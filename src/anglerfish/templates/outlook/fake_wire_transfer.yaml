@@ -1,0 +1,23 @@
+name: Fake Wire Transfer
+description: Hidden email containing fake wire transfer banking details
+type: outlook
+
+variables:
+  - name: canary_account
+    description: Canary bank account number to embed in the wire transfer
+
+folder_name: Finance - Confidential
+subject: "Wire Transfer Instructions - Q4 Vendor Payment"
+sender_name: Dana Sawyer (CFO)
+sender_email: dana.sawyer@contoso.com
+body_html: |
+  <html>
+  <body>
+  <p>Please process the following wire transfer by end of day:</p>
+  <ul>
+    <li>Beneficiary: Fabrikam Consulting LLC</li>
+    <li>Account: ${canary_account}</li>
+    <li>Amount: $47,500.00</li>
+  </ul>
+  </body>
+  </html>

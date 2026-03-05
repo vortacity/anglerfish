@@ -1,0 +1,29 @@
+name: M&A Acquisition Target List
+description: Deceptive M&A strategy document placed in a restricted SharePoint site to detect unauthorized access
+type: sharepoint
+
+site_name: Strategy
+folder_path: Mergers and Acquisitions/Confidential
+filenames:
+  - FY${fiscal_year}_Acquisition_Targets_${region}.txt
+content_text: |
+  STRICTLY CONFIDENTIAL — BOARD AND EXECUTIVE USE ONLY
+
+  Canary Document: ${filename}
+  Prepared by: Corporate Strategy & Development
+  Fiscal Year: ${fiscal_year}
+  Region: ${region}
+
+  This document contains non-public information about potential acquisition targets.
+  Unauthorized access, copying, or distribution is a violation of company policy
+  and may constitute a breach of securities regulations.
+
+  Access to this document is logged and monitored.
+
+variables:
+  - name: fiscal_year
+    description: Fiscal year for the acquisition pipeline
+    default: "2026"
+  - name: region
+    description: Target region (e.g. EMEA, APAC, Americas)
+    default: Americas

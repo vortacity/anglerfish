@@ -1,0 +1,25 @@
+name: Personal Tax Documents
+description: Deceptive tax document placed in personal OneDrive to detect unauthorized file browsing
+type: onedrive
+
+folder_path: Financial/Tax
+filenames:
+  - ${tax_year}_W2_${company_name}.txt
+content_text: |
+  CONFIDENTIAL — PERSONAL TAX RECORDS
+
+  Canary Document: ${filename}
+  Tax Year: ${tax_year}
+  Employer: ${company_name}
+
+  This file contains personal tax information including W-2 wage and tax
+  statements. This document is stored for personal record-keeping purposes.
+  Unauthorized access or distribution is strictly prohibited and monitored.
+
+variables:
+  - name: tax_year
+    description: Tax year for the document
+    default: "2025"
+  - name: company_name
+    description: Employer or company name
+    default: Contoso

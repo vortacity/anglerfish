@@ -1,0 +1,55 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "anglerfish"
+version = "0.1.0"
+description = "Deploy M365 canary tokens and detect unauthorized access via audit logs — no callbacks, no beacons"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "Anglerfish Contributors" }
+]
+dependencies = [
+  "msal>=1.28.0,<2.0.0",
+  "requests>=2.31.0,<3.0.0",
+  "pyyaml>=6.0,<7.0",
+  "questionary>=2.0.0,<3.0.0",
+  "rich>=13.0.0,<14.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.0",
+  "pytest-mock>=3.0",
+  "responses>=0.24.0",
+  "ruff>=0.1.0",
+  "bandit>=1.7.0",
+  "pip-audit>=2.6.0",
+]
+
+[project.scripts]
+anglerfish = "anglerfish.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/anglerfish"]
+include = [
+  "src/anglerfish/templates/**/*.yaml",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "src/anglerfish/**/*.py",
+  "src/anglerfish/templates/**/*.yaml",
+  "README.md",
+  "CHANGELOG.md",
+  "CONTRIBUTING.md",
+  "LICENSE",
+  ".env.example",
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120

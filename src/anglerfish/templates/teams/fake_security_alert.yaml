@@ -1,0 +1,27 @@
+name: Fake Security Alert
+description: Canary posing as a security incident notification in Teams
+type: teams
+
+variables:
+  - name: incident_id
+    description: Incident tracking ID
+    default: INC-2026-0042
+  - name: severity
+    description: Incident severity level
+    default: High
+
+subject: "[Security Alert] Incident ${incident_id} — Severity: ${severity}"
+body_html: |
+  <html>
+  <body>
+  <h2>Security Incident Notification</h2>
+  <p><strong>Incident ID:</strong> ${incident_id}</p>
+  <p><strong>Severity:</strong> ${severity}</p>
+  <p>The Security Operations Center has detected unusual activity on the corporate network.
+  An active investigation is underway. The SOC will contact affected personnel directly
+  with specific remediation instructions.</p>
+  <p>Do not take any action until you receive further guidance from the SOC team. Do not
+  share this information outside of the incident response team.</p>
+  <p><em>— SOC Team</em></p>
+  </body>
+  </html>

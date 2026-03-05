@@ -1,0 +1,35 @@
+name: IT Compliance Audit Notice
+description: Hidden email posing as an annual IT compliance access review from the compliance team
+type: outlook
+
+variables:
+  - name: target_name
+    description: Display name of the target user
+    default: User
+  - name: audit_id
+    description: Compliance audit tracking identifier
+    default: AUDIT-2026-0118
+  - name: audit_deadline
+    description: Deadline for completing the access review
+    default: 5 business days
+
+folder_name: Compliance Notices
+subject: "[Action Required] Annual IT Compliance Audit — Access Review ${audit_id}"
+sender_name: IT Compliance Team
+sender_email: it-compliance@contoso.com
+body_html: |
+  <html>
+  <body>
+  <p>Dear ${target_name},</p>
+  <p>As part of our annual IT compliance program, you are required to review and certify
+  the accuracy of your system access entitlements by <strong>${audit_deadline}</strong>.</p>
+  <p><strong>Audit Reference:</strong> ${audit_id}</p>
+  <p>Failure to complete this review may result in temporary suspension of elevated privileges
+  pending manual verification by the IT Security team.</p>
+  <p>Log in to the corporate compliance portal and navigate to <strong>My Access
+  Reviews</strong> to complete your review. Reference number: <strong>${audit_id}</strong>.</p>
+  <p>If you believe you received this message in error, contact the IT Compliance helpdesk
+  immediately at it-compliance@contoso.com.</p>
+  <p><em>— IT Compliance Team</em></p>
+  </body>
+  </html>

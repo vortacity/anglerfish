@@ -1,0 +1,27 @@
+name: Employee Salary Bands
+description: Deceptive compensation document placed in a restricted HR SharePoint folder to detect unauthorized access
+type: sharepoint
+
+site_name: HR
+folder_path: Compensation/Restricted
+filenames:
+  - ${year}_Employee_Salary_Bands_${department}.txt
+content_text: |
+  CONFIDENTIAL — HR AND FINANCE USE ONLY
+
+  Canary Document: ${filename}
+  Document Owner: Compensation & Benefits
+  Year: ${year}
+  Department: ${department}
+
+  This document contains confidential salary band and compensation range data.
+  It is intended solely for HR business partners and finance leadership.
+  Unauthorized access or distribution is strictly prohibited and monitored.
+
+variables:
+  - name: year
+    description: Compensation year
+    default: "2026"
+  - name: department
+    description: Business unit or department name
+    default: Engineering

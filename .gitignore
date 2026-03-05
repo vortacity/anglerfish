@@ -1,0 +1,39 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.venv/
+.env
+
+# Credentials and key material — must never be committed
+*.pfx
+*.pem
+*.key
+*.p12
+*.cer
+*.crt
+token_cache.bin
+token_cache.json
+
+# Build and distribution
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+
+# Claude Code
+.claude/
+
+# Coverage and test artifacts
+.coverage
+htmlcov/
+pytest-of-*/
+
+# Deployment records (may contain artifact IDs)
+deployment-record*.json
+
+# OS
+.DS_Store

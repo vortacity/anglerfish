@@ -1,0 +1,26 @@
+name: HR Records Decoy Bundle
+description: Personnel-oriented canary files intended to attract unauthorized browsing.
+type: sharepoint
+site_name: HR-Operations
+folder_path: HR/Restricted
+filenames:
+  - Employee_Disciplinary_Actions_${quarter}.txt
+content_text: |
+  HR RESTRICTED - Sensitive Personnel Record
+
+  Canary Document: ${filename}
+  Quarter: ${quarter}
+  HR Contact: ${hr_contact}
+  Policy Reference: ${policy_id}
+
+  Access is logged. Do not distribute.
+variables:
+  - name: quarter
+    description: Reporting quarter
+    default: Q1-2026
+  - name: hr_contact
+    description: HR contact display name
+    default: HR Compliance
+  - name: policy_id
+    description: Internal policy reference
+    default: HR-POL-4471

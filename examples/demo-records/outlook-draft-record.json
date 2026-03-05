@@ -1,0 +1,13 @@
+{
+  "timestamp": "2026-03-01T14:30:00+00:00",
+  "canary_type": "outlook",
+  "template_name": "Fake Password Reset",
+  "auth_mode": "application",
+  "status": "active",
+  "delivery_mode": "draft",
+  "target_user": "j.smith@contoso.com",
+  "folder_id": "AAMkADAwMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMAA_demo_folder",
+  "message_id": "AAMkADAwMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMABG_demo_msg_001",
+  "folder_name": "IT Security Notifications",
+  "subject": "[ACTION REQUIRED] Password Expiry Notice"
+}
