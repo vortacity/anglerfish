@@ -63,10 +63,7 @@ class OneDriveDeployer(BaseDeployer):
         except GraphApiError as exc:
             msg = str(exc)
             if getattr(exc, "status_code", None) == 404 and "/drive/" in (getattr(exc, "path", "") or ""):
-                msg = (
-                    f"OneDrive deployment failed: {exc}. "
-                    "Check that OneDrive is provisioned for the target user."
-                )
+                msg = f"OneDrive deployment failed: {exc}. Check that OneDrive is provisioned for the target user."
             else:
                 msg = f"OneDrive deployment failed: {exc}"
             raise DeploymentError(msg) from exc

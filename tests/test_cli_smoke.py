@@ -550,9 +550,7 @@ def test_main_onedrive_flow_deploys(monkeypatch):
     monkeypatch.setattr(
         cli,
         "list_templates",
-        lambda canary_type: [
-            {"name": "OneDrive Template", "description": "desc", "path": "pkg://onedrive/test.yaml"}
-        ],
+        lambda canary_type: [{"name": "OneDrive Template", "description": "desc", "path": "pkg://onedrive/test.yaml"}],
     )
     monkeypatch.setattr(cli, "load_template", lambda path: template)
 
@@ -629,9 +627,7 @@ def test_main_onedrive_non_interactive_deploys(monkeypatch):
     monkeypatch.setattr(
         cli,
         "list_templates",
-        lambda canary_type: [
-            {"name": "OneDrive Template", "description": "desc", "path": "pkg://onedrive/test.yaml"}
-        ],
+        lambda canary_type: [{"name": "OneDrive Template", "description": "desc", "path": "pkg://onedrive/test.yaml"}],
     )
     monkeypatch.setattr(cli, "load_template", lambda path: template)
 
@@ -717,9 +713,7 @@ def test_main_delegates_to_onedrive_handler(monkeypatch):
     monkeypatch.setattr(
         cli,
         "list_templates",
-        lambda canary_type: [
-            {"name": "OneDrive Template", "description": "desc", "path": "pkg://onedrive/test.yaml"}
-        ],
+        lambda canary_type: [{"name": "OneDrive Template", "description": "desc", "path": "pkg://onedrive/test.yaml"}],
     )
     template = OneDriveTemplate(
         name="OneDrive Template",

@@ -21,7 +21,12 @@ from .exceptions import TemplateError
 from .models import OneDriveTemplate, OutlookTemplate, SharePointTemplate, TeamsTemplate
 
 _PACKAGE_PATH_PREFIX = "pkg://"
-_SUPPORTED_TEMPLATE_TYPES = (TEMPLATE_KIND_OUTLOOK, TEMPLATE_KIND_SHAREPOINT, TEMPLATE_KIND_TEAMS, TEMPLATE_KIND_ONEDRIVE)
+_SUPPORTED_TEMPLATE_TYPES = (
+    TEMPLATE_KIND_OUTLOOK,
+    TEMPLATE_KIND_SHAREPOINT,
+    TEMPLATE_KIND_TEAMS,
+    TEMPLATE_KIND_ONEDRIVE,
+)
 _REQUIRED_OUTLOOK_FIELDS = (
     "name",
     "description",
