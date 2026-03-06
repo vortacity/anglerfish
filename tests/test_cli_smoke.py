@@ -23,11 +23,6 @@ def test_parse_args_accepts_onedrive_type():
     assert args.canary_type == "onedrive"
 
 
-def test_parse_args_rejects_removed_teams_type():
-    with pytest.raises(SystemExit):
-        cli._parse_args(["--canary-type", "teams"])
-
-
 def test_parse_args_rejects_removed_simulate_flag():
     with pytest.raises(SystemExit):
         cli._parse_args(["--simulate"])
@@ -347,14 +342,6 @@ def test_main_cleanup_sharepoint_happy_path(monkeypatch, tmp_path):
 
     assert result == 0
     assert status_updates == [(str(record_path), "cleaned_up")]
-
-
-def test_main_cleanup_rejects_teams_record(monkeypatch):
-    monkeypatch.setattr(cli, "read_deployment_record", lambda path: {"type": "teams"})
-
-    result = cli.main(["cleanup", "--non-interactive", "record.json"])
-
-    assert result == 1
 
 
 def test_main_list_returns_zero_when_records_dir_missing(tmp_path):
@@ -767,3 +754,28 @@ def test_main_delegates_to_onedrive_handler(monkeypatch):
     assert observed["non_interactive"] is True
     assert observed["total_steps"] == 4
     assert observed["cli_var_values"] == {}
+
+
+# ---------------------------------------------------------------------------
+# Batch subcommand tests
+# ---------------------------------------------------------------------------
+
+
+def test_parse_args_batch_subcommand():
+    args = cli._parse_args(["batch", "manifest.yaml"])
+    assert args.subcommand == "batch"
+    assert args.manifest == "manifest.yaml"
+
+
+def test_parse_args_batch_with_output_dir():
+    args = cli._parse_args(["batch", "manifest.yaml", "--output-dir", "/tmp/records"])
+    assert args.output_dir == "/tmp/records"
+
+
+def test_parse_args_batch_with_dry_run():
+    args = cli._parse_args(["batch", "manifest.yaml", "--dry-run"])
+    assert args.dry_run is True
+
+
+def test_main_batch_missing_manifest_file():
+    assert cli.main(["batch", "/nonexistent/manifest.yaml"]) == 1

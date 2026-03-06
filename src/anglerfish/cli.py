@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import datetime
+import logging
 import os
 import re
 import sys
@@ -21,14 +22,22 @@ from rich.table import Table
 from rich.text import Text
 
 from . import __version__
-from .auth import authenticate
+from .auth import authenticate, authenticate_management_api
 from .deployers.onedrive import OneDriveDeployer
 from .deployers.onedrive import remove_canary as onedrive_remove_canary
 from .deployers.outlook import OutlookDeployer
 from .deployers.outlook import remove_canary as outlook_remove_canary
 from .deployers.sharepoint import SharePointDeployer
 from .deployers.sharepoint import remove_canary as sharepoint_remove_canary
-from .exceptions import AnglerfishError, AuthenticationError, DeploymentError, GraphApiError, TemplateError
+from .exceptions import (
+    AnglerfishError,
+    AuditApiError,
+    AuthenticationError,
+    DeploymentError,
+    GraphApiError,
+    MonitorError,
+    TemplateError,
+)
 from .graph import GraphClient
 from .inventory import read_deployment_record, update_deployment_status, write_deployment_record
 from .models import OneDriveTemplate, OutlookTemplate, SharePointTemplate
@@ -290,6 +299,12 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         action="store_true",
         help="Run in offline demo mode. Skips authentication and Graph API calls.",
     )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Enable debug logging for API calls and auth flow.",
+    )
 
     subparsers = parser.add_subparsers(dest="subcommand")
 
@@ -323,6 +338,132 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         metavar="DIR",
         dest="records_dir",
         help=("Directory containing deployment record JSON files. Default: ~/.anglerfish/records/"),
+    )
+
+    monitor_parser = subparsers.add_parser("monitor", help="Monitor audit logs for canary access events.")
+    monitor_parser.add_argument(
+        "--records-dir",
+        default=str(Path.home() / ".anglerfish" / "records"),
+        metavar="DIR",
+        dest="records_dir",
+        help="Directory containing deployment record JSON files.",
+    )
+    monitor_parser.add_argument(
+        "--tenant-id",
+        default=None,
+        help="Microsoft Entra tenant ID. Overrides ANGLERFISH_TENANT_ID.",
+    )
+    monitor_parser.add_argument(
+        "--client-id",
+        default=None,
+        help="Microsoft Entra application (client) ID. Overrides ANGLERFISH_CLIENT_ID.",
+    )
+    monitor_parser.add_argument(
+        "--credential-mode",
+        choices=("auto", "secret", "certificate"),
+        default=None,
+        help="Credential type for application auth.",
+    )
+    monitor_parser.add_argument(
+        "--interval",
+        type=int,
+        default=300,
+        metavar="SECONDS",
+        help="Poll interval in seconds (default: 300).",
+    )
+    monitor_parser.add_argument(
+        "--once",
+        action="store_true",
+        help="Poll once and exit instead of running a continuous loop.",
+    )
+    monitor_parser.add_argument(
+        "--exclude-app-id",
+        action="append",
+        default=[],
+        metavar="APP_ID",
+        dest="exclude_app_ids",
+        help="App/client IDs to exclude from matching (repeatable).",
+    )
+    monitor_parser.add_argument(
+        "--state-file",
+        default=None,
+        metavar="PATH",
+        dest="state_file",
+        help="Persistent state file (default: ~/.anglerfish/monitor-state.json).",
+    )
+    monitor_parser.add_argument(
+        "--alert-log",
+        default=None,
+        metavar="PATH",
+        dest="alert_log",
+        help="JSONL alert log file.",
+    )
+    monitor_parser.add_argument(
+        "--alert-webhook",
+        default=None,
+        metavar="URL",
+        dest="alert_webhook",
+        help="Webhook URL for alert POST.",
+    )
+    monitor_parser.add_argument(
+        "--no-console",
+        action="store_true",
+        default=False,
+        dest="no_console",
+        help="Suppress Rich console alert output (daemon mode).",
+    )
+    monitor_parser.add_argument(
+        "--demo",
+        action="store_true",
+        default=False,
+        help="Print a simulated alert and exit (no auth required).",
+    )
+
+    detect_parser = subparsers.add_parser("detect", help="Generate SIEM detection queries from a deployment record.")
+    detect_parser.add_argument("record", metavar="RECORD", help="Path to deployment record JSON.")
+    detect_parser.add_argument(
+        "--format",
+        choices=("kql", "splunk", "odata"),
+        default="kql",
+        dest="query_format",
+        help="Query format (default: kql).",
+    )
+
+    batch_parser = subparsers.add_parser("batch", help="Deploy multiple canaries from a YAML manifest.")
+    batch_parser.add_argument("manifest", metavar="MANIFEST", help="Path to batch manifest YAML file.")
+    batch_parser.add_argument(
+        "--output-dir",
+        default=str(Path.home() / ".anglerfish" / "records"),
+        metavar="DIR",
+        dest="output_dir",
+        help="Directory for deployment record JSON files. Default: ~/.anglerfish/records/",
+    )
+    batch_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        dest="dry_run",
+        help="Validate manifest and authenticate without deploying.",
+    )
+    batch_parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="Run in offline demo mode (no auth, no API calls).",
+    )
+    batch_parser.add_argument(
+        "--tenant-id",
+        default=None,
+        help="Microsoft Entra tenant ID. Overrides ANGLERFISH_TENANT_ID.",
+    )
+    batch_parser.add_argument(
+        "--client-id",
+        default=None,
+        help="Microsoft Entra application (client) ID. Overrides ANGLERFISH_CLIENT_ID.",
+    )
+    batch_parser.add_argument(
+        "--credential-mode",
+        choices=("auto", "secret", "certificate"),
+        default=None,
+        help="Credential type for application auth.",
     )
 
     return parser.parse_args(list(argv) if argv is not None else sys.argv[1:])
@@ -776,7 +917,7 @@ def _run_cleanup(args: argparse.Namespace, console: Console) -> int:
         if not non_interactive:
             confirmed = questionary.confirm("Remove this canary?", default=False, style=_STYLE, qmark=_QMARK).ask()
             if not confirmed:
-                console.print("Cancelled.")
+                console.print("[yellow]Cancelled.[/yellow]")
                 return 0
 
         if canary_type == "outlook":
@@ -797,7 +938,7 @@ def _run_cleanup(args: argparse.Namespace, console: Console) -> int:
         _print_error(console, _format_exception_message(exc))
         return 1
     except KeyboardInterrupt:
-        console.print("\nCancelled.")
+        console.print("\n[yellow]Cancelled.[/yellow]")
         return 130
 
 
@@ -875,7 +1016,7 @@ def _run_sharepoint_deploy(
 
     app_credential_mode = _prompt_auth_setup(args, console, auth_mode="application", non_interactive=non_interactive)
     if app_credential_mode is None:
-        console.print("Cancelled.")
+        console.print("[yellow]Cancelled.[/yellow]")
         return 130
 
     console.print("Authenticating with Microsoft Graph...")
@@ -890,7 +1031,10 @@ def _run_sharepoint_deploy(
     selected_site_id = ""
     if non_interactive:
         if not args.target:
-            raise DeploymentError("--target (SharePoint site name) is required in --non-interactive mode.")
+            raise DeploymentError(
+                "--target (SharePoint site name) is required in --non-interactive mode. "
+                "Run `anglerfish --canary-type sharepoint` interactively to search and select sites."
+            )
         site_name = args.target.strip()
     else:
         site_search = questionary.text(
@@ -901,7 +1045,7 @@ def _run_sharepoint_deploy(
             qmark=_QMARK,
         ).ask()
         if site_search is None:
-            console.print("Cancelled.")
+            console.print("[yellow]Cancelled.[/yellow]")
             return 130
 
         with console.status("[bold green]Discovering SharePoint sites..."):
@@ -917,7 +1061,7 @@ def _run_sharepoint_deploy(
                 pointer=_POINTER,
             ).ask()
             if site_choice is None:
-                console.print("Cancelled.")
+                console.print("[yellow]Cancelled.[/yellow]")
                 return 130
 
             if site_choice == "__manual__":
@@ -929,7 +1073,7 @@ def _run_sharepoint_deploy(
                     qmark=_QMARK,
                 ).ask()
                 if site_name is None:
-                    console.print("Cancelled.")
+                    console.print("[yellow]Cancelled.[/yellow]")
                     return 130
                 site_name = site_name.strip()
             else:
@@ -945,7 +1089,7 @@ def _run_sharepoint_deploy(
                 qmark=_QMARK,
             ).ask()
             if site_name is None:
-                console.print("Cancelled.")
+                console.print("[yellow]Cancelled.[/yellow]")
                 return 130
             site_name = site_name.strip()
 
@@ -967,7 +1111,7 @@ def _run_sharepoint_deploy(
             qmark=_QMARK,
         ).ask()
         if folder_path is None:
-            console.print("Cancelled.")
+            console.print("[yellow]Cancelled.[/yellow]")
             return 130
         normalized_folder_path = _normalize_sharepoint_folder_path(folder_path)
 
@@ -979,7 +1123,7 @@ def _run_sharepoint_deploy(
             qmark=_QMARK,
         ).ask()
         if filename_input is None:
-            console.print("Cancelled.")
+            console.print("[yellow]Cancelled.[/yellow]")
             return 130
 
     template = dataclasses.replace(
@@ -1017,7 +1161,7 @@ def _run_sharepoint_deploy(
     if not non_interactive:
         should_deploy = questionary.confirm("Deploy this canary?", default=False, style=_STYLE, qmark=_QMARK).ask()
         if not should_deploy:
-            console.print("Cancelled.")
+            console.print("[yellow]Cancelled.[/yellow]")
             return 0
 
     # Step 4: Deploy
@@ -1075,7 +1219,7 @@ def _run_outlook_deploy(
             pointer=_POINTER,
         ).ask()
         if delivery_mode is None:
-            console.print("Cancelled.")
+            console.print("[yellow]Cancelled.[/yellow]")
             return 130
 
     if delivery_mode == "draft" and not non_interactive:
@@ -1087,13 +1231,16 @@ def _run_outlook_deploy(
             qmark=_QMARK,
         ).ask()
         if folder_name is None:
-            console.print("Cancelled.")
+            console.print("[yellow]Cancelled.[/yellow]")
             return 130
         template = dataclasses.replace(template, folder_name=folder_name.strip())
 
     if non_interactive:
         if not args.target:
-            raise DeploymentError("--target (mailbox UPN/email) is required for Outlook in --non-interactive mode.")
+            raise DeploymentError(
+                "--target (mailbox UPN/email) is required for Outlook in --non-interactive mode. "
+                "Example: --target user@contoso.com"
+            )
         target_user = args.target.strip()
     else:
         target_user = questionary.text(
@@ -1103,7 +1250,7 @@ def _run_outlook_deploy(
             qmark=_QMARK,
         ).ask()
         if target_user is None:
-            console.print("Cancelled.")
+            console.print("[yellow]Cancelled.[/yellow]")
             return 130
         target_user = target_user.strip()
 
@@ -1112,7 +1259,7 @@ def _run_outlook_deploy(
 
     app_credential_mode = _prompt_auth_setup(args, console, auth_mode="application", non_interactive=non_interactive)
     if app_credential_mode is None:
-        console.print("Cancelled.")
+        console.print("[yellow]Cancelled.[/yellow]")
         return 130
 
     console.print("Authenticating with Microsoft Graph...")
@@ -1147,7 +1294,7 @@ def _run_outlook_deploy(
     if not non_interactive:
         should_deploy = questionary.confirm("Deploy this canary?", default=False, style=_STYLE, qmark=_QMARK).ask()
         if not should_deploy:
-            console.print("Cancelled.")
+            console.print("[yellow]Cancelled.[/yellow]")
             return 0
 
     # Step 4: Deploy
@@ -1219,7 +1366,7 @@ def _run_onedrive_deploy(
 
     app_credential_mode = _prompt_auth_setup(args, console, auth_mode="application", non_interactive=non_interactive)
     if app_credential_mode is None:
-        console.print("Cancelled.")
+        console.print("[yellow]Cancelled.[/yellow]")
         return 130
 
     console.print("Authenticating with Microsoft Graph...")
@@ -1233,7 +1380,10 @@ def _run_onedrive_deploy(
 
     if non_interactive:
         if not args.target:
-            raise DeploymentError("--target (UPN/email) is required for OneDrive in --non-interactive mode.")
+            raise DeploymentError(
+                "--target (UPN/email) is required for OneDrive in --non-interactive mode. "
+                "Example: --target user@contoso.com"
+            )
         target_user = args.target.strip()
     else:
         target_user = questionary.text(
@@ -1243,7 +1393,7 @@ def _run_onedrive_deploy(
             qmark=_QMARK,
         ).ask()
         if target_user is None:
-            console.print("Cancelled.")
+            console.print("[yellow]Cancelled.[/yellow]")
             return 130
         target_user = target_user.strip()
 
@@ -1260,7 +1410,7 @@ def _run_onedrive_deploy(
             qmark=_QMARK,
         ).ask()
         if folder_path is None:
-            console.print("Cancelled.")
+            console.print("[yellow]Cancelled.[/yellow]")
             return 130
         folder_path = folder_path.strip()
 
@@ -1272,7 +1422,7 @@ def _run_onedrive_deploy(
             qmark=_QMARK,
         ).ask()
         if filename_input is None:
-            console.print("Cancelled.")
+            console.print("[yellow]Cancelled.[/yellow]")
             return 130
 
     template = dataclasses.replace(
@@ -1307,7 +1457,7 @@ def _run_onedrive_deploy(
     if not non_interactive:
         should_deploy = questionary.confirm("Deploy this canary?", default=False, style=_STYLE, qmark=_QMARK).ask()
         if not should_deploy:
-            console.print("Cancelled.")
+            console.print("[yellow]Cancelled.[/yellow]")
             return 0
 
     # Step 4: Deploy
@@ -1337,8 +1487,159 @@ def _run_onedrive_deploy(
     return 0
 
 
+def _run_monitor(args: argparse.Namespace, console: Console) -> int:
+    """Run the canary access monitoring loop."""
+    from .alerts import AlertDispatcher
+    from .audit import AuditClient
+    from .config import (
+        MONITOR_ALERT_LOG,
+        MONITOR_ALERT_WEBHOOK,
+        MONITOR_NO_CONSOLE,
+        MONITOR_STATE_FILE,
+        TENANT_ID,
+    )
+    from .monitor import CanaryIndex, _TokenManager, load_records, render_demo_alert, run_monitor
+    from .state import StateManager
+
+    _print_banner(console)
+
+    if getattr(args, "demo", False):
+        render_demo_alert(console)
+        return 0
+
+    records = load_records(args.records_dir)
+    if not records:
+        console.print(f"[yellow]No active deployment records found in {args.records_dir}[/yellow]")
+        console.print(
+            "[dim]Deploy canaries with --output-json to create records, "
+            "or pass --records-dir to specify a different path.[/dim]"
+        )
+        return 1
+
+    canary_index = CanaryIndex(records)
+    console.print(f"Loaded [bold]{canary_index.count}[/bold] active canary record(s).")
+
+    # Auth
+    cli_tenant_id = str(args.tenant_id or "").strip()
+    if cli_tenant_id:
+        os.environ["ANGLERFISH_TENANT_ID"] = cli_tenant_id
+    cli_client_id = str(args.client_id or "").strip()
+    if cli_client_id:
+        os.environ["ANGLERFISH_CLIENT_ID"] = cli_client_id
+
+    tenant_id = cli_tenant_id or os.environ.get("ANGLERFISH_TENANT_ID", TENANT_ID).strip()
+    if not tenant_id:
+        raise AuthenticationError(
+            "ANGLERFISH_TENANT_ID is required for monitoring. Set it via environment variable or --tenant-id."
+        )
+
+    token = authenticate_management_api(args.credential_mode)
+    audit_client = AuditClient(token, tenant_id)
+
+    exclude_ids = {aid.strip().lower() for aid in args.exclude_app_ids if aid.strip()}
+
+    # State persistence.
+    state_file = args.state_file or MONITOR_STATE_FILE or None
+    state_manager = StateManager(state_file) if state_file else StateManager()
+
+    # Alert dispatcher.
+    no_console = args.no_console or MONITOR_NO_CONSOLE
+    alert_log = args.alert_log or MONITOR_ALERT_LOG or None
+    alert_webhook = args.alert_webhook or MONITOR_ALERT_WEBHOOK or None
+    dispatcher = AlertDispatcher(
+        console=None if no_console else console,
+        alert_log=alert_log,
+        webhook_url=alert_webhook,
+    )
+
+    # Token manager for automatic refresh.
+    token_mgr = _TokenManager(token, args.credential_mode)
+
+    return run_monitor(
+        audit_client,
+        canary_index,
+        interval=args.interval,
+        once=args.once,
+        exclude_app_ids=exclude_ids or None,
+        console=console,
+        state_manager=state_manager,
+        dispatcher=dispatcher,
+        token_manager=token_mgr,
+    )
+
+
+def _run_detect(args: argparse.Namespace, console: Console) -> int:
+    """Generate and print a SIEM detection query."""
+    from .detect import generate_query
+
+    query = generate_query(args.record, fmt=args.query_format)
+    console.print(query)
+    if getattr(args, "demo", False):
+        console.print()
+        console.print("[bold yellow]Demo mode — query generated from demo record.[/bold yellow]")
+    return 0
+
+
+def _run_batch(args: argparse.Namespace, console: Console) -> int:
+    """Run batch deployment from a YAML manifest."""
+    from .batch import parse_manifest, run_batch
+
+    console.print()
+    console.rule("[bold]Batch Deployment[/bold]")
+    console.print()
+
+    specs = parse_manifest(args.manifest)
+    console.print(f"Loaded {len(specs)} canary definition(s) from manifest.")
+
+    if getattr(args, "demo", False):
+        results = run_batch(specs, graph=None, output_dir=args.output_dir, dry_run=True)
+        console.print("[bold yellow]Demo mode — no authentication or Graph API calls were made.[/bold yellow]")
+    else:
+        app_credential_mode = _prompt_auth_setup(args, console, auth_mode="application", non_interactive=True)
+        console.print("Authenticating with Microsoft Graph...")
+        token = authenticate(auth_mode="application", app_credential_mode=app_credential_mode)
+        graph = GraphClient(token)
+        _print_auth_success(console, auth_mode="application")
+
+        results = run_batch(
+            specs,
+            graph=graph,
+            output_dir=args.output_dir,
+            dry_run=getattr(args, "dry_run", False),
+        )
+
+    table = Table(box=box.ROUNDED, title="Batch Results")
+    table.add_column("#", style="dim")
+    table.add_column("Type")
+    table.add_column("Target")
+    table.add_column("Template")
+    table.add_column("Status")
+    table.add_column("Record")
+
+    for r in results:
+        if r.get("dry_run"):
+            status = "[yellow]DRY RUN[/yellow]"
+        elif r["success"]:
+            status = "[green]OK[/green]"
+        else:
+            status = f"[red]FAILED: {r.get('error', '?')}[/red]"
+        record = r.get("record_path", "—")
+        table.add_row(str(r["index"]), r["canary_type"], r["target"], r["template"], status, record)
+
+    console.print()
+    console.print(table)
+
+    succeeded = sum(1 for r in results if r["success"])
+    failed = len(results) - succeeded
+    console.print(f"\n[bold]{succeeded} succeeded, {failed} failed[/bold]")
+
+    return 1 if failed > 0 else 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
+    if getattr(args, "verbose", False):
+        logging.basicConfig(level=logging.DEBUG, format="%(name)s %(levelname)s %(message)s")
     console = Console()
     if args.version:
         console.print(__version__)
@@ -1349,6 +1650,33 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.subcommand == "list":
         return _run_list(args, console)
+
+    if args.subcommand == "monitor":
+        try:
+            return _run_monitor(args, console)
+        except (AuthenticationError, AuditApiError, DeploymentError, MonitorError) as exc:
+            _print_error(console, _format_exception_message(exc))
+            return 1
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Cancelled.[/yellow]")
+            return 130
+
+    if args.subcommand == "detect":
+        try:
+            return _run_detect(args, console)
+        except (DeploymentError, ValueError) as exc:
+            _print_error(console, str(exc))
+            return 1
+
+    if args.subcommand == "batch":
+        try:
+            return _run_batch(args, console)
+        except (AuthenticationError, DeploymentError, TemplateError, GraphApiError) as exc:
+            _print_error(console, _format_exception_message(exc))
+            return 1
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Cancelled.[/yellow]")
+            return 130
 
     _print_banner(console)
 
@@ -1361,7 +1689,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         # Non-interactive mode: require --canary-type.
         if non_interactive and not args.canary_type:
-            raise DeploymentError("--canary-type is required in --non-interactive mode.")
+            raise DeploymentError(
+                "--canary-type is required in --non-interactive mode. Options: outlook, sharepoint, onedrive."
+            )
 
         # Step 1: Canary configuration
         _step_rule(console, 1, total_steps, "Canary Configuration")
@@ -1381,7 +1711,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 pointer=_POINTER,
             ).ask()
             if canary_type is None:
-                console.print("Cancelled.")
+                console.print("[yellow]Cancelled.[/yellow]")
                 return 130
 
         available_templates = list_templates(canary_type)
@@ -1391,7 +1721,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         if non_interactive:
             if not args.template:
-                raise DeploymentError("--template is required in --non-interactive mode.")
+                raise DeploymentError(
+                    f"--template is required in --non-interactive mode. "
+                    f"Run `anglerfish --canary-type {canary_type}` interactively to see available templates."
+                )
             template_path = _find_template_by_name(canary_type, args.template)
         else:
             template_path = questionary.select(
@@ -1405,7 +1738,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 pointer=_POINTER,
             ).ask()
             if template_path is None:
-                console.print("Cancelled.")
+                console.print("[yellow]Cancelled.[/yellow]")
                 return 130
 
         template = load_template(template_path)
@@ -1417,7 +1750,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             cli_var_values=cli_var_values,
         )
         if rendered_template is None:
-            console.print("Cancelled.")
+            console.print("[yellow]Cancelled.[/yellow]")
             return 130
 
         if getattr(args, "demo", False):
@@ -1459,5 +1792,5 @@ def main(argv: Sequence[str] | None = None) -> int:
         _print_error(console, _format_exception_message(exc))
         return 1
     except KeyboardInterrupt:
-        console.print("\nCancelled.")
+        console.print("\n[yellow]Cancelled.[/yellow]")
         return 130
