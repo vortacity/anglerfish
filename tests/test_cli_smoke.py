@@ -779,3 +779,64 @@ def test_parse_args_batch_with_dry_run():
 
 def test_main_batch_missing_manifest_file():
     assert cli.main(["batch", "/nonexistent/manifest.yaml"]) == 1
+
+
+def test_main_batch_happy_path(monkeypatch, tmp_path):
+    """End-to-end: batch subcommand deploys from manifest and writes records."""
+    import yaml
+
+    import anglerfish.batch as batch_mod
+
+    manifest = tmp_path / "manifest.yaml"
+    manifest.write_text(
+        yaml.dump(
+            {
+                "canaries": [
+                    {
+                        "canary_type": "outlook",
+                        "template": "Outlook Template",
+                        "target": "cfo@contoso.com",
+                        "delivery_mode": "draft",
+                    },
+                ]
+            }
+        )
+    )
+    output_dir = tmp_path / "records"
+
+    monkeypatch.setattr(cli, "_prompt_auth_setup", lambda *args, **kwargs: "")
+    monkeypatch.setattr(cli, "_print_auth_success", lambda *args, **kwargs: None)
+    monkeypatch.setattr(cli, "authenticate", lambda *args, **kwargs: "token-123")
+
+    fake_graph = type("FakeGraph", (), {})()
+    monkeypatch.setattr(cli, "GraphClient", lambda token: fake_graph)
+
+    template = OutlookTemplate(
+        name="Outlook Template",
+        description="desc",
+        folder_name="IT Notifications",
+        subject="Reset",
+        body_html="<p>Test</p>",
+        sender_name="IT",
+        sender_email="it@contoso.com",
+        variables=[],
+    )
+
+    monkeypatch.setattr(batch_mod, "_find_template_by_name", lambda ct, name: "pkg://outlook/fake.yaml")
+    monkeypatch.setattr(batch_mod, "load_template", lambda path: template)
+    monkeypatch.setattr(batch_mod, "render_template", lambda t, v: t)
+
+    class FakeOutlookDeployer:
+        def __init__(self, graph, tmpl):
+            pass
+
+        def deploy(self, target_user, **kwargs):
+            return {"type": "outlook", "delivery_mode": "draft", "target_user": target_user, "message_id": "msg-1"}
+
+    monkeypatch.setattr(batch_mod, "OutlookDeployer", FakeOutlookDeployer)
+
+    result = cli.main(["batch", str(manifest), "--output-dir", str(output_dir)])
+    assert result == 0
+
+    records = list(output_dir.glob("*.json"))
+    assert len(records) == 1
