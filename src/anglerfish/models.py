@@ -38,9 +38,13 @@ class OneDriveTemplate:
 
 
 @dataclass(frozen=True)
-class TeamsTemplate:
-    name: str
-    description: str
-    subject: str
-    body_html: str
-    variables: list[dict[str, str]] = dataclasses.field(default_factory=list)
+class CanarySpec:
+    """A single canary entry from a batch manifest."""
+
+    canary_type: str
+    template: str
+    target: str
+    delivery_mode: str | None = None
+    folder_path: str | None = None
+    filename: str | None = None
+    vars: dict[str, str] = dataclasses.field(default_factory=dict)
