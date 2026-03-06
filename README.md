@@ -1,5 +1,7 @@
 # Anglerfish
 
+[![CI](https://github.com/vortacity/anglerfish/actions/workflows/ci.yml/badge.svg)](https://github.com/vortacity/anglerfish/actions/workflows/ci.yml)
+
 Deploy M365 canary tokens and detect unauthorized access — no callback URLs, no DNS beacons, no external infrastructure.
 
 Anglerfish is a Python CLI that provisions deceptive artifacts (Outlook draft emails, SharePoint documents, OneDrive files) in Microsoft 365 tenants via the Graph API. When an attacker accesses a canary artifact, the M365 Unified Audit Log generates an event (`MailItemsAccessed`, `FileAccessed`) that your SIEM can alert on. Detection is entirely access-based — the canary never phones home.
@@ -17,12 +19,14 @@ No HTTP callbacks, no DNS beacons, no embedded tracking pixels. The canary is a 
 ## Key Features
 
 - **Outlook canaries** — draft messages in hidden folders or sent to Inbox
-- **SharePoint canaries** — deceptive files uploaded to document libraries
-- **OneDrive canaries** — deceptive files uploaded to personal OneDrive for Business storage
+- **SharePoint canaries** — deceptive files (.txt, .docx, .xlsx) uploaded to document libraries
+- **OneDrive canaries** — deceptive files (.txt, .docx, .xlsx) uploaded to personal OneDrive for Business storage
 - **Interactive + scripted CLI** — guided deployment or `--non-interactive` for CI/automation
-- **YAML template system** — 12 bundled templates, custom template directories supported
+- **YAML template system** — 16 bundled templates, custom template directories supported
 - **Dry-run mode** — validate and authenticate without writing anything
 - **Cleanup subcommand** — deterministic removal using deployment records
+- **Monitor subcommand** — poll the M365 Management Activity API for canary access events
+- **Detect subcommand** — generate KQL, Splunk, or OData detection queries from deployment records
 - **Graph API retry safety** — GET/DELETE retry on transient errors; POST/PUT do not auto-retry
 - **Offline demo mode** — `--demo` flag for conference presentations without live tenant
 
@@ -79,6 +83,7 @@ See [Demo Tenant Setup Guide](docs/demo-tenant-setup.md) for step-by-step instru
 | Outlook (send) | `Mail.ReadWrite`, `Mail.Send` | Application |
 | SharePoint | `Sites.ReadWrite.All`, `Files.ReadWrite.All` | Application |
 | OneDrive | `Files.ReadWrite.All` | Application |
+| Monitor | `ActivityFeed.Read` | Application (Office 365 Management APIs) |
 
 ### Environment Variables
 
@@ -141,6 +146,48 @@ anglerfish \
   --output-json ./deployment-record.json
 ```
 
+### Batch Deployment
+
+Deploy multiple canaries from a YAML manifest:
+
+```bash
+anglerfish batch manifest.yaml --output-dir ./records/
+```
+
+Manifest format:
+
+```yaml
+defaults:
+  vars:
+    company_name: "Contoso Ltd"
+
+canaries:
+  - canary_type: outlook
+    template: "Fake Password Reset"
+    target: cfo@contoso.com
+    delivery_mode: draft
+    vars:
+      target_name: "Jane Chen"
+
+  - canary_type: sharepoint
+    template: "Employee Salary Bands"
+    target: HRSite
+    folder_path: "Compensation/Restricted"
+    filename: "2026_Salary_Bands_Engineering.txt"
+
+  - canary_type: onedrive
+    template: "VPN Credentials Backup"
+    target: j.smith@contoso.com
+    folder_path: "IT/Backups"
+    filename: "VPN_Config_GlobalProtect_Backup.txt"
+```
+
+Authenticates once, deploys all entries sequentially, writes one deployment record per canary to `--output-dir`. Failures are logged and skipped — remaining canaries still deploy.
+
+Dry run: `anglerfish batch manifest.yaml --dry-run`
+
+Demo: `anglerfish batch manifest.yaml --demo`
+
 ### Dry Run
 
 Validate configuration and authenticate without performing any writes:
@@ -199,11 +246,50 @@ anglerfish --demo
 
 # Simulated cleanup
 anglerfish --demo cleanup examples/demo-records/outlook-draft-record.json
+
+# Simulated monitoring alert
+anglerfish monitor --demo
+
+# Generate detection queries from demo records
+anglerfish detect examples/demo-records/outlook-draft-record.json
+anglerfish detect examples/demo-records/sharepoint-upload-record.json --format splunk
+```
+
+### Monitoring
+
+Poll the Office 365 Management Activity API for canary access events:
+
+```bash
+# Continuous monitoring (polls every 5 minutes)
+anglerfish monitor --records-dir ~/.anglerfish/records
+
+# Single poll
+anglerfish monitor --records-dir ~/.anglerfish/records --once
+
+# Custom interval, exclude your own app ID
+anglerfish monitor --records-dir ~/.anglerfish/records \
+  --interval 60 \
+  --exclude-app-id "your-app-client-id"
+```
+
+### Detection Queries
+
+Generate SIEM detection queries from deployment records:
+
+```bash
+# KQL (default, for Microsoft Sentinel)
+anglerfish detect ./deployment-record.json
+
+# Splunk SPL
+anglerfish detect ./deployment-record.json --format splunk
+
+# OData filter (for Management Activity API)
+anglerfish detect ./deployment-record.json --format odata
 ```
 
 ### Detection Setup
 
-After deploying canaries, configure your SIEM to query the M365 Unified Audit Log for the artifact IDs stored in each deployment record. For Outlook canaries, filter on `MailItemsAccessed` events matching the `message_id` or `folder_id`. For SharePoint and OneDrive canaries, filter on `FileAccessed` events matching the `item_id`. See [threat-model.md](docs/threat-model.md) for details on audit events, latency, and filtering guidance.
+After deploying canaries, configure your SIEM to query the M365 Unified Audit Log for the artifact IDs stored in each deployment record. For Outlook canaries, filter on `MailItemsAccessed` events matching the `message_id` or `folder_id`. For SharePoint and OneDrive canaries, filter on `FileAccessed` events matching the `item_id`. Use `anglerfish detect` to auto-generate queries. See [threat-model.md](docs/threat-model.md) for details on audit events, latency, and filtering guidance.
 
 ### Custom Templates
 
@@ -242,6 +328,15 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for template schema documentation.
 | `--dry-run` | Authenticate and validate without write calls |
 | `--output-json` | Write deployment record JSON |
 | `--demo` | Run in offline demo mode (no auth, no API calls) |
+| `monitor` | Subcommand: poll audit logs for canary access events |
+| `monitor --once` | Poll once and exit |
+| `monitor --interval N` | Set poll interval in seconds (default: 300) |
+| `monitor --exclude-app-id ID` | Exclude app IDs from matching (repeatable) |
+| `detect <record>` | Subcommand: generate SIEM query from deployment record |
+| `detect --format FMT` | Query format: `kql`, `splunk`, or `odata` (default: kql) |
+| `batch <manifest>` | Subcommand: deploy multiple canaries from a YAML manifest |
+| `batch --output-dir DIR` | Output directory for deployment records (default: `~/.anglerfish/records`) |
+| `batch --dry-run` | Validate manifest and authenticate without deploying |
 
 ## Reliability Notes
 
