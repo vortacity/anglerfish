@@ -2,12 +2,22 @@
 
 from __future__ import annotations
 
+import dataclasses
+import datetime
+import logging
 from pathlib import Path
 
 import yaml
 
-from .exceptions import DeploymentError
-from .models import CanarySpec
+from .deployers.onedrive import OneDriveDeployer
+from .deployers.outlook import OutlookDeployer
+from .deployers.sharepoint import SharePointDeployer
+from .exceptions import DeploymentError, TemplateError
+from .inventory import write_deployment_record
+from .models import CanarySpec, OneDriveTemplate, SharePointTemplate
+from .templates import list_templates, load_template, render_template
+
+logger = logging.getLogger(__name__)
 
 _VALID_CANARY_TYPES = {"outlook", "sharepoint", "onedrive"}
 _REQUIRED_ENTRY_FIELDS = ("canary_type", "template", "target")
@@ -96,3 +106,129 @@ def parse_manifest(path: str | Path) -> list[CanarySpec]:
         )
 
     return specs
+
+
+def _find_template_by_name(canary_type: str, template_name: str) -> str:
+    """Find a template path by name (case-insensitive)."""
+    available = list_templates(canary_type)
+    if not available:
+        raise TemplateError(f"No {canary_type} templates found.")
+    name_lower = template_name.casefold()
+    matches = [t for t in available if t["name"].casefold() == name_lower]
+    if not matches:
+        names = ", ".join(repr(t["name"]) for t in available)
+        raise TemplateError(
+            f"Template {template_name!r} not found for {canary_type}. Available: {names}"
+        )
+    if len(matches) > 1:
+        raise TemplateError(
+            f"Multiple templates named {template_name!r} found for {canary_type}."
+        )
+    return matches[0]["path"]
+
+
+def run_batch(
+    specs: list[CanarySpec],
+    *,
+    graph: object,
+    output_dir: str | Path,
+    dry_run: bool = False,
+) -> list[dict]:
+    """Deploy a batch of canary specs and return one result dict per spec."""
+    output_path = Path(output_dir)
+    results: list[dict] = []
+
+    for index, spec in enumerate(specs):
+        result: dict = {
+            "index": index,
+            "canary_type": spec.canary_type,
+            "target": spec.target,
+            "template": spec.template,
+        }
+
+        try:
+            # 1. Resolve template by name
+            template_path = _find_template_by_name(spec.canary_type, spec.template)
+
+            # 2. Load template
+            template = load_template(template_path)
+
+            # 3. Render template with spec vars
+            rendered = render_template(template, spec.vars)
+
+            # 4. Apply overrides from spec for SharePoint/OneDrive
+            if isinstance(rendered, (SharePointTemplate, OneDriveTemplate)):
+                overrides: dict = {}
+                if spec.folder_path is not None:
+                    overrides["folder_path"] = spec.folder_path
+                if spec.filename is not None:
+                    overrides["filenames"] = [spec.filename]
+                if overrides:
+                    rendered = dataclasses.replace(rendered, **overrides)
+
+            # 5. Dry run: skip deployment
+            if dry_run:
+                result["success"] = True
+                result["dry_run"] = True
+                results.append(result)
+                continue
+
+            # 6. Deploy
+            if spec.canary_type == "outlook":
+                deployer = OutlookDeployer(graph, rendered)
+                deploy_result = deployer.deploy(
+                    spec.target,
+                    delivery_mode=spec.delivery_mode or "draft",
+                )
+            elif spec.canary_type == "sharepoint":
+                deployer = SharePointDeployer(graph, rendered)
+                deploy_result = deployer.deploy(
+                    spec.target,
+                    folder_path=rendered.folder_path,
+                    filenames=rendered.filenames,
+                )
+            elif spec.canary_type == "onedrive":
+                deployer = OneDriveDeployer(graph, rendered)
+                deploy_result = deployer.deploy(
+                    spec.target,
+                    folder_path=rendered.folder_path,
+                    filenames=rendered.filenames,
+                )
+            else:
+                raise DeploymentError(
+                    f"Unsupported canary type: {spec.canary_type}"
+                )
+
+            # Write deployment record
+            safe_target = spec.target.replace("@", "-").replace(".", "-")
+            timestamp = datetime.datetime.now(datetime.timezone.utc).strftime(
+                "%Y%m%dT%H%M%SZ"
+            )
+            record_filename = f"{spec.canary_type}-{safe_target}-{timestamp}.json"
+            record_path = output_path / record_filename
+
+            record = {
+                "canary_type": spec.canary_type,
+                "template": spec.template,
+                "target": spec.target,
+                **deploy_result,
+            }
+            write_deployment_record(record_path, record)
+
+            result["success"] = True
+            result["record_path"] = str(record_path)
+
+        except Exception as exc:
+            logger.error(
+                "Batch deploy failed for spec %d (%s -> %s): %s",
+                index,
+                spec.canary_type,
+                spec.target,
+                exc,
+            )
+            result["success"] = False
+            result["error"] = str(exc)
+
+        results.append(result)
+
+    return results

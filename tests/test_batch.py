@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import dataclasses
+from unittest.mock import MagicMock
 
 import pytest
 import yaml
 
-from anglerfish.batch import parse_manifest
+from anglerfish.batch import parse_manifest, run_batch
 from anglerfish.exceptions import DeploymentError
-from anglerfish.models import CanarySpec
+from anglerfish.models import CanarySpec, OneDriveTemplate, OutlookTemplate
 
 
 def test_canary_spec_defaults():
@@ -135,3 +136,124 @@ def test_parse_manifest_invalid_yaml(tmp_path):
     manifest.write_text("canaries:\n  - [broken")
     with pytest.raises(DeploymentError, match="parse"):
         parse_manifest(manifest)
+
+
+# ---------------------------------------------------------------------------
+# Tests for run_batch
+# ---------------------------------------------------------------------------
+
+
+def _outlook_template():
+    return OutlookTemplate(
+        name="Fake Password Reset",
+        description="desc",
+        folder_name="IT Notifications",
+        subject="Reset",
+        body_html="<p>Reset</p>",
+        sender_name="IT",
+        sender_email="it@contoso.com",
+        variables=[],
+    )
+
+
+def _onedrive_template():
+    return OneDriveTemplate(
+        name="VPN Credentials Backup",
+        description="desc",
+        folder_path="IT/Backups",
+        filenames=["vpn_config.txt"],
+        content_text="VPN config",
+        variables=[],
+    )
+
+
+class FakeDeployer:
+    def __init__(self, graph, template):
+        self.graph = graph
+        self.template = template
+
+    def deploy(self, target_user, **kwargs):
+        return {
+            "type": "fake",
+            "target_user": target_user,
+            "status": "active",
+        }
+
+
+class FailingDeployer:
+    def __init__(self, graph, template):
+        pass
+
+    def deploy(self, target_user, **kwargs):
+        raise DeploymentError("Graph API 403: Forbidden")
+
+
+def test_run_batch_deploys_all_canaries(tmp_path, monkeypatch):
+    specs = [
+        CanarySpec(canary_type="outlook", template="Fake Password Reset", target="cfo@contoso.com", delivery_mode="draft"),
+        CanarySpec(canary_type="onedrive", template="VPN Credentials Backup", target="j.smith@contoso.com", folder_path="IT/Backups", filename="vpn.txt"),
+    ]
+    output_dir = tmp_path / "records"
+
+    import anglerfish.batch as batch_mod
+    monkeypatch.setattr(batch_mod, "_find_template_by_name", lambda ct, name: f"pkg://{ct}/fake.yaml")
+    monkeypatch.setattr(batch_mod, "load_template", lambda path: _outlook_template() if "outlook" in path else _onedrive_template())
+    monkeypatch.setattr(batch_mod, "render_template", lambda template, values: template)
+    monkeypatch.setattr(batch_mod, "OutlookDeployer", FakeDeployer)
+    monkeypatch.setattr(batch_mod, "OneDriveDeployer", FakeDeployer)
+    monkeypatch.setattr(batch_mod, "SharePointDeployer", FakeDeployer)
+
+    graph = MagicMock()
+    results = run_batch(specs, graph=graph, output_dir=output_dir)
+
+    assert len(results) == 2
+    assert all(r["success"] for r in results)
+    records = list(output_dir.glob("*.json"))
+    assert len(records) == 2
+
+
+def test_run_batch_continues_on_failure(tmp_path, monkeypatch):
+    specs = [
+        CanarySpec(canary_type="outlook", template="T", target="fail@e.com", delivery_mode="draft"),
+        CanarySpec(canary_type="onedrive", template="T", target="ok@e.com", folder_path="F", filename="f.txt"),
+    ]
+    output_dir = tmp_path / "records"
+
+    import anglerfish.batch as batch_mod
+    monkeypatch.setattr(batch_mod, "_find_template_by_name", lambda ct, name: f"pkg://{ct}/fake.yaml")
+    monkeypatch.setattr(batch_mod, "load_template", lambda path: _outlook_template() if "outlook" in path else _onedrive_template())
+    monkeypatch.setattr(batch_mod, "render_template", lambda template, values: template)
+    monkeypatch.setattr(batch_mod, "OutlookDeployer", FailingDeployer)
+    monkeypatch.setattr(batch_mod, "OneDriveDeployer", FakeDeployer)
+    monkeypatch.setattr(batch_mod, "SharePointDeployer", FakeDeployer)
+
+    graph = MagicMock()
+    results = run_batch(specs, graph=graph, output_dir=output_dir)
+
+    assert len(results) == 2
+    assert results[0]["success"] is False
+    assert "403" in results[0]["error"]
+    assert results[1]["success"] is True
+    records = list(output_dir.glob("*.json"))
+    assert len(records) == 1
+
+
+def test_run_batch_dry_run_writes_no_records(tmp_path, monkeypatch):
+    specs = [
+        CanarySpec(canary_type="outlook", template="T", target="u@e.com", delivery_mode="draft"),
+    ]
+    output_dir = tmp_path / "records"
+
+    import anglerfish.batch as batch_mod
+    monkeypatch.setattr(batch_mod, "_find_template_by_name", lambda ct, name: "pkg://outlook/fake.yaml")
+    monkeypatch.setattr(batch_mod, "load_template", lambda path: _outlook_template())
+    monkeypatch.setattr(batch_mod, "render_template", lambda template, values: template)
+
+    graph = MagicMock()
+    results = run_batch(specs, graph=graph, output_dir=output_dir, dry_run=True)
+
+    assert len(results) == 1
+    assert results[0]["success"] is True
+    assert results[0].get("dry_run") is True
+    records = list(output_dir.glob("*.json")) if output_dir.exists() else []
+    assert len(records) == 0
