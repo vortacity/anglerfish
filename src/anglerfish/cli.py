@@ -406,6 +406,13 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Webhook URL for alert POST.",
     )
     monitor_parser.add_argument(
+        "--slack-webhook-url",
+        default=None,
+        metavar="URL",
+        dest="slack_webhook_url",
+        help="Slack incoming webhook URL for alert notifications.",
+    )
+    monitor_parser.add_argument(
         "--no-console",
         action="store_true",
         default=False,
@@ -1495,6 +1502,7 @@ def _run_monitor(args: argparse.Namespace, console: Console) -> int:
         MONITOR_ALERT_LOG,
         MONITOR_ALERT_WEBHOOK,
         MONITOR_NO_CONSOLE,
+        MONITOR_SLACK_WEBHOOK,
         MONITOR_STATE_FILE,
         TENANT_ID,
     )
@@ -1546,10 +1554,12 @@ def _run_monitor(args: argparse.Namespace, console: Console) -> int:
     no_console = args.no_console or MONITOR_NO_CONSOLE
     alert_log = args.alert_log or MONITOR_ALERT_LOG or None
     alert_webhook = args.alert_webhook or MONITOR_ALERT_WEBHOOK or None
+    slack_webhook = getattr(args, "slack_webhook_url", None) or MONITOR_SLACK_WEBHOOK or None
     dispatcher = AlertDispatcher(
         console=None if no_console else console,
         alert_log=alert_log,
         webhook_url=alert_webhook,
+        slack_webhook_url=slack_webhook,
     )
 
     # Token manager for automatic refresh.
