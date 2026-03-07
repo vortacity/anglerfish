@@ -270,6 +270,10 @@ anglerfish monitor --records-dir ~/.anglerfish/records --once
 anglerfish monitor --records-dir ~/.anglerfish/records \
   --interval 60 \
   --exclude-app-id "your-app-client-id"
+
+# With Slack alerting
+anglerfish monitor --records-dir ~/.anglerfish/records \
+  --slack-webhook-url https://hooks.slack.com/services/T.../B.../xxx
 ```
 
 ### Detection Queries
@@ -332,6 +336,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for template schema documentation.
 | `monitor --once` | Poll once and exit |
 | `monitor --interval N` | Set poll interval in seconds (default: 300) |
 | `monitor --exclude-app-id ID` | Exclude app IDs from matching (repeatable) |
+| `monitor --slack-webhook-url URL` | Slack incoming webhook URL for alert notifications |
 | `detect <record>` | Subcommand: generate SIEM query from deployment record |
 | `detect --format FMT` | Query format: `kql`, `splunk`, or `odata` (default: kql) |
 | `batch <manifest>` | Subcommand: deploy multiple canaries from a YAML manifest |
