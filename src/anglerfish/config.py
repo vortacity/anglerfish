@@ -21,8 +21,19 @@ GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
 GRAPH_APP_SCOPE = "https://graph.microsoft.com/.default"
 GRAPH_DELEGATED_SCOPES = os.environ.get("ANGLERFISH_GRAPH_DELEGATED_SCOPES", "").strip()
 
+MANAGEMENT_API_BASE_URL = "https://manage.office.com/api/v1.0"
+MANAGEMENT_API_SCOPE = "https://manage.office.com/.default"
+
+MONITOR_STATE_FILE = os.environ.get("ANGLERFISH_MONITOR_STATE_FILE", "").strip()
+MONITOR_ALERT_LOG = os.environ.get("ANGLERFISH_MONITOR_ALERT_LOG", "").strip()
+MONITOR_ALERT_WEBHOOK = os.environ.get("ANGLERFISH_MONITOR_ALERT_WEBHOOK", "").strip()
+MONITOR_NO_CONSOLE = os.environ.get("ANGLERFISH_MONITOR_NO_CONSOLE", "").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+)
+
 TEMPLATES_ENV_VAR = "ANGLERFISH_TEMPLATES_DIR"
 TEMPLATE_KIND_OUTLOOK = "outlook"
 TEMPLATE_KIND_SHAREPOINT = "sharepoint"
-TEMPLATE_KIND_TEAMS = "teams"
 TEMPLATE_KIND_ONEDRIVE = "onedrive"

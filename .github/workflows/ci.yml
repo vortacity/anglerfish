@@ -43,6 +43,9 @@ jobs:
       - name: Format check (ruff format)
         run: ruff format --check src tests
 
+      - name: Security scan (bandit)
+        run: bandit -r src -ll
+
   audit:
     name: Dependency audit
     runs-on: ubuntu-latest

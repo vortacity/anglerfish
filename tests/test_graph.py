@@ -113,12 +113,12 @@ def test_graph_client_captures_request_context_on_error_response():
     client = GraphClient("token", session=session)
 
     with pytest.raises(GraphApiError) as exc_info:
-        client.post("/teams/abc/channels/def/messages", json={"body": {"content": "test"}})
+        client.post("/users/abc/mailFolders/def/messages", json={"body": {"content": "test"}})
 
     exc = exc_info.value
     assert exc.status_code == 403
     assert exc.method == "POST"
-    assert exc.path == "/teams/abc/channels/def/messages"
+    assert exc.path == "/users/abc/mailFolders/def/messages"
     assert exc.request_id == "header-req-id"
     assert exc.client_request_id == "inner-client-id"
 

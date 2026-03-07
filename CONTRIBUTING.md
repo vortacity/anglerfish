@@ -11,7 +11,7 @@ template authoring, and the pull request process.
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/<org>/anglerfish.git
+git clone https://github.com/vortacity/anglerfish.git
 cd anglerfish
 
 # 2. Create and activate a virtual environment
@@ -116,28 +116,6 @@ variables:
 
 `${filename}` in `content_text` is automatically substituted with the final filename.
 All other `${var}` slots must have corresponding `variables:` entries.
-
-### Teams Template Schema
-
-```yaml
-name: Human-readable template name
-description: One-line description
-type: teams
-
-variables:
-  - name: var_name
-    description: Prompt shown to the user
-    default: "default"
-
-subject: "Message subject shown in Teams"   # Required
-body_html: |                                 # Required — HTML string
-  <html>
-  <body>
-  <p>Hi ${var_name},</p>
-  <p>Message content here.</p>
-  </body>
-  </html>
-```
 
 ### Variable Substitution
 

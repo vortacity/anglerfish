@@ -217,6 +217,49 @@ def test_onedrive_deployer_raises_when_filenames_list_is_empty():
         deployer.deploy("j.smith@contoso.com", filenames=[])
 
 
+def test_onedrive_deployer_docx_filename_triggers_docx_content_type():
+    graph = StubGraph()
+    template = OneDriveTemplate(
+        name="Test",
+        description="Test",
+        folder_path="HR/Reviews",
+        filenames=["Review_Notes.docx"],
+        content_text="Performance review content",
+        variables=[],
+    )
+    deployer = OneDriveDeployer(graph, template)
+
+    deployer.deploy("j.smith@contoso.com")
+
+    assert graph.put_calls[0][2] == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+def test_onedrive_deployer_xlsx_filename_triggers_xlsx_content_type():
+    graph = StubGraph()
+    template = OneDriveTemplate(
+        name="Test",
+        description="Test",
+        folder_path="Financial/Investments",
+        filenames=["Portfolio.xlsx"],
+        content_text="Header\nRow 1\nRow 2",
+        variables=[],
+    )
+    deployer = OneDriveDeployer(graph, template)
+
+    deployer.deploy("j.smith@contoso.com")
+
+    assert graph.put_calls[0][2] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def test_onedrive_deployer_txt_filename_still_uses_text_plain():
+    graph = StubGraph()
+    deployer = OneDriveDeployer(graph, _template())
+
+    deployer.deploy("j.smith@contoso.com")
+
+    assert graph.put_calls[0][2] == "text/plain; charset=utf-8"
+
+
 def test_onedrive_deployer_allows_empty_folder_path():
     """OneDrive allows empty folder_path (file in drive root)."""
     graph = StubGraph()

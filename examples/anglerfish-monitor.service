@@ -1,0 +1,17 @@
+[Unit]
+Description=Anglerfish Canary Monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=anglerfish
+EnvironmentFile=/etc/anglerfish/env
+ExecStart=/usr/local/bin/anglerfish monitor --records-dir /var/lib/anglerfish/records --state-file /var/lib/anglerfish/monitor-state.json --alert-log /var/log/anglerfish/alerts.jsonl --no-console
+Restart=on-failure
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

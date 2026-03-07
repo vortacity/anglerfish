@@ -10,6 +10,7 @@ from urllib.parse import quote, unquote
 from ..exceptions import DeploymentError, GraphApiError
 from ..models import OneDriveTemplate
 from .base import BaseDeployer
+from .content import render_file_content
 
 _VERIFY_ATTEMPTS = 3
 # Percent-encoded slash (%2f), backslash (%5c), and dot (%2e) sequences used in traversal attacks.
@@ -36,11 +37,12 @@ class OneDriveDeployer(BaseDeployer):
             item_id = ""
             for filename in filenames:
                 path = _encode_drive_path(folder_path, filename)
-                content = self._render_content(filename).encode("utf-8")
+                rendered_text = self._render_content(filename)
+                content, content_type = render_file_content(rendered_text, filename)
                 item = self.graph.put(
                     f"/users/{encoded_upn}/drive/root:/{path}:/content",
                     data=content,
-                    content_type="text/plain; charset=utf-8",
+                    content_type=content_type,
                 )
                 item_id = str(item.get("id", "")).strip()
                 if not item_id:

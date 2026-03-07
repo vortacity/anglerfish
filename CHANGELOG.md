@@ -7,9 +7,29 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [Unreleased]
+## [0.2.0] — 2026-03-06
 
 ### Added
+
+- **`monitor` subcommand** — continuously poll the Office 365 Management Activity API
+  for canary access events. Correlates audit events against deployment records using
+  `CanaryIndex` (internet message ID, item ID, filename, folder path). Supports
+  `--once` for single-poll mode, `--interval` for custom poll frequency, and
+  `--exclude-app-id` to suppress self-access noise.
+
+- **`detect` subcommand** — generate SIEM detection queries from deployment records.
+  Supported formats: KQL (Sentinel), Splunk SPL, and OData filter. Usage:
+  `anglerfish detect <record.json> --format kql`.
+
+- **Management Activity API client** (`audit.py`) — subscription management, content
+  blob listing with pagination, and event fetching with retry/backoff.
+
+- **Rich file format support (.docx / .xlsx)** — canary files can now be deployed as
+  Word documents or Excel spreadsheets in addition to plain text. File format is
+  determined by the filename extension. Four new templates added: Board Meeting
+  Minutes (.docx), Compensation Analysis (.xlsx), Performance Review Notes (.docx),
+  and Investment Portfolio (.xlsx). Shared rendering logic in
+  `src/anglerfish/deployers/content.py`.
 
 - **OneDrive canary deployment** — upload deceptive files to personal OneDrive for
   Business storage to detect unauthorized file browsing. Uses

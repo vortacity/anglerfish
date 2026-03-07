@@ -36,3 +36,24 @@ class TemplateError(AnglerfishError):
 
 class DeploymentError(AnglerfishError):
     """Canary deployment failed."""
+
+
+class MonitorError(AnglerfishError):
+    """Monitor state or runtime error."""
+
+
+class AuditApiError(AnglerfishError):
+    """Management Activity API returned an error response."""
+
+    def __init__(
+        self,
+        message: str,
+        status_code: int = 0,
+        *,
+        method: str | None = None,
+        url: str | None = None,
+    ):
+        super().__init__(message)
+        self.status_code = status_code
+        self.method = (method or "").strip().upper()
+        self.url = (url or "").strip()

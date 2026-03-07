@@ -74,7 +74,7 @@ def test_demo_cleanup_works_for_onedrive():
 def test_demo_cleanup_rejects_unknown_type():
     """--demo cleanup with an unknown canary type returns error."""
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-        json.dump({"timestamp": "2026-01-01T00:00:00Z", "canary_type": "teams"}, f)
+        json.dump({"timestamp": "2026-01-01T00:00:00Z", "canary_type": "unknown"}, f)
         path = f.name
     result = cli.main(["--demo", "cleanup", "--non-interactive", path])
     assert result == 1

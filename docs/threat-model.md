@@ -14,7 +14,6 @@ Threat scenarios detected:
 | Attacker sends canary email to victim, victim opens it | Outlook (send) | `MailItemsAccessed` |
 | Attacker browses a SharePoint document library | SharePoint | `FileAccessed` |
 | Attacker browses a user's personal OneDrive | OneDrive | `FileAccessed`, `FileDownloaded` |
-| Attacker reads a Teams channel or chat | Teams | `MessageRead` (channel) / `ChatMessageRead` (chat) |
 
 ### UAL Event Details
 
@@ -23,9 +22,6 @@ Threat scenarios detected:
   for mailbox audit logging to be enabled.
 - **`FileAccessed`** — fires when a SharePoint/OneDrive file is opened or
   previewed. Available in all M365 plans with audit logging enabled.
-- **`MessageRead`** / **`ChatMessageRead`** — fires when a Teams channel message
-  or chat message is read. Requires an appropriate M365 license tier that
-  includes Teams audit logging.
 
 ## What Anglerfish Does NOT Detect
 
@@ -70,10 +66,6 @@ Anglerfish requires explicit authorization before deployment. Operators must:
 | Outlook | `Mail.ReadWrite` | Application |
 | SharePoint | `Sites.ReadWrite.All` | Application |
 | OneDrive | `Files.ReadWrite.All` | Application |
-| Teams channel | `ChannelMessage.Send` | Delegated |
-| Teams chat | `ChatMessage.Send` | Delegated |
-| Teams cleanup | `ChannelMessage.Delete`, `ChatMessage.Delete` | Delegated |
-
 Grant only the permissions required for the canary types you intend to deploy.
 
 ## Known Limitations
@@ -85,27 +77,12 @@ minutes of the triggering action, but Microsoft does not guarantee a specific
 SLA. Do not expect real-time detection. Configure your SIEM to query the UAL
 on a schedule (e.g., every 15–30 minutes) and alert on canary artifact IDs.
 
-### Teams Audit Requires Appropriate License Tier
-
-Teams audit events (`MessageRead`, `ChatMessageRead`) require a Microsoft 365
-license tier that includes Teams audit logging. As of 2026, this is generally
-available in Microsoft 365 E3 / E5 and equivalent plans. Verify that Teams
-audit logging is enabled in your tenant before relying on Teams canaries for
-detection.
-
 ### Shared Mailboxes May Require Additional Permissions
 
 For Outlook canaries targeting shared mailboxes, the app registration may
 require the `FullAccess` Exchange permission in addition to the Graph
 `Mail.ReadWrite` application permission, depending on tenant configuration.
 Test with a dedicated canary mailbox first.
-
-### Soft-Delete Only for Teams Messages
-
-Teams messages cannot be permanently deleted via the Graph API. The
-`cleanup` subcommand issues a soft-delete that marks the message as deleted
-in the Teams UI, but the message remains in compliance and audit logs. This is
-standard Microsoft 365 behavior and cannot be overridden via Graph API.
 
 ### No Detection of Access by the Deploying Principal
 

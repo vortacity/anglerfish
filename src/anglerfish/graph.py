@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from email.utils import parsedate_to_datetime
 import time
 from datetime import datetime, timezone
@@ -12,6 +13,8 @@ from requests import Response
 
 from .config import GRAPH_BASE_URL
 from .exceptions import GraphApiError
+
+logger = logging.getLogger(__name__)
 
 
 class GraphClient:
@@ -76,6 +79,7 @@ class GraphClient:
         can_retry = retry_safe or normalized_method in {"GET", "DELETE"}
 
         for attempt in range(self.retries):
+            logger.debug("%s %s", normalized_method, url)
             try:
                 response = self.session.request(normalized_method, url, timeout=self.timeout, **kwargs)
             except requests.RequestException as exc:
@@ -87,6 +91,8 @@ class GraphClient:
                     method=normalized_method,
                     path=request_path,
                 ) from exc
+
+            logger.debug("%s %s -> %d", normalized_method, url, response.status_code)
 
             if response.status_code == 429 and can_retry and attempt < self.retries - 1:
                 retry_after = _parse_retry_after(response.headers.get("Retry-After"))

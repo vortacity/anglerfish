@@ -10,6 +10,7 @@ from urllib.parse import quote, unquote
 from ..exceptions import DeploymentError, GraphApiError
 from ..models import SharePointTemplate
 from .base import BaseDeployer
+from .content import render_file_content
 
 _VERIFY_ATTEMPTS = 3
 _SHAREPOINT_LIBRARY_PREFIXES = {"shared documents", "documents"}
@@ -45,11 +46,12 @@ class SharePointDeployer(BaseDeployer):
             uploaded_urls: list[str] = []
             for filename in filenames:
                 path = _encode_drive_path(folder_path, filename)
-                content = self._render_content(filename).encode("utf-8")
+                rendered_text = self._render_content(filename)
+                content, content_type = render_file_content(rendered_text, filename)
                 item = self.graph.put(
                     f"/sites/{encoded_site_id}/drive/root:/{path}:/content",
                     data=content,
-                    content_type="text/plain; charset=utf-8",
+                    content_type=content_type,
                 )
                 item_id = str(item.get("id", "")).strip()
                 if not item_id:

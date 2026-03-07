@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Sequence
@@ -21,9 +22,12 @@ from .config import (
     CLIENT_SECRET,
     GRAPH_APP_SCOPE,
     GRAPH_DELEGATED_SCOPES,
+    MANAGEMENT_API_SCOPE,
     TENANT_ID,
 )
 from .exceptions import AuthenticationError
+
+logger = logging.getLogger(__name__)
 
 _DEFAULT_DELEGATED_SCOPES = (
     "User.Read",
@@ -45,6 +49,7 @@ def authenticate(
 ) -> str:
     """Authenticate using the configured auth mode and return an access token."""
     normalized_mode = _resolve_auth_mode(auth_mode)
+    logger.debug("Authenticating: mode=%s", normalized_mode)
     if normalized_mode == "application":
         return _authenticate_application(app_credential_mode=app_credential_mode)
     if normalized_mode == "delegated":
@@ -135,8 +140,27 @@ def _sanitize_delegated_scopes(raw_scopes: Sequence[str]) -> list[str]:
     return scopes
 
 
-def _authenticate_application(app_credential_mode: str | None = None) -> str:
-    """Authenticate via client credentials flow and return an app access token."""
+def authenticate_management_api(app_credential_mode: str | None = None) -> str:
+    """Authenticate for the Office 365 Management Activity API (app-only).
+
+    Uses the same MSAL client credentials flow and credential resolution as
+    ``_authenticate_application`` but requests a token scoped to
+    ``https://manage.office.com/.default`` instead of Graph.
+
+    Raises ``AuthenticationError`` if delegated mode is attempted (the
+    Management Activity API requires application-level permissions).
+    """
+    auth_mode = _resolve_auth_mode(None)
+    if auth_mode == "delegated":
+        raise AuthenticationError(
+            "The Management Activity API requires application (client credentials) auth. "
+            "Delegated auth mode is not supported for monitoring."
+        )
+    return _acquire_app_token(scope=MANAGEMENT_API_SCOPE, app_credential_mode=app_credential_mode)
+
+
+def _acquire_app_token(*, scope: str, app_credential_mode: str | None = None) -> str:
+    """Shared logic for acquiring an app-only token for a given scope."""
     client_id = _get_str_env("ANGLERFISH_CLIENT_ID", CLIENT_ID)
     tenant_id = _get_str_env("ANGLERFISH_TENANT_ID", TENANT_ID)
     client_secret = _get_str_env("ANGLERFISH_CLIENT_SECRET", CLIENT_SECRET)
@@ -205,7 +229,7 @@ def _authenticate_application(app_credential_mode: str | None = None) -> str:
         client_credential=client_credential,
     )
 
-    result = app.acquire_token_for_client(scopes=[GRAPH_APP_SCOPE])
+    result = app.acquire_token_for_client(scopes=[scope])
     if not isinstance(result, dict) or "access_token" not in result:
         details = "Unknown error"
         if isinstance(result, dict):
@@ -213,6 +237,11 @@ def _authenticate_application(app_credential_mode: str | None = None) -> str:
         raise AuthenticationError(f"Application authentication failed: {details}")
 
     return str(result["access_token"])
+
+
+def _authenticate_application(app_credential_mode: str | None = None) -> str:
+    """Authenticate via client credentials flow and return an app access token."""
+    return _acquire_app_token(scope=GRAPH_APP_SCOPE, app_credential_mode=app_credential_mode)
 
 
 def _build_certificate_credential(

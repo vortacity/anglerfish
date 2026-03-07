@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from anglerfish.exceptions import TemplateError
-from anglerfish.models import OutlookTemplate, SharePointTemplate, TeamsTemplate
+from anglerfish.models import OneDriveTemplate, OutlookTemplate, SharePointTemplate
 from anglerfish.templates import list_templates, load_template, render_template
 
 
@@ -174,56 +174,6 @@ content_text: Canary file ${filename}
         load_template(str(template_file))
 
 
-def test_list_templates_returns_packaged_teams_templates():
-    templates = list_templates("teams")
-
-    assert templates
-    assert all(item["path"] for item in templates)
-    assert all(item["name"] for item in templates)
-
-
-def test_load_packaged_template_returns_teams_template():
-    template_ref = list_templates("teams")[0]["path"]
-    template = load_template(template_ref)
-
-    assert isinstance(template, TeamsTemplate)
-    assert template.subject
-    assert template.body_html
-
-
-def test_render_teams_template_substitutes_variables():
-    template = TeamsTemplate(
-        name="Test",
-        description="desc",
-        subject="Alert ${incident_id}",
-        body_html="<p>Severity: ${severity}</p>",
-        variables=[
-            {"name": "incident_id", "description": "ID", "default": "INC-001"},
-            {"name": "severity", "description": "Severity", "default": "High"},
-        ],
-    )
-
-    rendered = render_template(template, {"incident_id": "INC-999"})
-    assert rendered.subject == "Alert INC-999"
-    assert rendered.body_html == "<p>Severity: High</p>"
-
-
-def test_load_teams_template_rejects_missing_fields(tmp_path: Path):
-    template_file = tmp_path / "bad_teams_template.yaml"
-    template_file.write_text(
-        """
-name: Bad Teams Template
-description: Should fail
-type: teams
-subject: Test Subject
-""".strip(),
-        encoding="utf-8",
-    )
-
-    with pytest.raises(TemplateError, match="missing required fields"):
-        load_template(str(template_file))
-
-
 # --- New template tests ---
 
 
@@ -277,28 +227,6 @@ def test_load_employee_salary_bands_template():
     StringTemplate(template.content_text).safe_substitute()
 
 
-def test_load_urgent_ceo_request_template():
-    from string import Template as StringTemplate
-
-    templates = {t["name"]: t["path"] for t in list_templates("teams")}
-    template = load_template(templates["Urgent CEO Request"])
-
-    assert isinstance(template, TeamsTemplate)
-    assert template.subject
-    StringTemplate(template.body_html).safe_substitute()
-
-
-def test_load_it_access_review_template():
-    from string import Template as StringTemplate
-
-    templates = {t["name"]: t["path"] for t in list_templates("teams")}
-    template = load_template(templates["IT Access Review Required"])
-
-    assert isinstance(template, TeamsTemplate)
-    assert template.subject
-    StringTemplate(template.body_html).safe_substitute()
-
-
 # --- New template coverage tests ---
 
 
@@ -324,7 +252,7 @@ def test_list_templates_uses_custom_dir(tmp_path: Path, monkeypatch: pytest.Monk
 def test_list_templates_custom_dir_missing_subdir_returns_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("ANGLERFISH_TEMPLATES_DIR", str(tmp_path))
 
-    templates = list_templates("teams")
+    templates = list_templates("outlook")
 
     assert templates == []
 
@@ -547,6 +475,56 @@ def test_render_sharepoint_empty_filename_after_substitution_raises():
 
     with pytest.raises(TemplateError, match="empty filename"):
         render_template(template, {})
+
+
+def test_load_board_meeting_minutes_template():
+    from string import Template as StringTemplate
+
+    templates = {t["name"]: t["path"] for t in list_templates("sharepoint")}
+    template = load_template(templates["Board Meeting Minutes"])
+
+    assert isinstance(template, SharePointTemplate)
+    assert template.site_name == "Executive"
+    assert template.folder_path == "Board/Minutes"
+    assert template.filenames == ["Board_Minutes_${quarter}.docx"]
+    StringTemplate(template.content_text).safe_substitute()
+
+
+def test_load_compensation_analysis_template():
+    from string import Template as StringTemplate
+
+    templates = {t["name"]: t["path"] for t in list_templates("sharepoint")}
+    template = load_template(templates["Compensation Analysis"])
+
+    assert isinstance(template, SharePointTemplate)
+    assert template.site_name == "HR"
+    assert template.folder_path == "Compensation/Analysis"
+    assert template.filenames == ["${year}_Compensation_Analysis_${department}.xlsx"]
+    StringTemplate(template.content_text).safe_substitute()
+
+
+def test_load_performance_review_notes_template():
+    from string import Template as StringTemplate
+
+    templates = {t["name"]: t["path"] for t in list_templates("onedrive")}
+    template = load_template(templates["Performance Review Notes"])
+
+    assert isinstance(template, OneDriveTemplate)
+    assert template.folder_path == "HR/Reviews"
+    assert template.filenames == ["${review_period}_Performance_Review_Notes.docx"]
+    StringTemplate(template.content_text).safe_substitute()
+
+
+def test_load_investment_portfolio_template():
+    from string import Template as StringTemplate
+
+    templates = {t["name"]: t["path"] for t in list_templates("onedrive")}
+    template = load_template(templates["Investment Portfolio"])
+
+    assert isinstance(template, OneDriveTemplate)
+    assert template.folder_path == "Financial/Investments"
+    assert template.filenames == ["Portfolio_Summary_${year}.xlsx"]
+    StringTemplate(template.content_text).safe_substitute()
 
 
 def test_render_sharepoint_multiple_filenames_after_substitution_raises():

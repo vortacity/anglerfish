@@ -1,0 +1,25 @@
+name: Compensation Analysis
+description: Deceptive compensation spreadsheet in SharePoint to detect unauthorized access
+type: sharepoint
+
+site_name: HR
+folder_path: Compensation/Analysis
+filenames:
+  - ${year}_Compensation_Analysis_${department}.xlsx
+content_text: |
+  Employee ID	Name	Title	Band	Base Salary	Bonus Target	Total Comp
+  EMP-1001	[REDACTED]	Senior Engineer	L5	145000	15%	166750
+  EMP-1002	[REDACTED]	Staff Engineer	L6	185000	20%	222000
+  EMP-1003	[REDACTED]	Engineering Manager	M3	175000	20%	210000
+  EMP-1004	[REDACTED]	Principal Engineer	L7	220000	25%	275000
+  EMP-1005	[REDACTED]	Director of Engineering	M4	210000	30%	273000
+  CONFIDENTIAL — HR AND FINANCE USE ONLY — ${year} ${department}
+  Canary Document: ${filename} — Access is logged and monitored.
+
+variables:
+  - name: year
+    description: Compensation analysis year
+    default: "2026"
+  - name: department
+    description: Business unit or department name
+    default: Engineering

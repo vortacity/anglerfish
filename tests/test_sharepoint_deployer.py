@@ -408,6 +408,51 @@ def test_sharepoint_deployer_raises_when_filenames_list_is_empty():
         deployer.deploy("Finance", filenames=[])
 
 
+def test_sharepoint_deployer_docx_filename_triggers_docx_content_type():
+    graph = StubGraph()
+    template = SharePointTemplate(
+        name="Test",
+        description="Test",
+        site_name="Finance",
+        folder_path="Board/Minutes",
+        filenames=["Board_Minutes.docx"],
+        content_text="Board meeting minutes content",
+        variables=[],
+    )
+    deployer = SharePointDeployer(graph, template)
+
+    deployer.deploy("Finance")
+
+    assert graph.put_calls[0][2] == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+def test_sharepoint_deployer_xlsx_filename_triggers_xlsx_content_type():
+    graph = StubGraph()
+    template = SharePointTemplate(
+        name="Test",
+        description="Test",
+        site_name="Finance",
+        folder_path="Compensation/Analysis",
+        filenames=["Compensation.xlsx"],
+        content_text="Header\nRow 1\nRow 2",
+        variables=[],
+    )
+    deployer = SharePointDeployer(graph, template)
+
+    deployer.deploy("Finance")
+
+    assert graph.put_calls[0][2] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def test_sharepoint_deployer_txt_filename_still_uses_text_plain():
+    graph = StubGraph()
+    deployer = SharePointDeployer(graph, _template())
+
+    deployer.deploy("Finance")
+
+    assert graph.put_calls[0][2] == "text/plain; charset=utf-8"
+
+
 def test_sharepoint_describe_candidate_returns_label_when_names_match():
     from anglerfish.deployers.sharepoint import _describe_candidate
 

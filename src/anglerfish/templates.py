@@ -14,17 +14,15 @@ from .config import (
     TEMPLATE_KIND_ONEDRIVE,
     TEMPLATE_KIND_OUTLOOK,
     TEMPLATE_KIND_SHAREPOINT,
-    TEMPLATE_KIND_TEAMS,
     TEMPLATES_ENV_VAR,
 )
 from .exceptions import TemplateError
-from .models import OneDriveTemplate, OutlookTemplate, SharePointTemplate, TeamsTemplate
+from .models import OneDriveTemplate, OutlookTemplate, SharePointTemplate
 
 _PACKAGE_PATH_PREFIX = "pkg://"
 _SUPPORTED_TEMPLATE_TYPES = (
     TEMPLATE_KIND_OUTLOOK,
     TEMPLATE_KIND_SHAREPOINT,
-    TEMPLATE_KIND_TEAMS,
     TEMPLATE_KIND_ONEDRIVE,
 )
 _REQUIRED_OUTLOOK_FIELDS = (
@@ -43,12 +41,6 @@ _REQUIRED_SHAREPOINT_FIELDS = (
     "folder_path",
     "filenames",
     "content_text",
-)
-_REQUIRED_TEAMS_FIELDS = (
-    "name",
-    "description",
-    "subject",
-    "body_html",
 )
 _REQUIRED_ONEDRIVE_FIELDS = (
     "name",
@@ -72,7 +64,7 @@ def list_templates(canary_type: str) -> list[dict[str, str]]:
     return _list_packaged_templates(canary_type)
 
 
-def load_template(path: str) -> OutlookTemplate | SharePointTemplate | TeamsTemplate | OneDriveTemplate:
+def load_template(path: str) -> OutlookTemplate | SharePointTemplate | OneDriveTemplate:
     """Load and validate a template from package or filesystem."""
     data = _load_template_data(path)
 
@@ -81,8 +73,6 @@ def load_template(path: str) -> OutlookTemplate | SharePointTemplate | TeamsTemp
         return _load_outlook_template(data)
     if template_type == TEMPLATE_KIND_SHAREPOINT:
         return _load_sharepoint_template(data)
-    if template_type == TEMPLATE_KIND_TEAMS:
-        return _load_teams_template(data)
     if template_type == TEMPLATE_KIND_ONEDRIVE:
         return _load_onedrive_template(data)
 
@@ -132,22 +122,6 @@ def _load_sharepoint_template(data: dict) -> SharePointTemplate:
         folder_path=str(data["folder_path"]),
         filenames=filenames,
         content_text=str(data["content_text"]),
-        variables=variables,
-    )
-
-
-def _load_teams_template(data: dict) -> TeamsTemplate:
-    missing = [field for field in _REQUIRED_TEAMS_FIELDS if not str(data.get(field, "")).strip()]
-    if missing:
-        raise TemplateError(f"Template missing required fields: {', '.join(missing)}")
-
-    variables = _parse_variables(data.get("variables"))
-
-    return TeamsTemplate(
-        name=str(data["name"]),
-        description=str(data["description"]),
-        subject=str(data["subject"]),
-        body_html=str(data["body_html"]),
         variables=variables,
     )
 
@@ -293,13 +267,12 @@ def _parse_filenames(raw: object) -> list[str]:
 
 
 _OUTLOOK_RENDER_FIELDS = ("subject", "body_html", "sender_name", "sender_email", "folder_name")
-_TEAMS_RENDER_FIELDS = ("subject", "body_html")
 
 
 def render_template(
-    template: OutlookTemplate | SharePointTemplate | TeamsTemplate | OneDriveTemplate,
+    template: OutlookTemplate | SharePointTemplate | OneDriveTemplate,
     values: dict[str, str],
-) -> OutlookTemplate | SharePointTemplate | TeamsTemplate | OneDriveTemplate:
+) -> OutlookTemplate | SharePointTemplate | OneDriveTemplate:
     """Substitute template variables and return a new template instance."""
     # Build defaults from variable definitions
     defaults: dict[str, str] = {}
@@ -343,13 +316,6 @@ def render_template(
             filenames=filenames,
             content_text=content_text,
         )
-
-    if isinstance(template, TeamsTemplate):
-        updates: dict[str, str] = {}
-        for field in _TEAMS_RENDER_FIELDS:
-            original = getattr(template, field)
-            updates[field] = StringTemplate(original).safe_substitute(merged)
-        return dataclasses.replace(template, **updates)
 
     if isinstance(template, OneDriveTemplate):
         folder_path = StringTemplate(template.folder_path).safe_substitute(merged).strip()
