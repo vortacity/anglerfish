@@ -5,6 +5,12 @@ from __future__ import annotations
 import random
 from datetime import datetime, timezone
 
+from textual.app import App, ComposeResult
+from textual.binding import Binding
+from textual.containers import Horizontal
+from textual.widgets import DataTable, Footer, Header, RichLog, Static
+
+from . import __version__
 from .monitor import CanaryAlert
 from .verify import VerifyResult, VerifyStatus
 
@@ -149,3 +155,166 @@ class DemoDataProvider:
         current = self._verify_statuses[idx]
         choices = [s for s in VerifyStatus if s != current]
         self._verify_statuses[idx] = random.choice(choices)
+
+
+# ------------------------------------------------------------------
+# Status styling
+# ------------------------------------------------------------------
+
+_STATUS_STYLES = {
+    VerifyStatus.OK: "green",
+    VerifyStatus.GONE: "red",
+    VerifyStatus.ERROR: "yellow",
+}
+
+
+# ------------------------------------------------------------------
+# Textual dashboard app
+# ------------------------------------------------------------------
+
+
+class AnglerDashboard(App):
+    """Full-screen canary monitoring dashboard."""
+
+    TITLE = "Anglerfish Dashboard"
+    CSS = """
+    Horizontal {
+        height: 1fr;
+    }
+    DataTable {
+        width: 1fr;
+    }
+    RichLog {
+        width: 1fr;
+        border-left: solid $accent;
+    }
+    #stats-bar {
+        dock: bottom;
+        height: 3;
+        padding: 0 1;
+        background: $surface;
+        color: $text;
+    }
+    """
+    BINDINGS = [
+        Binding("q", "quit", "Quit"),
+        Binding("r", "refresh", "Refresh"),
+    ]
+
+    def __init__(
+        self,
+        *,
+        demo: bool = False,
+        records_dir: str = "",
+        poll_interval: int = 300,
+        verify_interval: int = 300,
+        alert_log: str = "",
+        exclude_app_ids: list[str] | None = None,
+        credential_mode: str | None = None,
+    ) -> None:
+        super().__init__()
+        self._demo = demo
+        self._records_dir = records_dir
+        self._poll_interval = poll_interval
+        self._verify_interval = verify_interval
+        self._alert_log = alert_log
+        self._exclude_app_ids = exclude_app_ids or []
+        self._credential_mode = credential_mode
+        self._demo_provider: DemoDataProvider | None = None
+        self._alert_count = 0
+        self._last_poll = ""
+        self._started_at = datetime.now(timezone.utc)
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        with Horizontal():
+            yield DataTable(id="canary-table")
+            yield RichLog(id="alert-feed", markup=True)
+        yield Static(id="stats-bar")
+        yield Footer()
+
+    def on_mount(self) -> None:
+        self.sub_title = f"v{__version__}"
+        table = self.query_one("#canary-table", DataTable)
+        table.add_columns("Type", "Template", "Target", "Status")
+
+        if self._demo:
+            self._demo_provider = DemoDataProvider()
+            self._populate_demo_canaries()
+            self._update_stats()
+            self.set_interval(self._poll_interval, self._demo_poll_tick)
+            self.set_interval(self._verify_interval, self._demo_verify_tick)
+        else:
+            self._init_live_mode()
+
+    def _populate_demo_canaries(self) -> None:
+        assert self._demo_provider is not None
+        table = self.query_one("#canary-table", DataTable)
+        for result in self._demo_provider.verify_results():
+            style = _STATUS_STYLES.get(result.status, "white")
+            table.add_row(
+                result.canary_type,
+                result.template_name,
+                result.target,
+                f"[{style}]{result.status.value}[/{style}]",
+            )
+
+    def _demo_poll_tick(self) -> None:
+        assert self._demo_provider is not None
+        alert = self._demo_provider.generate_alert()
+        self._append_alert(alert)
+
+    def _demo_verify_tick(self) -> None:
+        assert self._demo_provider is not None
+        self._demo_provider.cycle_verify_status()
+        self._refresh_canary_table_demo()
+
+    def _refresh_canary_table_demo(self) -> None:
+        assert self._demo_provider is not None
+        table = self.query_one("#canary-table", DataTable)
+        table.clear()
+        for result in self._demo_provider.verify_results():
+            style = _STATUS_STYLES.get(result.status, "white")
+            table.add_row(
+                result.canary_type,
+                result.template_name,
+                result.target,
+                f"[{style}]{result.status.value}[/{style}]",
+            )
+
+    def _append_alert(self, alert: CanaryAlert) -> None:
+        feed = self.query_one("#alert-feed", RichLog)
+        self._alert_count += 1
+        self._last_poll = datetime.now(timezone.utc).strftime("%H:%M UTC")
+        feed.write(
+            f"[bold red]{alert.timestamp}  {alert.canary_type.upper()}[/bold red]\n"
+            f"  {alert.accessed_by}\n"
+            f"  {alert.template_name}\n"
+            f"  {alert.source_ip}\n"
+        )
+        self._update_stats()
+
+    def _update_stats(self) -> None:
+        bar = self.query_one("#stats-bar", Static)
+        now = datetime.now(timezone.utc)
+        uptime = now - self._started_at
+        minutes = int(uptime.total_seconds() // 60)
+        canary_count = 0
+        if self._demo_provider:
+            canary_count = len(self._demo_provider.records())
+        last = self._last_poll or "\u2014"
+        bar.update(
+            f"Canaries: {canary_count}  |  "
+            f"Alerts: {self._alert_count}  |  "
+            f"Last poll: {last}  |  "
+            f"Uptime: {minutes}m"
+        )
+
+    def action_refresh(self) -> None:
+        if self._demo and self._demo_provider:
+            self._demo_poll_tick()
+            self._demo_verify_tick()
+
+    def _init_live_mode(self) -> None:
+        """Placeholder for live API mode \u2014 implemented in Task 5."""
+        pass

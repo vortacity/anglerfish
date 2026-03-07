@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import pytest
+from textual.widgets import DataTable, RichLog, Static
+
 from anglerfish.dashboard import DemoDataProvider
 from anglerfish.monitor import CanaryAlert
 from anglerfish.verify import VerifyResult, VerifyStatus
@@ -56,3 +59,32 @@ class TestDemoDataProvider:
         after = provider._verify_statuses
         assert before != after
         assert all(isinstance(s, VerifyStatus) for s in after)
+
+
+class TestAnglerDashboardApp:
+    @pytest.mark.asyncio
+    async def test_app_mounts_all_panels_in_demo_mode(self):
+        from anglerfish.dashboard import AnglerDashboard
+
+        app = AnglerDashboard(demo=True)
+        async with app.run_test() as _pilot:
+            assert app.query_one(DataTable) is not None
+            assert app.query_one(RichLog) is not None
+            assert app.query_one("#stats-bar", Static) is not None
+
+    @pytest.mark.asyncio
+    async def test_canary_table_populated_in_demo_mode(self):
+        from anglerfish.dashboard import AnglerDashboard
+
+        app = AnglerDashboard(demo=True)
+        async with app.run_test() as _pilot:
+            table = app.query_one(DataTable)
+            assert table.row_count == 5
+
+    @pytest.mark.asyncio
+    async def test_q_key_exits_app(self):
+        from anglerfish.dashboard import AnglerDashboard
+
+        app = AnglerDashboard(demo=True)
+        async with app.run_test() as pilot:
+            await pilot.press("q")
