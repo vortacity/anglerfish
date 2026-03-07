@@ -473,6 +473,44 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Credential type for application auth.",
     )
 
+    verify_parser = subparsers.add_parser("verify", help="Check that deployed canaries still exist.")
+    verify_parser.add_argument(
+        "record",
+        nargs="?",
+        default=None,
+        metavar="RECORD",
+        help="Path to a single deployment record JSON file.",
+    )
+    verify_parser.add_argument(
+        "--records-dir",
+        default=None,
+        metavar="DIR",
+        dest="records_dir",
+        help="Directory containing deployment record JSON files.",
+    )
+    verify_parser.add_argument(
+        "--demo",
+        action="store_true",
+        default=False,
+        help="Show simulated verify output (no auth required).",
+    )
+    verify_parser.add_argument(
+        "--tenant-id",
+        default=None,
+        help="Microsoft Entra tenant ID. Overrides ANGLERFISH_TENANT_ID.",
+    )
+    verify_parser.add_argument(
+        "--client-id",
+        default=None,
+        help="Microsoft Entra application (client) ID. Overrides ANGLERFISH_CLIENT_ID.",
+    )
+    verify_parser.add_argument(
+        "--credential-mode",
+        choices=("auto", "secret", "certificate"),
+        default=None,
+        help="Credential type for application auth.",
+    )
+
     return parser.parse_args(list(argv) if argv is not None else sys.argv[1:])
 
 
@@ -1646,6 +1684,79 @@ def _run_batch(args: argparse.Namespace, console: Console) -> int:
     return 1 if failed > 0 else 0
 
 
+def _run_verify(args: argparse.Namespace, console: Console) -> int:
+    """Verify deployed canaries still exist via Graph API."""
+    from .monitor import load_records
+    from .verify import VerifyResult, VerifyStatus, run_verify
+
+    _print_banner(console)
+
+    # Collect records.
+    records: list[tuple[str, dict]] = []
+    if args.record:
+        rec = read_deployment_record(args.record)
+        records.append((args.record, rec))
+    elif args.records_dir:
+        records = load_records(args.records_dir)
+    else:
+        default_dir = str(Path.home() / ".anglerfish" / "records")
+        records = load_records(default_dir)
+
+    if not records:
+        console.print("[yellow]No deployment records found to verify.[/yellow]")
+        return 1
+
+    console.print(f"Verifying [bold]{len(records)}[/bold] deployment record(s)...\n")
+
+    if getattr(args, "demo", False):
+        # Demo mode: show simulated output.
+        results = [
+            VerifyResult(canary_type="outlook", template_name="Fake Password Reset", target="cfo@contoso.com", status=VerifyStatus.OK),
+            VerifyResult(canary_type="sharepoint", template_name="Employee Salary Bands", target="HRSite", status=VerifyStatus.GONE, detail="404 Not Found"),
+            VerifyResult(canary_type="onedrive", template_name="VPN Credentials Backup", target="j.smith@contoso.com", status=VerifyStatus.OK),
+        ]
+    else:
+        # Authenticate.
+        app_credential_mode = _prompt_auth_setup(args, console, auth_mode="application", non_interactive=True)
+        console.print("Authenticating with Microsoft Graph...")
+        token = authenticate(auth_mode="application", app_credential_mode=app_credential_mode)
+        graph = GraphClient(token)
+        _print_auth_success(console, auth_mode="application")
+
+        results = run_verify(records, graph)
+
+    # Render table.
+    table = Table(box=box.ROUNDED, title="Canary Verification")
+    table.add_column("Type", style="dim")
+    table.add_column("Template")
+    table.add_column("Target")
+    table.add_column("Status")
+
+    any_bad = False
+    for r in results:
+        if r.status == VerifyStatus.OK:
+            status_str = "[green]OK[/green]"
+        elif r.status == VerifyStatus.GONE:
+            status_str = "[red]GONE[/red]"
+            any_bad = True
+        else:
+            status_str = f"[yellow]ERROR: {r.detail}[/yellow]"
+            any_bad = True
+        table.add_row(r.canary_type, r.template_name, r.target, status_str)
+
+    console.print(table)
+
+    ok_count = sum(1 for r in results if r.status == VerifyStatus.OK)
+    gone_count = sum(1 for r in results if r.status == VerifyStatus.GONE)
+    error_count = sum(1 for r in results if r.status == VerifyStatus.ERROR)
+    console.print(f"\n[bold]{ok_count} OK, {gone_count} gone, {error_count} error(s)[/bold]")
+
+    if getattr(args, "demo", False):
+        console.print("[bold yellow]Demo mode — no Graph API calls were made.[/bold yellow]")
+
+    return 1 if any_bad else 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
     if getattr(args, "verbose", False):
@@ -1687,6 +1798,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         except KeyboardInterrupt:
             console.print("\n[yellow]Cancelled.[/yellow]")
             return 130
+
+    if args.subcommand == "verify":
+        try:
+            return _run_verify(args, console)
+        except (AuthenticationError, DeploymentError, GraphApiError) as exc:
+            _print_error(console, _format_exception_message(exc))
+            return 1
 
     _print_banner(console)
 
