@@ -31,10 +31,12 @@ class AlertDispatcher:
         console: Console | None = None,
         alert_log: str | Path | None = None,
         webhook_url: str | None = None,
+        slack_webhook_url: str | None = None,
     ):
         self._console = console
         self._alert_log = Path(alert_log) if alert_log else None
         self._webhook_url = webhook_url
+        self._slack_webhook_url = slack_webhook_url
 
     def dispatch(self, alert: CanaryAlert) -> None:
         """Send an alert to all configured channels."""
@@ -55,6 +57,12 @@ class AlertDispatcher:
                 _post_webhook(self._webhook_url, alert)
             except Exception:
                 logger.warning("Webhook alert POST failed", exc_info=True)
+
+        if self._slack_webhook_url is not None:
+            try:
+                _post_slack(self._slack_webhook_url, alert)
+            except Exception:
+                logger.warning("Slack alert POST failed", exc_info=True)
 
 
 # ------------------------------------------------------------------
@@ -110,3 +118,42 @@ def _post_webhook(url: str, alert: CanaryAlert) -> None:
     resp = requests.post(url, json=payload, timeout=10)
     if not resp.ok:
         logger.warning("Webhook POST to %s returned HTTP %d", url, resp.status_code)
+
+
+# ------------------------------------------------------------------
+# Slack channel
+# ------------------------------------------------------------------
+
+
+def _post_slack(url: str, alert: CanaryAlert) -> None:
+    """POST a Block Kit message to a Slack incoming webhook."""
+    blocks = [
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": f"Canary Alert: {alert.canary_type} canary accessed",
+            },
+        },
+        {
+            "type": "section",
+            "fields": [
+                {"type": "mrkdwn", "text": f"*Canary:*\n{alert.template_name}"},
+                {"type": "mrkdwn", "text": f"*Operation:*\n{alert.operation}"},
+                {"type": "mrkdwn", "text": f"*Accessed by:*\n{alert.accessed_by}"},
+                {"type": "mrkdwn", "text": f"*Source IP:*\n{alert.source_ip}"},
+                {"type": "mrkdwn", "text": f"*Timestamp:*\n{alert.timestamp}"},
+                {"type": "mrkdwn", "text": f"*Artifact:*\n{alert.artifact_label}"},
+            ],
+        },
+        {
+            "type": "context",
+            "elements": [
+                {"type": "mrkdwn", "text": f"Record: `{alert.record_path}`"},
+            ],
+        },
+    ]
+    payload = {"text": f"Canary Alert: {alert.template_name} accessed by {alert.accessed_by}", "blocks": blocks}
+    resp = requests.post(url, json=payload, timeout=10)
+    if not resp.ok:
+        logger.warning("Slack POST to %s returned HTTP %d", url, resp.status_code)

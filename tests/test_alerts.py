@@ -136,3 +136,42 @@ def test_console_failure_does_not_block_jsonl(tmp_path):
     assert log_path.is_file()
     lines = log_path.read_text().strip().split("\n")
     assert len(lines) == 1
+
+
+# ------------------------------------------------------------------
+# Slack channel
+# ------------------------------------------------------------------
+
+
+def test_dispatch_slack_posts_block_kit():
+    with patch("anglerfish.alerts.requests.post") as mock_post:
+        mock_post.return_value.ok = True
+        dispatcher = AlertDispatcher(slack_webhook_url="https://hooks.slack.com/services/T/B/xxx")
+        dispatcher.dispatch(_sample_alert())
+
+        mock_post.assert_called_once()
+        call_kwargs = mock_post.call_args
+        payload = call_kwargs[1]["json"]
+        # Slack Block Kit has "blocks" key
+        assert "blocks" in payload
+        assert call_kwargs[1]["timeout"] == 10
+
+
+def test_dispatch_slack_failure_does_not_raise():
+    with patch("anglerfish.alerts.requests.post") as mock_post:
+        mock_post.side_effect = ConnectionError("network down")
+        dispatcher = AlertDispatcher(slack_webhook_url="https://hooks.slack.com/services/T/B/xxx")
+        # Should not raise.
+        dispatcher.dispatch(_sample_alert())
+
+
+def test_dispatch_slack_and_webhook_both_fire():
+    with patch("anglerfish.alerts.requests.post") as mock_post:
+        mock_post.return_value.ok = True
+        dispatcher = AlertDispatcher(
+            webhook_url="https://hooks.example.com/alert",
+            slack_webhook_url="https://hooks.slack.com/services/T/B/xxx",
+        )
+        dispatcher.dispatch(_sample_alert())
+
+        assert mock_post.call_count == 2
