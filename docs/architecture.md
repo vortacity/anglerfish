@@ -68,3 +68,4 @@ Records are used by:
 - default command: deploy
 - `cleanup <record>`
 - `list [--records-dir DIR]`
+- `dashboard [--demo] [--poll-interval N] [--verify-interval N]` (live TUI — Textual app)

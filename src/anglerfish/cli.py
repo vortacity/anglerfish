@@ -511,6 +511,68 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Credential type for application auth.",
     )
 
+    dashboard_parser = subparsers.add_parser("dashboard", help="Live TUI dashboard for canary monitoring.")
+    dashboard_parser.add_argument(
+        "--records-dir",
+        default=str(Path.home() / ".anglerfish" / "records"),
+        metavar="DIR",
+        dest="records_dir",
+        help="Directory containing deployment record JSON files.",
+    )
+    dashboard_parser.add_argument(
+        "--poll-interval",
+        type=int,
+        default=300,
+        metavar="SECONDS",
+        dest="poll_interval",
+        help="Audit log poll interval in seconds (default: 300).",
+    )
+    dashboard_parser.add_argument(
+        "--verify-interval",
+        type=int,
+        default=300,
+        metavar="SECONDS",
+        dest="verify_interval",
+        help="Health check refresh interval in seconds (default: 300).",
+    )
+    dashboard_parser.add_argument(
+        "--alert-log",
+        default=None,
+        metavar="PATH",
+        dest="alert_log",
+        help="JSONL alert log file (loads history on startup).",
+    )
+    dashboard_parser.add_argument(
+        "--exclude-app-id",
+        action="append",
+        default=[],
+        metavar="APP_ID",
+        dest="exclude_app_ids",
+        help="App/client IDs to exclude from matching (repeatable).",
+    )
+    dashboard_parser.add_argument(
+        "--credential-mode",
+        choices=("auto", "secret", "certificate"),
+        default=None,
+        help="Credential type for application auth.",
+    )
+    dashboard_parser.add_argument(
+        "--tenant-id",
+        default=None,
+        help="Microsoft Entra tenant ID. Overrides ANGLERFISH_TENANT_ID.",
+    )
+    dashboard_parser.add_argument(
+        "--client-id",
+        default=None,
+        help="Microsoft Entra application (client) ID. Overrides ANGLERFISH_CLIENT_ID.",
+    )
+    dashboard_parser.add_argument(
+        "--demo",
+        action="store_true",
+        default=False,
+        help="Run with simulated data (no auth required).",
+    )
+
     return parser.parse_args(list(argv) if argv is not None else sys.argv[1:])
 
 
@@ -1773,6 +1835,23 @@ def _run_verify(args: argparse.Namespace, console: Console) -> int:
     return 1 if any_bad else 0
 
 
+def _run_dashboard(args: argparse.Namespace) -> int:
+    """Launch the Textual TUI dashboard."""
+    from .dashboard import AnglerDashboard
+
+    app = AnglerDashboard(
+        demo=getattr(args, "demo", False),
+        records_dir=args.records_dir,
+        poll_interval=args.poll_interval,
+        verify_interval=args.verify_interval,
+        alert_log=args.alert_log or "",
+        exclude_app_ids=args.exclude_app_ids,
+        credential_mode=args.credential_mode,
+    )
+    app.run()
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
     if getattr(args, "verbose", False):
@@ -1821,6 +1900,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         except (AuthenticationError, DeploymentError, GraphApiError) as exc:
             _print_error(console, _format_exception_message(exc))
             return 1
+
+    if args.subcommand == "dashboard":
+        try:
+            return _run_dashboard(args)
+        except (AuthenticationError, AuditApiError, MonitorError) as exc:
+            _print_error(console, _format_exception_message(exc))
+            return 1
+        except KeyboardInterrupt:
+            return 0
 
     _print_banner(console)
 

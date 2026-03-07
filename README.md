@@ -30,6 +30,7 @@ No HTTP callbacks, no DNS beacons, no embedded tracking pixels. The canary is a 
 - **Monitor subcommand** — poll the M365 Management Activity API for canary access events
 - **Detect subcommand** — generate KQL, Splunk, or OData detection queries from deployment records
 - **Verify subcommand** — confirm deployed canaries still exist via Graph API health checks
+- **Dashboard subcommand** — full-screen TUI with canary status table, live alert feed, and stats bar
 - **Graph API retry safety** — GET/DELETE retry on transient errors; POST/PUT do not auto-retry
 - **Offline demo mode** — `--demo` flag for conference presentations without live tenant
 
@@ -253,6 +254,9 @@ anglerfish --demo cleanup examples/demo-records/outlook-draft-record.json
 # Simulated monitoring alert
 anglerfish monitor --demo
 
+# Dashboard with simulated data
+anglerfish dashboard --demo
+
 # Generate detection queries from demo records
 anglerfish detect examples/demo-records/outlook-draft-record.json
 anglerfish detect examples/demo-records/sharepoint-upload-record.json --format splunk
@@ -314,6 +318,28 @@ anglerfish verify --demo
 
 Exit code 0 if all canaries are OK, 1 if any are GONE or ERROR.
 
+### Dashboard (Live TUI)
+
+Full-screen terminal dashboard showing canary status, live alert feed, and summary stats:
+
+```bash
+# Demo mode (simulated data, no auth required)
+anglerfish dashboard --demo
+
+# Live mode with default intervals (polls every 5 minutes)
+anglerfish dashboard --records-dir ~/.anglerfish/records
+
+# Custom intervals and alert log
+anglerfish dashboard \
+  --records-dir ~/.anglerfish/records \
+  --poll-interval 60 \
+  --verify-interval 120 \
+  --alert-log ./alerts.jsonl \
+  --exclude-app-id "your-app-client-id"
+```
+
+Key bindings: **q** to quit, **r** to manual refresh.
+
 ### Detection Setup
 
 After deploying canaries, configure your SIEM to query the M365 Unified Audit Log for the artifact IDs stored in each deployment record. For Outlook canaries, filter on `MailItemsAccessed` events matching the `message_id` or `folder_id`. For SharePoint and OneDrive canaries, filter on `FileAccessed` events matching the `item_id`. Use `anglerfish detect` to auto-generate queries. See [threat-model.md](docs/threat-model.md) for details on audit events, latency, and filtering guidance.
@@ -367,6 +393,12 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for template schema documentation.
 | `batch --dry-run` | Validate manifest and authenticate without deploying |
 | `verify [RECORD]` | Subcommand: check deployed canaries still exist via Graph API |
 | `verify --records-dir DIR` | Directory of records to verify (default: `~/.anglerfish/records`) |
+| `dashboard` | Subcommand: full-screen TUI with canary status, live alerts, and stats |
+| `dashboard --demo` | Run with simulated data (no auth required) |
+| `dashboard --poll-interval N` | Audit log poll interval in seconds (default: 300) |
+| `dashboard --verify-interval N` | Health check refresh interval in seconds (default: 300) |
+| `dashboard --alert-log PATH` | JSONL alert log file (loads history on startup) |
+| `dashboard --exclude-app-id ID` | App/client IDs to exclude from matching (repeatable) |
 
 ## Reliability Notes
 

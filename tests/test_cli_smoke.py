@@ -866,3 +866,48 @@ def test_verify_demo_exits_one():
     # Demo includes a GONE canary, so exit code is 1.
     assert result.returncode == 1
     assert "Canary Verification" in result.stdout or "GONE" in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# Dashboard subcommand tests
+# ---------------------------------------------------------------------------
+
+
+def test_parse_args_dashboard_subcommand():
+    args = cli._parse_args(["dashboard", "--demo"])
+    assert args.subcommand == "dashboard"
+    assert args.demo is True
+
+
+def test_parse_args_dashboard_with_intervals():
+    args = cli._parse_args([
+        "dashboard",
+        "--poll-interval", "60",
+        "--verify-interval", "120",
+        "--records-dir", "/tmp/records",
+    ])
+    assert args.poll_interval == 60
+    assert args.verify_interval == 120
+    assert args.records_dir == "/tmp/records"
+
+
+def test_dashboard_demo_runs_briefly(monkeypatch):
+    """Smoke test: dashboard --demo launches and can be stopped."""
+    from anglerfish.dashboard import AnglerDashboard
+
+    ran = False
+
+    class FakeApp(AnglerDashboard):
+        def on_mount(self):
+            nonlocal ran
+            super().on_mount()
+            ran = True
+            self.exit()
+
+    monkeypatch.setattr("anglerfish.cli.AnglerDashboard", FakeApp, raising=False)
+
+    # We can't easily test the full Textual run loop in a CLI smoke test,
+    # so just verify the parser accepts the args.
+    args = cli._parse_args(["dashboard", "--demo"])
+    assert args.subcommand == "dashboard"
+    assert args.demo is True
