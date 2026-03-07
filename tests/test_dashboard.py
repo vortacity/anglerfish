@@ -116,3 +116,18 @@ class TestLiveModeInit:
             verify_interval=9999,
         )
         assert app._records_dir == str(tmp_path)
+
+
+class TestDemoAlertFlow:
+    @pytest.mark.asyncio
+    async def test_demo_alert_appears_after_tick(self):
+        import asyncio
+
+        from anglerfish.dashboard import AnglerDashboard
+
+        app = AnglerDashboard(demo=True, poll_interval=1, verify_interval=9999)
+        async with app.run_test() as pilot:
+            assert app._alert_count == 0
+            await asyncio.sleep(1.5)
+            await pilot.pause()
+            assert app._alert_count >= 1
