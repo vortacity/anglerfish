@@ -45,3 +45,14 @@ class TestDemoDataProvider:
         assert alert.canary_type in ("outlook", "sharepoint", "onedrive")
         assert alert.accessed_by
         assert alert.source_ip
+
+    def test_cycle_verify_status_changes_a_status(self):
+        import random
+
+        random.seed(42)
+        provider = DemoDataProvider()
+        before = list(provider._verify_statuses)
+        provider.cycle_verify_status()
+        after = provider._verify_statuses
+        assert before != after
+        assert all(isinstance(s, VerifyStatus) for s in after)
