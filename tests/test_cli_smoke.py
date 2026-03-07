@@ -840,3 +840,29 @@ def test_main_batch_happy_path(monkeypatch, tmp_path):
 
     records = list(output_dir.glob("*.json"))
     assert len(records) == 1
+
+
+# ---------------------------------------------------------------------------
+# Verify subcommand tests
+# ---------------------------------------------------------------------------
+
+
+def test_parse_args_verify_subcommand():
+    args = cli._parse_args(["verify", "--demo"])
+    assert args.subcommand == "verify"
+    assert args.demo is True
+
+
+def test_verify_demo_exits_one():
+    """Smoke test: verify --demo should exit 1 (simulated output includes a GONE)."""
+    import subprocess
+
+    result = subprocess.run(
+        [".venv/bin/python", "-m", "anglerfish", "verify", "--demo"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    # Demo includes a GONE canary, so exit code is 1.
+    assert result.returncode == 1
+    assert "Canary Verification" in result.stdout or "GONE" in result.stdout

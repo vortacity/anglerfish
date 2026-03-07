@@ -1691,31 +1691,31 @@ def _run_verify(args: argparse.Namespace, console: Console) -> int:
 
     _print_banner(console)
 
-    # Collect records.
-    records: list[tuple[str, dict]] = []
-    if args.record:
-        rec = read_deployment_record(args.record)
-        records.append((args.record, rec))
-    elif args.records_dir:
-        records = load_records(args.records_dir)
-    else:
-        default_dir = str(Path.home() / ".anglerfish" / "records")
-        records = load_records(default_dir)
-
-    if not records:
-        console.print("[yellow]No deployment records found to verify.[/yellow]")
-        return 1
-
-    console.print(f"Verifying [bold]{len(records)}[/bold] deployment record(s)...\n")
-
     if getattr(args, "demo", False):
         # Demo mode: show simulated output.
+        console.print("Verifying [bold]3[/bold] deployment record(s)...\n")
         results = [
             VerifyResult(canary_type="outlook", template_name="Fake Password Reset", target="cfo@contoso.com", status=VerifyStatus.OK),
             VerifyResult(canary_type="sharepoint", template_name="Employee Salary Bands", target="HRSite", status=VerifyStatus.GONE, detail="404 Not Found"),
             VerifyResult(canary_type="onedrive", template_name="VPN Credentials Backup", target="j.smith@contoso.com", status=VerifyStatus.OK),
         ]
     else:
+        # Collect records.
+        records: list[tuple[str, dict]] = []
+        if args.record:
+            rec = read_deployment_record(args.record)
+            records.append((args.record, rec))
+        elif args.records_dir:
+            records = load_records(args.records_dir)
+        else:
+            default_dir = str(Path.home() / ".anglerfish" / "records")
+            records = load_records(default_dir)
+
+        if not records:
+            console.print("[yellow]No deployment records found to verify.[/yellow]")
+            return 1
+
+        console.print(f"Verifying [bold]{len(records)}[/bold] deployment record(s)...\n")
         # Authenticate.
         app_credential_mode = _prompt_auth_setup(args, console, auth_mode="application", non_interactive=True)
         console.print("Authenticating with Microsoft Graph...")
