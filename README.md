@@ -1,4 +1,6 @@
-# Anglerfish
+<div align="center">
+  <img src="docs/images/logo.png" alt="Anglerfish" width="400">
+</div>
 
 [![CI](https://github.com/vortacity/anglerfish/actions/workflows/ci.yml/badge.svg)](https://github.com/vortacity/anglerfish/actions/workflows/ci.yml)
 
