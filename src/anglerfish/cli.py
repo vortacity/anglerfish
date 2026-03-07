@@ -1695,9 +1695,25 @@ def _run_verify(args: argparse.Namespace, console: Console) -> int:
         # Demo mode: show simulated output.
         console.print("Verifying [bold]3[/bold] deployment record(s)...\n")
         results = [
-            VerifyResult(canary_type="outlook", template_name="Fake Password Reset", target="cfo@contoso.com", status=VerifyStatus.OK),
-            VerifyResult(canary_type="sharepoint", template_name="Employee Salary Bands", target="HRSite", status=VerifyStatus.GONE, detail="404 Not Found"),
-            VerifyResult(canary_type="onedrive", template_name="VPN Credentials Backup", target="j.smith@contoso.com", status=VerifyStatus.OK),
+            VerifyResult(
+                canary_type="outlook",
+                template_name="Fake Password Reset",
+                target="cfo@contoso.com",
+                status=VerifyStatus.OK,
+            ),
+            VerifyResult(
+                canary_type="sharepoint",
+                template_name="Employee Salary Bands",
+                target="HRSite",
+                status=VerifyStatus.GONE,
+                detail="404 Not Found",
+            ),
+            VerifyResult(
+                canary_type="onedrive",
+                template_name="VPN Credentials Backup",
+                target="j.smith@contoso.com",
+                status=VerifyStatus.OK,
+            ),
         ]
     else:
         # Collect records.

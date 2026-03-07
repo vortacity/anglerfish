@@ -40,11 +40,15 @@ def test_canary_spec_is_frozen():
 
 def test_parse_manifest_minimal(tmp_path):
     manifest = tmp_path / "manifest.yaml"
-    manifest.write_text(yaml.dump({
-        "canaries": [
-            {"canary_type": "outlook", "template": "Fake Password Reset", "target": "cfo@contoso.com"},
-        ]
-    }))
+    manifest.write_text(
+        yaml.dump(
+            {
+                "canaries": [
+                    {"canary_type": "outlook", "template": "Fake Password Reset", "target": "cfo@contoso.com"},
+                ]
+            }
+        )
+    )
     specs = parse_manifest(manifest)
     assert len(specs) == 1
     assert specs[0].canary_type == "outlook"
@@ -54,40 +58,54 @@ def test_parse_manifest_minimal(tmp_path):
 
 def test_parse_manifest_merges_default_vars(tmp_path):
     manifest = tmp_path / "manifest.yaml"
-    manifest.write_text(yaml.dump({
-        "defaults": {"vars": {"company": "Contoso"}},
-        "canaries": [
-            {"canary_type": "outlook", "template": "T", "target": "u@e.com", "vars": {"name": "Alice"}},
-        ]
-    }))
+    manifest.write_text(
+        yaml.dump(
+            {
+                "defaults": {"vars": {"company": "Contoso"}},
+                "canaries": [
+                    {"canary_type": "outlook", "template": "T", "target": "u@e.com", "vars": {"name": "Alice"}},
+                ],
+            }
+        )
+    )
     specs = parse_manifest(manifest)
     assert specs[0].vars == {"company": "Contoso", "name": "Alice"}
 
 
 def test_parse_manifest_entry_vars_override_defaults(tmp_path):
     manifest = tmp_path / "manifest.yaml"
-    manifest.write_text(yaml.dump({
-        "defaults": {"vars": {"company": "Contoso"}},
-        "canaries": [
-            {"canary_type": "outlook", "template": "T", "target": "u@e.com", "vars": {"company": "Fabrikam"}},
-        ]
-    }))
+    manifest.write_text(
+        yaml.dump(
+            {
+                "defaults": {"vars": {"company": "Contoso"}},
+                "canaries": [
+                    {"canary_type": "outlook", "template": "T", "target": "u@e.com", "vars": {"company": "Fabrikam"}},
+                ],
+            }
+        )
+    )
     specs = parse_manifest(manifest)
     assert specs[0].vars["company"] == "Fabrikam"
 
 
 def test_parse_manifest_all_fields(tmp_path):
     manifest = tmp_path / "manifest.yaml"
-    manifest.write_text(yaml.dump({
-        "canaries": [{
-            "canary_type": "sharepoint",
-            "template": "Employee Salary Bands",
-            "target": "HRSite",
-            "folder_path": "Compensation/Restricted",
-            "filename": "salaries.txt",
-            "vars": {"quarter": "Q1"},
-        }]
-    }))
+    manifest.write_text(
+        yaml.dump(
+            {
+                "canaries": [
+                    {
+                        "canary_type": "sharepoint",
+                        "template": "Employee Salary Bands",
+                        "target": "HRSite",
+                        "folder_path": "Compensation/Restricted",
+                        "filename": "salaries.txt",
+                        "vars": {"quarter": "Q1"},
+                    }
+                ]
+            }
+        )
+    )
     specs = parse_manifest(manifest)
     assert specs[0].folder_path == "Compensation/Restricted"
     assert specs[0].filename == "salaries.txt"
@@ -110,18 +128,14 @@ def test_parse_manifest_empty_canaries_list(tmp_path):
 
 def test_parse_manifest_missing_required_field(tmp_path):
     manifest = tmp_path / "manifest.yaml"
-    manifest.write_text(yaml.dump({
-        "canaries": [{"canary_type": "outlook", "template": "T"}]
-    }))
+    manifest.write_text(yaml.dump({"canaries": [{"canary_type": "outlook", "template": "T"}]}))
     with pytest.raises(DeploymentError, match="target"):
         parse_manifest(manifest)
 
 
 def test_parse_manifest_invalid_canary_type(tmp_path):
     manifest = tmp_path / "manifest.yaml"
-    manifest.write_text(yaml.dump({
-        "canaries": [{"canary_type": "teams", "template": "T", "target": "u@e.com"}]
-    }))
+    manifest.write_text(yaml.dump({"canaries": [{"canary_type": "teams", "template": "T", "target": "u@e.com"}]}))
     with pytest.raises(DeploymentError, match="teams"):
         parse_manifest(manifest)
 
@@ -190,14 +204,25 @@ class FailingDeployer:
 
 def test_run_batch_deploys_all_canaries(tmp_path, monkeypatch):
     specs = [
-        CanarySpec(canary_type="outlook", template="Fake Password Reset", target="cfo@contoso.com", delivery_mode="draft"),
-        CanarySpec(canary_type="onedrive", template="VPN Credentials Backup", target="j.smith@contoso.com", folder_path="IT/Backups", filename="vpn.txt"),
+        CanarySpec(
+            canary_type="outlook", template="Fake Password Reset", target="cfo@contoso.com", delivery_mode="draft"
+        ),
+        CanarySpec(
+            canary_type="onedrive",
+            template="VPN Credentials Backup",
+            target="j.smith@contoso.com",
+            folder_path="IT/Backups",
+            filename="vpn.txt",
+        ),
     ]
     output_dir = tmp_path / "records"
 
     import anglerfish.batch as batch_mod
+
     monkeypatch.setattr(batch_mod, "_find_template_by_name", lambda ct, name: f"pkg://{ct}/fake.yaml")
-    monkeypatch.setattr(batch_mod, "load_template", lambda path: _outlook_template() if "outlook" in path else _onedrive_template())
+    monkeypatch.setattr(
+        batch_mod, "load_template", lambda path: _outlook_template() if "outlook" in path else _onedrive_template()
+    )
     monkeypatch.setattr(batch_mod, "render_template", lambda template, values: template)
     monkeypatch.setattr(batch_mod, "OutlookDeployer", FakeDeployer)
     monkeypatch.setattr(batch_mod, "OneDriveDeployer", FakeDeployer)
@@ -220,8 +245,11 @@ def test_run_batch_continues_on_failure(tmp_path, monkeypatch):
     output_dir = tmp_path / "records"
 
     import anglerfish.batch as batch_mod
+
     monkeypatch.setattr(batch_mod, "_find_template_by_name", lambda ct, name: f"pkg://{ct}/fake.yaml")
-    monkeypatch.setattr(batch_mod, "load_template", lambda path: _outlook_template() if "outlook" in path else _onedrive_template())
+    monkeypatch.setattr(
+        batch_mod, "load_template", lambda path: _outlook_template() if "outlook" in path else _onedrive_template()
+    )
     monkeypatch.setattr(batch_mod, "render_template", lambda template, values: template)
     monkeypatch.setattr(batch_mod, "OutlookDeployer", FailingDeployer)
     monkeypatch.setattr(batch_mod, "OneDriveDeployer", FakeDeployer)
@@ -245,6 +273,7 @@ def test_run_batch_dry_run_writes_no_records(tmp_path, monkeypatch):
     output_dir = tmp_path / "records"
 
     import anglerfish.batch as batch_mod
+
     monkeypatch.setattr(batch_mod, "_find_template_by_name", lambda ct, name: "pkg://outlook/fake.yaml")
     monkeypatch.setattr(batch_mod, "load_template", lambda path: _outlook_template())
     monkeypatch.setattr(batch_mod, "render_template", lambda template, values: template)

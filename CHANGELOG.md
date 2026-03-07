@@ -7,6 +7,21 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Slack alerting** — `--slack-webhook-url` flag on `monitor` sends Block Kit
+  formatted alerts to a Slack incoming webhook when canary access events are detected.
+
+- **`verify` subcommand** — check that deployed canary artifacts still exist via
+  Graph API health checks. Supports single records, directory scans, and `--demo`
+  mode. Exit code 1 if any canary is gone or errored.
+
+- **Project logo** — added to README header.
+
+---
+
 ## [0.2.0] — 2026-03-06
 
 ### Added

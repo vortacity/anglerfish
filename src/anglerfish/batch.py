@@ -47,9 +47,7 @@ def parse_manifest(path: str | Path) -> list[CanarySpec]:
 
     canaries_raw = data["canaries"]
     if not isinstance(canaries_raw, list) or len(canaries_raw) == 0:
-        raise DeploymentError(
-            f"Manifest '{path}' must contain at least one entry in 'canaries'."
-        )
+        raise DeploymentError(f"Manifest '{path}' must contain at least one entry in 'canaries'.")
 
     default_vars: dict[str, str] = {}
     defaults = data.get("defaults")
@@ -65,9 +63,7 @@ def parse_manifest(path: str | Path) -> list[CanarySpec]:
 
         missing = [f for f in _REQUIRED_ENTRY_FIELDS if f not in entry]
         if missing:
-            raise DeploymentError(
-                f"Canary entry {i + 1} is missing required fields: {', '.join(missing)}"
-            )
+            raise DeploymentError(f"Canary entry {i + 1} is missing required fields: {', '.join(missing)}")
 
         canary_type = str(entry["canary_type"]).strip().lower()
         if canary_type not in _VALID_CANARY_TYPES:
@@ -88,19 +84,9 @@ def parse_manifest(path: str | Path) -> list[CanarySpec]:
                 canary_type=canary_type,
                 template=str(entry["template"]).strip(),
                 target=str(entry["target"]).strip(),
-                delivery_mode=(
-                    str(entry["delivery_mode"]).strip()
-                    if "delivery_mode" in entry
-                    else None
-                ),
-                folder_path=(
-                    str(entry["folder_path"]).strip()
-                    if "folder_path" in entry
-                    else None
-                ),
-                filename=(
-                    str(entry["filename"]).strip() if "filename" in entry else None
-                ),
+                delivery_mode=(str(entry["delivery_mode"]).strip() if "delivery_mode" in entry else None),
+                folder_path=(str(entry["folder_path"]).strip() if "folder_path" in entry else None),
+                filename=(str(entry["filename"]).strip() if "filename" in entry else None),
                 vars=merged_vars,
             )
         )
@@ -117,13 +103,9 @@ def _find_template_by_name(canary_type: str, template_name: str) -> str:
     matches = [t for t in available if t["name"].casefold() == name_lower]
     if not matches:
         names = ", ".join(repr(t["name"]) for t in available)
-        raise TemplateError(
-            f"Template {template_name!r} not found for {canary_type}. Available: {names}"
-        )
+        raise TemplateError(f"Template {template_name!r} not found for {canary_type}. Available: {names}")
     if len(matches) > 1:
-        raise TemplateError(
-            f"Multiple templates named {template_name!r} found for {canary_type}."
-        )
+        raise TemplateError(f"Multiple templates named {template_name!r} found for {canary_type}.")
     return matches[0]["path"]
 
 
@@ -195,15 +177,11 @@ def run_batch(
                     filenames=rendered.filenames,
                 )
             else:
-                raise DeploymentError(
-                    f"Unsupported canary type: {spec.canary_type}"
-                )
+                raise DeploymentError(f"Unsupported canary type: {spec.canary_type}")
 
             # Write deployment record
             safe_target = spec.target.replace("@", "-").replace(".", "-")
-            timestamp = datetime.datetime.now(datetime.timezone.utc).strftime(
-                "%Y%m%dT%H%M%SZ"
-            )
+            timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
             record_filename = f"{spec.canary_type}-{safe_target}-{timestamp}.json"
             record_path = output_path / record_filename
 
