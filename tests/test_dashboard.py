@@ -88,3 +88,31 @@ class TestAnglerDashboardApp:
         app = AnglerDashboard(demo=True)
         async with app.run_test() as pilot:
             await pilot.press("q")
+
+
+class TestLiveModeInit:
+    def test_live_mode_sets_records_dir(self, tmp_path):
+        """Live mode stores the records dir."""
+        import json
+
+        from anglerfish.dashboard import AnglerDashboard
+
+        rec = {
+            "canary_type": "outlook",
+            "template_name": "Test",
+            "target_user": "user@test.com",
+            "folder_id": "f1",
+            "internet_message_id": "<test@test.com>",
+            "timestamp": "2026-03-07T00:00:00Z",
+            "status": "active",
+        }
+        rec_file = tmp_path / "test.json"
+        rec_file.write_text(json.dumps(rec))
+
+        app = AnglerDashboard(
+            demo=False,
+            records_dir=str(tmp_path),
+            poll_interval=9999,
+            verify_interval=9999,
+        )
+        assert app._records_dir == str(tmp_path)
