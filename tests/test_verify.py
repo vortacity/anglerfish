@@ -156,6 +156,75 @@ def test_verify_unknown_canary_type():
     assert "unsupported" in result.detail.lower() or "unknown" in result.detail.lower()
 
 
+def test_run_verify_returns_results_for_multiple_records():
+    from anglerfish.verify import run_verify
+
+    records = [
+        (
+            "rec1.json",
+            {
+                "timestamp": "t",
+                "canary_type": "outlook",
+                "target_user": "a@contoso.com",
+                "folder_id": "f1",
+                "template_name": "T1",
+            },
+        ),
+        (
+            "rec2.json",
+            {
+                "timestamp": "t",
+                "canary_type": "sharepoint",
+                "site_id": "s1",
+                "item_id": "i1",
+                "template_name": "T2",
+            },
+        ),
+    ]
+    graph = _mock_graph()
+    results = run_verify(records, graph)
+
+    assert len(results) == 2
+    assert all(r.status == VerifyStatus.OK for r in results)
+
+
+def test_run_verify_mixed_results():
+    from anglerfish.verify import run_verify
+
+    records = [
+        (
+            "ok.json",
+            {
+                "timestamp": "t",
+                "canary_type": "onedrive",
+                "target_user": "u@contoso.com",
+                "item_id": "i1",
+                "template_name": "T1",
+            },
+        ),
+        (
+            "gone.json",
+            {
+                "timestamp": "t",
+                "canary_type": "outlook",
+                "target_user": "u@contoso.com",
+                "folder_id": "f1",
+                "template_name": "T2",
+            },
+        ),
+    ]
+    graph = MagicMock()
+    # First call succeeds, second raises 404.
+    graph.get.side_effect = [
+        {"id": "ok"},
+        GraphApiError("Not found", status_code=404),
+    ]
+    results = run_verify(records, graph)
+
+    assert results[0].status == VerifyStatus.OK
+    assert results[1].status == VerifyStatus.GONE
+
+
 def test_verify_missing_required_field():
     record = {
         "timestamp": "2026-03-01T00:00:00Z",

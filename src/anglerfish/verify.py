@@ -131,6 +131,18 @@ def _verify_onedrive(graph: GraphClient, record: dict, template_name: str) -> Ve
     )
 
 
+def run_verify(
+    records: list[tuple[str, dict]],
+    graph: GraphClient,
+) -> list[VerifyResult]:
+    """Check all deployment records and return results."""
+    results: list[VerifyResult] = []
+    for _path, record in records:
+        result = verify_record(graph, record)
+        results.append(result)
+    return results
+
+
 def _get_target(record: dict, canary_type: str) -> str:
     if canary_type in ("outlook", "onedrive"):
         return record.get("target_user", "")
