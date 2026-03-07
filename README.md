@@ -27,6 +27,7 @@ No HTTP callbacks, no DNS beacons, no embedded tracking pixels. The canary is a 
 - **Cleanup subcommand** — deterministic removal using deployment records
 - **Monitor subcommand** — poll the M365 Management Activity API for canary access events
 - **Detect subcommand** — generate KQL, Splunk, or OData detection queries from deployment records
+- **Verify subcommand** — confirm deployed canaries still exist via Graph API health checks
 - **Graph API retry safety** — GET/DELETE retry on transient errors; POST/PUT do not auto-retry
 - **Offline demo mode** — `--demo` flag for conference presentations without live tenant
 
@@ -291,6 +292,26 @@ anglerfish detect ./deployment-record.json --format splunk
 anglerfish detect ./deployment-record.json --format odata
 ```
 
+### Canary Health Check
+
+Verify that deployed canaries still exist:
+
+```bash
+# Check a single record
+anglerfish verify ./deployment-record.json
+
+# Check all records in default directory
+anglerfish verify
+
+# Check all records in a specific directory
+anglerfish verify --records-dir ~/.anglerfish/records/
+
+# Demo mode (simulated output)
+anglerfish verify --demo
+```
+
+Exit code 0 if all canaries are OK, 1 if any are GONE or ERROR.
+
 ### Detection Setup
 
 After deploying canaries, configure your SIEM to query the M365 Unified Audit Log for the artifact IDs stored in each deployment record. For Outlook canaries, filter on `MailItemsAccessed` events matching the `message_id` or `folder_id`. For SharePoint and OneDrive canaries, filter on `FileAccessed` events matching the `item_id`. Use `anglerfish detect` to auto-generate queries. See [threat-model.md](docs/threat-model.md) for details on audit events, latency, and filtering guidance.
@@ -342,6 +363,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for template schema documentation.
 | `batch <manifest>` | Subcommand: deploy multiple canaries from a YAML manifest |
 | `batch --output-dir DIR` | Output directory for deployment records (default: `~/.anglerfish/records`) |
 | `batch --dry-run` | Validate manifest and authenticate without deploying |
+| `verify [RECORD]` | Subcommand: check deployed canaries still exist via Graph API |
+| `verify --records-dir DIR` | Directory of records to verify (default: `~/.anglerfish/records`) |
 
 ## Reliability Notes
 
