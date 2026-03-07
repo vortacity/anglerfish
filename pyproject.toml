@@ -24,11 +24,6 @@ classifiers = [
   "Topic :: Security",
 ]
 
-[project.urls]
-Homepage = "https://github.com/vortacity/anglerfish"
-Repository = "https://github.com/vortacity/anglerfish"
-Issues = "https://github.com/vortacity/anglerfish/issues"
-Changelog = "https://github.com/vortacity/anglerfish/blob/main/CHANGELOG.md"
 dependencies = [
   "msal>=1.28.0,<2.0.0",
   "requests>=2.31.0,<3.0.0",
@@ -38,6 +33,12 @@ dependencies = [
   "python-docx>=1.0.0,<2.0.0",
   "openpyxl>=3.1.0,<4.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/vortacity/anglerfish"
+Repository = "https://github.com/vortacity/anglerfish"
+Issues = "https://github.com/vortacity/anglerfish/issues"
+Changelog = "https://github.com/vortacity/anglerfish/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [
