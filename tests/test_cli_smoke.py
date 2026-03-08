@@ -1,4 +1,5 @@
 import json
+import sys
 
 import pytest
 
@@ -858,7 +859,7 @@ def test_verify_demo_exits_one():
     import subprocess
 
     result = subprocess.run(
-        [".venv/bin/python", "-m", "anglerfish", "verify", "--demo"],
+        [sys.executable, "-m", "anglerfish", "verify", "--demo"],
         capture_output=True,
         text=True,
         timeout=30,
