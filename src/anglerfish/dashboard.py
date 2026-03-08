@@ -307,10 +307,7 @@ class AnglerDashboard(App):
             canary_count = 0
         last = self._last_poll or "\u2014"
         bar.update(
-            f"Canaries: {canary_count}  |  "
-            f"Alerts: {self._alert_count}  |  "
-            f"Last poll: {last}  |  "
-            f"Uptime: {minutes}m"
+            f"Canaries: {canary_count}  |  Alerts: {self._alert_count}  |  Last poll: {last}  |  Uptime: {minutes}m"
         )
 
     def action_refresh(self) -> None:

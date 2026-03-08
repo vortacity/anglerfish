@@ -138,5 +138,3 @@ def test_dispatch_slack_failure_does_not_raise():
         dispatcher = AlertDispatcher(slack_webhook_url="https://hooks.slack.com/services/T/B/xxx")
         # Should not raise.
         dispatcher.dispatch(_sample_alert())
-
-

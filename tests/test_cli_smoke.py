@@ -881,12 +881,17 @@ def test_parse_args_dashboard_subcommand():
 
 
 def test_parse_args_dashboard_with_intervals():
-    args = cli._parse_args([
-        "dashboard",
-        "--poll-interval", "60",
-        "--verify-interval", "120",
-        "--records-dir", "/tmp/records",
-    ])
+    args = cli._parse_args(
+        [
+            "dashboard",
+            "--poll-interval",
+            "60",
+            "--verify-interval",
+            "120",
+            "--records-dir",
+            "/tmp/records",
+        ]
+    )
     assert args.poll_interval == 60
     assert args.verify_interval == 120
     assert args.records_dir == "/tmp/records"
