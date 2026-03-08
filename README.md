@@ -8,6 +8,10 @@ Deploy M365 canary tokens and detect unauthorized access: no callback URLs, no D
 
 Anglerfish is a Python CLI that provisions deceptive artifacts (Outlook draft emails, SharePoint documents, OneDrive files) in Microsoft 365 tenants via the Graph API. When an attacker accesses a canary artifact, the M365 Unified Audit Log generates an event (`MailItemsAccessed`, `FileAccessed`) that your SIEM can alert on. Detection is entirely access-based; the canary never phones home.
 
+> [!WARNING]
+> **This tool is intended for security research, authorized testing, and defensive canary deployments only.**
+> Always validate and test thoroughly in a non-production environment before deploying to any production tenant. Deploying untested canaries in production can result in unintended access events, alert fatigue, and artifacts that are difficult to clean up. See the [Legal Authorization Requirement](#legal-authorization-requirement) section before proceeding.
+
 ## How It Works
 
 ```text
