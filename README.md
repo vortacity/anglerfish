@@ -35,7 +35,7 @@ No HTTP callbacks, no DNS beacons, no embedded tracking pixels. The canary is a 
 
 ## Differentiator
 
-Unlike [Canarytokens.org](https://canarytokens.org/) (DNS/HTTP beacons) or [Thinkst Canary](https://canary.tools/) (appliance-based), Anglerfish uses no callback infrastructure. Canary artifacts are native M365 objects. Detection is powered by the Unified Audit Log that enterprises already collect: no additional infrastructure, no network egress, no token-serving endpoints.
+Unlike other canary token services that rely on DNS/HTTP beacons or external appliances, Anglerfish uses no callback infrastructure. Canary artifacts are native M365 objects. Detection is powered by the Unified Audit Log that enterprises already collect: no additional infrastructure, no network egress, no token-serving endpoints.
 
 ## Supported Canary Types
 
@@ -402,9 +402,24 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for template schema documentation.
 - Deployment record writes (`--output-json`) are atomic (temp file + replace) to reduce partial-write risk.
 - Deployment record reads require a JSON object with `timestamp` and `canary_type` (or legacy `type`).
 
+## Legal Authorization Requirement
+
+> [!CAUTION]
+> **Do not deploy canaries without explicit written authorization.**
+>
+> Deploying canary artifacts in a Microsoft 365 tenant you do not own or administer without permission may violate computer fraud and unauthorized access laws in your jurisdiction. Before deploying Anglerfish in any environment:
+>
+> - **Obtain written authorization** from the asset owner and the organization that owns the tenant. Verbal approval is not sufficient.
+> - **Consult your legal department.** Laws governing monitoring, deception, and access to computer systems vary by country, state, and industry. Your legal team must review and approve the deployment before you proceed.
+> - **Notify your security and compliance stakeholders.** SOC teams, privacy officers, and HR may have standing policies that govern this type of activity.
+> - **Never deploy in a tenant you do not have explicit authority over**, including client environments, partner tenants, or shared infrastructure, without a signed agreement and legal review.
+>
+> This tool is intended for authorized security testing, red team operations, and defensive canary deployments by teams with proper authorization. Misuse is the sole responsibility of the operator.
+
 ## Safety Checklist
 
-- [ ] Written authorization obtained from asset owner before deploying to production
+- [ ] **Written authorization obtained from asset owner before deploying to production**
+- [ ] Legal department consulted and deployment approved
 - [ ] SOC / detection team notified of canary type, template, and target
 - [ ] App registration created with least-privilege permissions
 - [ ] `--output-json` path specified so the record is saved for later cleanup
