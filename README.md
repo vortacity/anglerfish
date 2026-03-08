@@ -23,6 +23,18 @@ Anglerfish is a Python CLI that provisions deceptive artifacts (Outlook emails, 
 
 No HTTP callbacks, no DNS beacons, no embedded tracking pixels. The canary is a normal M365 object; detection relies on Microsoft's built-in audit pipeline.
 
+## Differentiator
+
+Unlike other canary token services that rely on DNS/HTTP beacons or external appliances, Anglerfish uses no callback infrastructure. Canary artifacts are native M365 objects. Detection is powered by the Unified Audit Log that enterprises already collect: no additional infrastructure, no network egress, no token-serving endpoints.
+
+## Attack Scenarios
+
+| Threat scenario | Canary type | Detection event |
+|---|---|---|
+| Attacker reads mail in a compromised executive mailbox | Outlook draft | `MailItemsAccessed` |
+| Insider threat browses a restricted HR document library | SharePoint | `FileAccessed` |
+| Credential-stuffing actor enumerates a personal OneDrive | OneDrive | `FileAccessed`, `FileDownloaded` |
+
 ## Key Features
 
 - **Outlook canaries**: draft messages in hidden folders or sent to Inbox
@@ -37,10 +49,6 @@ No HTTP callbacks, no DNS beacons, no embedded tracking pixels. The canary is a 
 - **Dashboard subcommand**: full-screen TUI with canary status table, live alert feed, and stats bar
 - **Graph API retry safety**: GET/DELETE retry on transient errors; POST/PUT do not auto-retry
 - **Offline demo mode**: `--demo` flag for conference presentations without live tenant
-
-## Differentiator
-
-Unlike other canary token services that rely on DNS/HTTP beacons or external appliances, Anglerfish uses no callback infrastructure. Canary artifacts are native M365 objects. Detection is powered by the Unified Audit Log that enterprises already collect: no additional infrastructure, no network egress, no token-serving endpoints.
 
 ## Supported Canary Types
 
