@@ -4,9 +4,9 @@
 
 [![CI](https://github.com/vortacity/anglerfish/actions/workflows/ci.yml/badge.svg)](https://github.com/vortacity/anglerfish/actions/workflows/ci.yml)
 
-Deploy M365 canary tokens and detect unauthorized access — no callback URLs, no DNS beacons, no external infrastructure.
+Deploy M365 canary tokens and detect unauthorized access: no callback URLs, no DNS beacons, no external infrastructure.
 
-Anglerfish is a Python CLI that provisions deceptive artifacts (Outlook draft emails, SharePoint documents, OneDrive files) in Microsoft 365 tenants via the Graph API. When an attacker accesses a canary artifact, the M365 Unified Audit Log generates an event (`MailItemsAccessed`, `FileAccessed`) that your SIEM can alert on. Detection is entirely access-based — the canary never phones home.
+Anglerfish is a Python CLI that provisions deceptive artifacts (Outlook draft emails, SharePoint documents, OneDrive files) in Microsoft 365 tenants via the Graph API. When an attacker accesses a canary artifact, the M365 Unified Audit Log generates an event (`MailItemsAccessed`, `FileAccessed`) that your SIEM can alert on. Detection is entirely access-based; the canary never phones home.
 
 ## How It Works
 
@@ -20,22 +20,22 @@ No HTTP callbacks, no DNS beacons, no embedded tracking pixels. The canary is a 
 
 ## Key Features
 
-- **Outlook canaries** — draft messages in hidden folders or sent to Inbox
-- **SharePoint canaries** — deceptive files (.txt, .docx, .xlsx) uploaded to document libraries
-- **OneDrive canaries** — deceptive files (.txt, .docx, .xlsx) uploaded to personal OneDrive for Business storage
-- **Interactive + scripted CLI** — guided deployment or `--non-interactive` for CI/automation
-- **YAML template system** — 16 bundled templates, custom template directories supported
-- **Dry-run mode** — validate and authenticate without writing anything
-- **Cleanup subcommand** — deterministic removal using deployment records
-- **Monitor subcommand** — poll the M365 Management Activity API for canary access events
-- **Verify subcommand** — confirm deployed canaries still exist via Graph API health checks
-- **Dashboard subcommand** — full-screen TUI with canary status table, live alert feed, and stats bar
-- **Graph API retry safety** — GET/DELETE retry on transient errors; POST/PUT do not auto-retry
-- **Offline demo mode** — `--demo` flag for conference presentations without live tenant
+- **Outlook canaries**: draft messages in hidden folders or sent to Inbox
+- **SharePoint canaries**: deceptive files (.txt, .docx, .xlsx) uploaded to document libraries
+- **OneDrive canaries**: deceptive files (.txt, .docx, .xlsx) uploaded to personal OneDrive for Business storage
+- **Interactive + scripted CLI**: guided deployment or `--non-interactive` for CI/automation
+- **YAML template system**: 16 bundled templates, custom template directories supported
+- **Dry-run mode**: validate and authenticate without writing anything
+- **Cleanup subcommand**: deterministic removal using deployment records
+- **Monitor subcommand**: poll the M365 Management Activity API for canary access events
+- **Verify subcommand**: confirm deployed canaries still exist via Graph API health checks
+- **Dashboard subcommand**: full-screen TUI with canary status table, live alert feed, and stats bar
+- **Graph API retry safety**: GET/DELETE retry on transient errors; POST/PUT do not auto-retry
+- **Offline demo mode**: `--demo` flag for conference presentations without live tenant
 
 ## Differentiator
 
-Unlike [Canarytokens.org](https://canarytokens.org/) (DNS/HTTP beacons) or [Thinkst Canary](https://canary.tools/) (appliance-based), Anglerfish uses no callback infrastructure. Canary artifacts are native M365 objects. Detection is powered by the Unified Audit Log that enterprises already collect — no additional infrastructure, no network egress, no token-serving endpoints.
+Unlike [Canarytokens.org](https://canarytokens.org/) (DNS/HTTP beacons) or [Thinkst Canary](https://canary.tools/) (appliance-based), Anglerfish uses no callback infrastructure. Canary artifacts are native M365 objects. Detection is powered by the Unified Audit Log that enterprises already collect: no additional infrastructure, no network egress, no token-serving endpoints.
 
 ## Supported Canary Types
 
@@ -185,7 +185,7 @@ canaries:
     filename: "VPN_Config_GlobalProtect_Backup.txt"
 ```
 
-Authenticates once, deploys all entries sequentially, writes one deployment record per canary to `--output-dir`. Failures are logged and skipped — remaining canaries still deploy.
+Authenticates once, deploys all entries sequentially, writes one deployment record per canary to `--output-dir`. Failures are logged and skipped; remaining canaries still deploy.
 
 Dry run: `anglerfish batch manifest.yaml --dry-run`
 
@@ -238,7 +238,7 @@ Deletion behavior:
 
 ### Demo Mode (Offline)
 
-Run the CLI without a live M365 tenant — useful for conference demos or local testing:
+Run the CLI without a live M365 tenant, useful for conference demos or local testing:
 
 ```bash
 # List pre-staged fixture records
@@ -345,6 +345,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for template schema documentation.
 
 ## CLI Reference
 
+### Global Flags (deploy command)
+
 | Flag | Description |
 |------|-------------|
 | `--non-interactive` | Skip prompts |
@@ -358,17 +360,34 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for template schema documentation.
 | `--dry-run` | Authenticate and validate without write calls |
 | `--output-json` | Write deployment record JSON |
 | `--demo` | Run in offline demo mode (no auth, no API calls) |
-| `monitor` | Subcommand: poll audit logs for canary access events |
+| `--tenant-id` | Microsoft Entra tenant ID (overrides `ANGLERFISH_TENANT_ID`) |
+| `--client-id` | Microsoft Entra application (client) ID (overrides `ANGLERFISH_CLIENT_ID`) |
+| `--credential-mode` | Credential type: `auto`, `secret`, or `certificate` |
+| `-v, --verbose` | Enable debug logging for API calls and auth flow |
+
+### Subcommands
+
+| Command | Description |
+|---------|-------------|
+| `list` | List deployed canary artifacts |
+| `list --records-dir DIR` | Records directory (default: `~/.anglerfish/records`) |
+| `cleanup <record>` | Remove a deployed canary artifact using its deployment record |
+| `cleanup --non-interactive` | Skip confirmation prompt |
+| `monitor` | Poll audit logs for canary access events |
 | `monitor --once` | Poll once and exit |
-| `monitor --interval N` | Set poll interval in seconds (default: 300) |
+| `monitor --interval N` | Poll interval in seconds (default: 300) |
 | `monitor --exclude-app-id ID` | Exclude app IDs from matching (repeatable) |
 | `monitor --slack-webhook-url URL` | Slack incoming webhook URL for alert notifications |
-| `batch <manifest>` | Subcommand: deploy multiple canaries from a YAML manifest |
+| `monitor --alert-log PATH` | JSONL file to append alert records to |
+| `monitor --no-console` | Suppress Rich console output (daemon mode) |
+| `monitor --demo` | Print a simulated alert and exit (no auth required) |
+| `batch <manifest>` | Deploy multiple canaries from a YAML manifest |
 | `batch --output-dir DIR` | Output directory for deployment records (default: `~/.anglerfish/records`) |
 | `batch --dry-run` | Validate manifest and authenticate without deploying |
-| `verify [RECORD]` | Subcommand: check deployed canaries still exist via Graph API |
+| `batch --demo` | Run with simulated data (no auth, no API calls) |
+| `verify [RECORD]` | Check deployed canaries still exist via Graph API |
 | `verify --records-dir DIR` | Directory of records to verify (default: `~/.anglerfish/records`) |
-| `dashboard` | Subcommand: full-screen TUI with canary status, live alerts, and stats |
+| `dashboard` | Full-screen TUI with canary status, live alerts, and stats |
 | `dashboard --demo` | Run with simulated data (no auth required) |
 | `dashboard --poll-interval N` | Audit log poll interval in seconds (default: 300) |
 | `dashboard --verify-interval N` | Health check refresh interval in seconds (default: 300) |
@@ -404,7 +423,7 @@ See [threat-model.md](docs/threat-model.md) for the full deployment checklist an
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 

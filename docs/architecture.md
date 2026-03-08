@@ -1,4 +1,4 @@
-# Anglerfish — Architecture
+# Anglerfish: Architecture
 
 ## Overview
 
@@ -16,6 +16,10 @@ CLI (cli.py)
   -> Auth (auth.py)
   -> Graph client (graph.py)
   -> Deployer (deployers/outlook.py, deployers/sharepoint.py, deployers/onedrive.py)
+  -> Batch orchestrator (batch.py)
+  -> Monitor (monitor.py, audit.py, alerts.py, state.py)
+  -> Verify (verify.py)
+  -> Dashboard (dashboard.py)
 ```
 
 ## Auth Model
@@ -62,10 +66,14 @@ Record guarantees:
 Records are used by:
 - `cleanup` (deterministic removal)
 - `list` (inventory view)
+- `verify` (health check against Graph API)
 
 ## CLI Subcommands
 
 - default command: deploy
 - `cleanup <record>`
 - `list [--records-dir DIR]`
-- `dashboard [--demo] [--poll-interval N] [--verify-interval N]` (live TUI — Textual app)
+- `monitor [--once] [--interval N] [--exclude-app-id ID] [--slack-webhook-url URL]` (poll audit logs for canary access events)
+- `batch <manifest> [--output-dir DIR] [--dry-run]` (deploy multiple canaries from a YAML manifest)
+- `verify [RECORD] [--records-dir DIR]` (health check deployed canaries via Graph API)
+- `dashboard [--demo] [--poll-interval N] [--verify-interval N]` (live TUI, Textual app)

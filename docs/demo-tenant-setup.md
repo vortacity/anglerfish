@@ -10,7 +10,7 @@ If you don't already have a test tenant:
 
 1. Go to the [Microsoft 365 Developer Program](https://developer.microsoft.com/en-us/microsoft-365/dev-program)
 2. Sign up (free) and provision a developer sandbox tenant
-3. The sandbox includes 25 E5 licenses — sufficient for all Anglerfish features
+3. The sandbox includes 25 E5 licenses, sufficient for all Anglerfish features
 4. Note your tenant domain (e.g., `yourtenant.onmicrosoft.com`)
 
 If you have an existing test/dev tenant with E3 or E5 licenses, that works too. **Never use a production tenant for demos.**
@@ -35,7 +35,7 @@ If you have an existing test/dev tenant with E3 or E5 licenses, that works too. 
 1. In your app registration, go to **Certificates & secrets** > **Client secrets** > **New client secret**
 2. Description: `anglerfish-demo`
 3. Expiry: 6 months (or shorter for conference-only use)
-4. Click **Add** and **copy the secret value immediately** — it won't be shown again
+4. Click **Add** and **copy the secret value immediately** (it won't be shown again)
 
 ---
 
@@ -128,7 +128,7 @@ set -a; source .env; set +a
 # Check version
 anglerfish --version
 
-# Dry run — authenticates and validates without writing
+# Dry run: authenticates and validates without writing
 anglerfish --dry-run --non-interactive \
   --canary-type outlook \
   --template "Fake Password Reset" \
@@ -182,4 +182,4 @@ anglerfish cleanup ~/.anglerfish/records/first-test.json
 1. Remove deployed canaries: `anglerfish cleanup <record.json>` for each record
 2. Optionally delete the app registration in Azure Portal
 3. Rotate or delete the client secret
-4. Developer sandbox tenants auto-renew — no action needed unless you want to deprovision
+4. Developer sandbox tenants auto-renew; no action needed unless you want to deprovision

@@ -78,7 +78,7 @@ folder_name: Hidden Folder Name          # Required
 subject: "[Tag] Email subject"           # Required
 sender_name: Display Name                # Required
 sender_email: from@contoso.com           # Required
-body_html: |                             # Required — HTML string
+body_html: |                             # Required - HTML string
   <html>
   <body>
   <p>Dear ${var_name},</p>
@@ -88,7 +88,7 @@ body_html: |                             # Required — HTML string
 ```
 
 **Important:** Do not include clickable hyperlinks (`<a href="...">`) in `body_html`.
-Detection is access-based (UAL `MailItemsAccessed`) — no URL callbacks are used.
+Detection is access-based (UAL `MailItemsAccessed`); no URL callbacks are used.
 Body content should be plausible as a standalone internal communication.
 
 ### SharePoint Template Schema
@@ -104,7 +104,7 @@ filenames:
   - Filename_${variable}.txt             # Exactly one filename, variables supported
 
 content_text: |                          # Plain text file content
-  CONFIDENTIAL — Internal Use Only
+  CONFIDENTIAL - Internal Use Only
   File: ${filename}
   Variable: ${variable}
 
@@ -116,6 +116,31 @@ variables:
 
 `${filename}` in `content_text` is automatically substituted with the final filename.
 All other `${var}` slots must have corresponding `variables:` entries.
+
+### OneDrive Template Schema
+
+```yaml
+name: Human-readable template name
+description: One-line description
+type: onedrive
+
+folder_path: Parent/Subfolder            # Default folder path (no leading slash; empty = drive root)
+filenames:
+  - Filename_${variable}.txt             # Exactly one filename, variables supported
+
+content_text: |                          # Plain text file content
+  CONFIDENTIAL - Internal Use Only
+  File: ${filename}
+  Variable: ${variable}
+
+variables:
+  - name: variable
+    description: Prompt shown to the user
+    default: "default"
+```
+
+`${filename}` in `content_text` is automatically substituted with the final filename.
+File format (.txt, .docx, .xlsx) is determined by the filename extension.
 
 ### Variable Substitution
 
@@ -155,7 +180,7 @@ anglerfish --canary-type outlook --template "Your Template Name" \
 ## Pull Request Guidelines
 
 - Open an issue first for significant changes (new deployer types, breaking changes).
-- Keep PRs focused — one logical change per PR.
+- Keep PRs focused: one logical change per PR.
 - All tests must pass (`pytest`) and linting must be clean (`ruff check src tests`).
 - Update `CHANGELOG.md` with a brief description of your change under `[Unreleased]`.
 - Do not commit credentials, `.env` files, certificate material (`*.pfx`, `*.pem`,

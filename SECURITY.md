@@ -31,11 +31,11 @@ disclosure timing with the reporter.
 
 Anglerfish is designed with the following safety principles:
 
-- **No auto-retry on write operations** — POST/PUT calls to Graph do not
+- **No auto-retry on write operations**: POST/PUT calls to Graph do not
   automatically retry to prevent duplicate side effects.
-- **Confirmation prompts default to No** — interactive deployment requires
+- **Confirmation prompts default to No**: interactive deployment requires
   explicit opt-in before any write operation.
-- **Atomic file writes** — deployment records and monitor state use
+- **Atomic file writes**: deployment records and monitor state use
   temp-file + `os.replace` to prevent partial writes.
-- **No embedded secrets** — all credentials are supplied via environment
+- **No embedded secrets**: all credentials are supplied via environment
   variables; no secrets are stored in code, templates, or deployment records.
