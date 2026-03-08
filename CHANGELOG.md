@@ -32,10 +32,6 @@ This project uses [Semantic Versioning](https://semver.org/).
   `--once` for single-poll mode, `--interval` for custom poll frequency, and
   `--exclude-app-id` to suppress self-access noise.
 
-- **`detect` subcommand** — generate SIEM detection queries from deployment records.
-  Supported formats: KQL (Sentinel), Splunk SPL, and OData filter. Usage:
-  `anglerfish detect <record.json> --format kql`.
-
 - **Management Activity API client** (`audit.py`) — subscription management, content
   blob listing with pagination, and event fetching with retry/backoff.
 

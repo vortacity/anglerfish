@@ -77,31 +77,6 @@ def test_dispatch_jsonl_creates_parent_dirs(tmp_path):
 
 
 # ------------------------------------------------------------------
-# Webhook channel
-# ------------------------------------------------------------------
-
-
-def test_dispatch_webhook_posts_json():
-    with patch("anglerfish.alerts.requests.post") as mock_post:
-        mock_post.return_value.ok = True
-        dispatcher = AlertDispatcher(webhook_url="https://hooks.example.com/alert")
-        dispatcher.dispatch(_sample_alert())
-
-        mock_post.assert_called_once()
-        call_kwargs = mock_post.call_args
-        assert call_kwargs[1]["json"]["canary_type"] == "outlook"
-        assert call_kwargs[1]["timeout"] == 10
-
-
-def test_dispatch_webhook_failure_does_not_raise():
-    with patch("anglerfish.alerts.requests.post") as mock_post:
-        mock_post.side_effect = ConnectionError("network down")
-        dispatcher = AlertDispatcher(webhook_url="https://hooks.example.com/alert")
-        # Should not raise.
-        dispatcher.dispatch(_sample_alert())
-
-
-# ------------------------------------------------------------------
 # Multi-channel fan-out
 # ------------------------------------------------------------------
 
@@ -115,7 +90,7 @@ def test_dispatch_all_channels(tmp_path):
         dispatcher = AlertDispatcher(
             console=console,
             alert_log=log_path,
-            webhook_url="https://hooks.example.com/alert",
+            slack_webhook_url="https://hooks.slack.com/services/T/B/xxx",
         )
         dispatcher.dispatch(_sample_alert())
 
@@ -165,13 +140,3 @@ def test_dispatch_slack_failure_does_not_raise():
         dispatcher.dispatch(_sample_alert())
 
 
-def test_dispatch_slack_and_webhook_both_fire():
-    with patch("anglerfish.alerts.requests.post") as mock_post:
-        mock_post.return_value.ok = True
-        dispatcher = AlertDispatcher(
-            webhook_url="https://hooks.example.com/alert",
-            slack_webhook_url="https://hooks.slack.com/services/T/B/xxx",
-        )
-        dispatcher.dispatch(_sample_alert())
-
-        assert mock_post.call_count == 2

@@ -30,12 +30,10 @@ class AlertDispatcher:
         *,
         console: Console | None = None,
         alert_log: str | Path | None = None,
-        webhook_url: str | None = None,
         slack_webhook_url: str | None = None,
     ):
         self._console = console
         self._alert_log = Path(alert_log) if alert_log else None
-        self._webhook_url = webhook_url
         self._slack_webhook_url = slack_webhook_url
 
     def dispatch(self, alert: CanaryAlert) -> None:
@@ -51,12 +49,6 @@ class AlertDispatcher:
                 _append_jsonl(self._alert_log, alert)
             except Exception:
                 logger.warning("JSONL alert logging failed", exc_info=True)
-
-        if self._webhook_url is not None:
-            try:
-                _post_webhook(self._webhook_url, alert)
-            except Exception:
-                logger.warning("Webhook alert POST failed", exc_info=True)
 
         if self._slack_webhook_url is not None:
             try:
@@ -105,19 +97,6 @@ def _append_jsonl(path: Path, alert: CanaryAlert) -> None:
     record = asdict(alert)
     with path.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(record, default=str) + "\n")
-
-
-# ------------------------------------------------------------------
-# Webhook channel
-# ------------------------------------------------------------------
-
-
-def _post_webhook(url: str, alert: CanaryAlert) -> None:
-    """HTTP POST alert as JSON. Fire-and-forget with warning on failure."""
-    payload = asdict(alert)
-    resp = requests.post(url, json=payload, timeout=10)
-    if not resp.ok:
-        logger.warning("Webhook POST to %s returned HTTP %d", url, resp.status_code)
 
 
 # ------------------------------------------------------------------

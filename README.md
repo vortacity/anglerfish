@@ -28,7 +28,6 @@ No HTTP callbacks, no DNS beacons, no embedded tracking pixels. The canary is a 
 - **Dry-run mode** — validate and authenticate without writing anything
 - **Cleanup subcommand** — deterministic removal using deployment records
 - **Monitor subcommand** — poll the M365 Management Activity API for canary access events
-- **Detect subcommand** — generate KQL, Splunk, or OData detection queries from deployment records
 - **Verify subcommand** — confirm deployed canaries still exist via Graph API health checks
 - **Dashboard subcommand** — full-screen TUI with canary status table, live alert feed, and stats bar
 - **Graph API retry safety** — GET/DELETE retry on transient errors; POST/PUT do not auto-retry
@@ -257,9 +256,6 @@ anglerfish monitor --demo
 # Dashboard with simulated data
 anglerfish dashboard --demo
 
-# Generate detection queries from demo records
-anglerfish detect examples/demo-records/outlook-draft-record.json
-anglerfish detect examples/demo-records/sharepoint-upload-record.json --format splunk
 ```
 
 ### Monitoring
@@ -281,21 +277,6 @@ anglerfish monitor --records-dir ~/.anglerfish/records \
 # With Slack alerting
 anglerfish monitor --records-dir ~/.anglerfish/records \
   --slack-webhook-url https://hooks.slack.com/services/T.../B.../xxx
-```
-
-### Detection Queries
-
-Generate SIEM detection queries from deployment records:
-
-```bash
-# KQL (default, for Microsoft Sentinel)
-anglerfish detect ./deployment-record.json
-
-# Splunk SPL
-anglerfish detect ./deployment-record.json --format splunk
-
-# OData filter (for Management Activity API)
-anglerfish detect ./deployment-record.json --format odata
 ```
 
 ### Canary Health Check
@@ -340,10 +321,6 @@ anglerfish dashboard \
 
 Key bindings: **q** to quit, **r** to manual refresh.
 
-### Detection Setup
-
-After deploying canaries, configure your SIEM to query the M365 Unified Audit Log for the artifact IDs stored in each deployment record. For Outlook canaries, filter on `MailItemsAccessed` events matching the `message_id` or `folder_id`. For SharePoint and OneDrive canaries, filter on `FileAccessed` events matching the `item_id`. Use `anglerfish detect` to auto-generate queries. See [threat-model.md](docs/threat-model.md) for details on audit events, latency, and filtering guidance.
-
 ### Custom Templates
 
 Built-in templates are loaded from package data. Custom templates directory:
@@ -386,8 +363,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for template schema documentation.
 | `monitor --interval N` | Set poll interval in seconds (default: 300) |
 | `monitor --exclude-app-id ID` | Exclude app IDs from matching (repeatable) |
 | `monitor --slack-webhook-url URL` | Slack incoming webhook URL for alert notifications |
-| `detect <record>` | Subcommand: generate SIEM query from deployment record |
-| `detect --format FMT` | Query format: `kql`, `splunk`, or `odata` (default: kql) |
 | `batch <manifest>` | Subcommand: deploy multiple canaries from a YAML manifest |
 | `batch --output-dir DIR` | Output directory for deployment records (default: `~/.anglerfish/records`) |
 | `batch --dry-run` | Validate manifest and authenticate without deploying |

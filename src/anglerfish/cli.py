@@ -399,13 +399,6 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="JSONL alert log file.",
     )
     monitor_parser.add_argument(
-        "--alert-webhook",
-        default=None,
-        metavar="URL",
-        dest="alert_webhook",
-        help="Webhook URL for alert POST.",
-    )
-    monitor_parser.add_argument(
         "--slack-webhook-url",
         default=None,
         metavar="URL",
@@ -424,16 +417,6 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         action="store_true",
         default=False,
         help="Print a simulated alert and exit (no auth required).",
-    )
-
-    detect_parser = subparsers.add_parser("detect", help="Generate SIEM detection queries from a deployment record.")
-    detect_parser.add_argument("record", metavar="RECORD", help="Path to deployment record JSON.")
-    detect_parser.add_argument(
-        "--format",
-        choices=("kql", "splunk", "odata"),
-        default="kql",
-        dest="query_format",
-        help="Query format (default: kql).",
     )
 
     batch_parser = subparsers.add_parser("batch", help="Deploy multiple canaries from a YAML manifest.")
@@ -1600,7 +1583,6 @@ def _run_monitor(args: argparse.Namespace, console: Console) -> int:
     from .audit import AuditClient
     from .config import (
         MONITOR_ALERT_LOG,
-        MONITOR_ALERT_WEBHOOK,
         MONITOR_NO_CONSOLE,
         MONITOR_SLACK_WEBHOOK,
         MONITOR_STATE_FILE,
@@ -1653,12 +1635,10 @@ def _run_monitor(args: argparse.Namespace, console: Console) -> int:
     # Alert dispatcher.
     no_console = args.no_console or MONITOR_NO_CONSOLE
     alert_log = args.alert_log or MONITOR_ALERT_LOG or None
-    alert_webhook = args.alert_webhook or MONITOR_ALERT_WEBHOOK or None
     slack_webhook = getattr(args, "slack_webhook_url", None) or MONITOR_SLACK_WEBHOOK or None
     dispatcher = AlertDispatcher(
         console=None if no_console else console,
         alert_log=alert_log,
-        webhook_url=alert_webhook,
         slack_webhook_url=slack_webhook,
     )
 
@@ -1676,18 +1656,6 @@ def _run_monitor(args: argparse.Namespace, console: Console) -> int:
         dispatcher=dispatcher,
         token_manager=token_mgr,
     )
-
-
-def _run_detect(args: argparse.Namespace, console: Console) -> int:
-    """Generate and print a SIEM detection query."""
-    from .detect import generate_query
-
-    query = generate_query(args.record, fmt=args.query_format)
-    console.print(query)
-    if getattr(args, "demo", False):
-        console.print()
-        console.print("[bold yellow]Demo mode — query generated from demo record.[/bold yellow]")
-    return 0
 
 
 def _run_batch(args: argparse.Namespace, console: Console) -> int:
@@ -1876,13 +1844,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         except KeyboardInterrupt:
             console.print("\n[yellow]Cancelled.[/yellow]")
             return 130
-
-    if args.subcommand == "detect":
-        try:
-            return _run_detect(args, console)
-        except (DeploymentError, ValueError) as exc:
-            _print_error(console, str(exc))
-            return 1
 
     if args.subcommand == "batch":
         try:
