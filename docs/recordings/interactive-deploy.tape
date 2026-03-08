@@ -1,5 +1,12 @@
 Output docs/images/interactive-deploy.gif
 
+# Run from the repo root:
+#   cd /path/to/anglerfish
+#   vhs docs/recordings/interactive-deploy.tape
+#
+# Requires: vhs, ffmpeg, ttyd (see docs/plans/2026-03-08-arsenal-readme-improvements.md)
+# Output:   docs/images/interactive-deploy.gif
+
 Set Theme "Dracula"
 Set FontSize 13
 Set Width 1200
@@ -35,3 +42,5 @@ Sleep 1s
 Type "cfo@contoso.com"
 Enter
 Sleep 4s
+
+# End of recording
