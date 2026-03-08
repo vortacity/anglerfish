@@ -1,5 +1,6 @@
 <div align="center">
   <img src="docs/images/logo.png" alt="Anglerfish" width="400">
+  <h1>Anglerfish</h1>
 </div>
 
 [![CI](https://github.com/vortacity/anglerfish/actions/workflows/ci.yml/badge.svg)](https://github.com/vortacity/anglerfish/actions/workflows/ci.yml)
