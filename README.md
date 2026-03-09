@@ -62,10 +62,6 @@ OfficeActivity
 
 Replace `canary_ids` with the artifact IDs from your `--output-json` deployment records.
 
-## Differentiator
-
-Unlike other canary token services that rely on DNS/HTTP beacons or external appliances, Anglerfish uses no callback infrastructure. Canary artifacts are native M365 objects. Detection is powered by the Unified Audit Log that enterprises already collect: no additional infrastructure, no network egress, no token-serving endpoints.
-
 ## Attack Scenarios
 
 | Threat scenario | Canary type | Detection event |
@@ -73,21 +69,6 @@ Unlike other canary token services that rely on DNS/HTTP beacons or external app
 | Attacker reads mail in a compromised executive mailbox | Outlook draft | `MailItemsAccessed` |
 | Insider threat browses a restricted HR document library | SharePoint | `FileAccessed` |
 | Credential-stuffing actor enumerates a personal OneDrive | OneDrive | `FileAccessed`, `FileDownloaded` |
-
-## Key Features
-
-- **Outlook canaries**: draft messages in hidden folders or sent to Inbox
-- **SharePoint canaries**: deceptive files (.txt, .docx, .xlsx) uploaded to document libraries
-- **OneDrive canaries**: deceptive files (.txt, .docx, .xlsx) uploaded to personal OneDrive for Business storage
-- **Interactive + scripted CLI**: guided deployment or `--non-interactive` for CI/automation
-- **YAML template system**: 16 bundled templates, custom template directories supported
-- **Dry-run mode**: validate and authenticate without writing anything
-- **Cleanup subcommand**: deterministic removal using deployment records
-- **Monitor subcommand**: poll the M365 Management Activity API for canary access events
-- **Verify subcommand**: confirm deployed canaries still exist via Graph API health checks
-- **Dashboard subcommand**: full-screen TUI with canary status table, live alert feed, and stats bar
-- **Graph API retry safety**: GET/DELETE retry on transient errors; POST/PUT do not auto-retry
-- **Offline demo mode**: `--demo` flag for conference presentations without live tenant
 
 ## Supported Canary Types
 
