@@ -37,6 +37,31 @@ Anglerfish is a Python CLI that provisions deceptive artifacts (Outlook emails, 
 
 No HTTP callbacks, no DNS beacons, no embedded tracking pixels. The canary is a normal M365 object; detection relies on Microsoft's built-in audit pipeline.
 
+## What Detection Looks Like
+
+When an attacker accesses a canary, the M365 Unified Audit Log generates an event your SIEM can alert on:
+
+```json
+{
+  "Operation": "MailItemsAccessed",
+  "UserId": "attacker@contoso.com",
+  "ClientIPAddress": "203.0.113.42",
+  "InternetMessageId": "<artifact-id-from-deployment-record>",
+  "ResultStatus": "Succeeded"
+}
+```
+
+**Microsoft Sentinel KQL** — alert when any canary is accessed:
+
+```kql
+OfficeActivity
+| where Operation in ("MailItemsAccessed", "FileAccessed", "FileDownloaded")
+| where OfficeObjectId in (canary_ids)  // artifact IDs from --output-json records
+| project TimeGenerated, UserId, ClientIPAddress, Operation, OfficeObjectId
+```
+
+Replace `canary_ids` with the artifact IDs from your `--output-json` deployment records.
+
 ## Differentiator
 
 Unlike other canary token services that rely on DNS/HTTP beacons or external appliances, Anglerfish uses no callback infrastructure. Canary artifacts are native M365 objects. Detection is powered by the Unified Audit Log that enterprises already collect: no additional infrastructure, no network egress, no token-serving endpoints.
