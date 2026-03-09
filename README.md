@@ -70,6 +70,25 @@ Replace `canary_ids` with the artifact IDs from your `--output-json` deployment 
 | Insider threat browses a restricted HR document library | SharePoint | `FileAccessed` |
 | Credential-stuffing actor enumerates a personal OneDrive | OneDrive | `FileAccessed`, `FileDownloaded` |
 
+## Quickstart
+
+```bash
+# 1. Clone and install
+git clone https://github.com/vortacity/anglerfish.git
+cd anglerfish
+pip install -e .
+
+# 2. Configure — copy .env.example and fill in your app registration
+export ANGLERFISH_TENANT_ID="..."
+export ANGLERFISH_CLIENT_ID="..."
+export ANGLERFISH_CLIENT_SECRET="..."
+
+# 3. Try it offline — no tenant required
+anglerfish --demo
+```
+
+For a full Azure AD app registration walkthrough, see [Demo Tenant Setup Guide](docs/demo-tenant-setup.md).
+
 ## Supported Canary Types
 
 | Type | Delivery | Auth | Detection event |
@@ -98,7 +117,8 @@ bash scripts/quickstart.sh
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-pip install -e ".[dev]"
+pip install -e .         # end-user install
+pip install -e ".[dev]"  # contributor install (adds pytest, ruff, bandit)
 ```
 
 ### Azure AD App Registration
