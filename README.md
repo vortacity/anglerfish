@@ -78,12 +78,6 @@ Replace `canary_ids` with the artifact IDs from your `--output-json` deployment 
 | SharePoint | File upload to an existing site folder | Application | `FileAccessed`, `FileDownloaded` |
 | OneDrive | File upload to personal OneDrive for Business | Application | `FileAccessed`, `FileDownloaded` |
 
-## Scope Warning
-
-> **`Mail.ReadWrite` is an application-level permission that grants access to ALL mailboxes in the tenant.** Grant this permission only in dedicated security/canary tenants or ensure your organization's security team has reviewed and approved the scope. Use least-privilege: grant only the permissions required for the canary types you intend to deploy.
-
----
-
 ## Installation
 
 ### Prerequisites
@@ -448,6 +442,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for template schema documentation.
 > - **Never deploy in a tenant you do not have explicit authority over**, including client environments, partner tenants, or shared infrastructure, without a signed agreement and legal review.
 >
 > This tool is intended for authorized security testing, red team operations, and defensive canary deployments by teams with proper authorization. Misuse is the sole responsibility of the operator.
+
+> [!WARNING]
+> **`Mail.ReadWrite` is an application-level permission that grants access to ALL mailboxes in the tenant.** Grant this permission only in dedicated security/canary tenants or after your organization's security team has reviewed and approved the scope. Use least-privilege: grant only the permissions required for the canary types you intend to deploy.
 
 ## Safety Checklist
 
