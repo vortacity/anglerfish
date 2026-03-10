@@ -8,14 +8,29 @@ Output docs/images/dashboard.gif
 # Output:   docs/images/dashboard.gif
 
 Set Theme "Dracula"
-Set FontSize 13
+Set FontSize 16
 Set Width 1200
 Set Height 650
-Set TypingSpeed 50ms
+Set TypingSpeed 80ms
 
-Type "source .venv/bin/activate && anglerfish dashboard --demo"
+# Activate venv
+Type "source .venv/bin/activate"
 Enter
-Sleep 8s
+Sleep 1s
+Ctrl+L
+
+# Launch dashboard in demo mode
+Type "anglerfish dashboard --demo"
+Enter
+Sleep 4s
+
+# Trigger first alert (r = refresh in demo mode → generates synthetic alert on right panel)
+Type "r"
+Sleep 3s
+
+# Trigger second alert
+Type "r"
+Sleep 2s
 
 # Quit
 Type "q"
