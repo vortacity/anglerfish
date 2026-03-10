@@ -8,13 +8,19 @@ Output docs/images/interactive-deploy.gif
 # Output:   docs/images/interactive-deploy.gif
 
 Set Theme "Dracula"
-Set FontSize 13
+Set FontSize 16
 Set Width 1200
 Set Height 700
-Set TypingSpeed 50ms
+Set TypingSpeed 80ms
 
-# Activate venv and run demo
-Type "source .venv/bin/activate && anglerfish --demo"
+# Activate venv
+Type "source .venv/bin/activate"
+Enter
+Sleep 1s
+Ctrl+L
+
+# Launch interactive demo
+Type "anglerfish --demo"
 Enter
 Sleep 3s
 
@@ -26,7 +32,8 @@ Sleep 1s
 Enter
 Sleep 1s
 
-# Accept default target_name: User
+# Enter target name: Adele Vance
+Type "Adele Vance"
 Enter
 Sleep 1s
 
@@ -39,8 +46,8 @@ Enter
 Sleep 1s
 
 # Enter target mailbox
-Type "cfo@contoso.com"
+Type "adele.vance@contoso.com"
 Enter
-Sleep 4s
+Sleep 8s
 
 # End of recording
