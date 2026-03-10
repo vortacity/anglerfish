@@ -1,4 +1,5 @@
 """Tests for monitor --demo --count behaviour."""
+
 from unittest.mock import MagicMock, patch
 
 from anglerfish.monitor import render_demo_alert
