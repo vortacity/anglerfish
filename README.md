@@ -11,15 +11,15 @@ Anglerfish is a Python CLI that provisions deceptive artifacts (Outlook emails, 
 
 ## Demo
 
-**Interactive deployment** (offline demo mode — no tenant required):
+**Interactive deployment** (`anglerfish`):
 
 ![Interactive deployment](docs/images/interactive-deploy.gif)
 
-**Live dashboard** (`anglerfish dashboard --demo`):
+**Live dashboard** (`anglerfish dashboard`):
 
 ![Dashboard TUI](docs/images/dashboard.gif)
 
-**Alert detection** (`anglerfish monitor --demo`):
+**Alert detection** (`anglerfish monitor`):
 
 ![Monitor alert](docs/images/monitor-alert.gif)
 
