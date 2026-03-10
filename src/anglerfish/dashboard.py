@@ -236,7 +236,7 @@ class AnglerDashboard(App):
     def on_mount(self) -> None:
         self.sub_title = f"v{__version__}"
         table = self.query_one("#canary-table", DataTable)
-        table.add_columns("Type", "Template", "Target", "Status")
+        table.add_columns("#", "Type", "Template", "Target", "Status")
 
         if self._demo:
             self._demo_provider = DemoDataProvider()
@@ -250,9 +250,10 @@ class AnglerDashboard(App):
     def _populate_demo_canaries(self) -> None:
         assert self._demo_provider is not None
         table = self.query_one("#canary-table", DataTable)
-        for result in self._demo_provider.verify_results():
+        for i, result in enumerate(self._demo_provider.verify_results(), start=1):
             style = _STATUS_STYLES.get(result.status, "white")
             table.add_row(
+                str(i),
                 result.canary_type,
                 result.template_name,
                 result.target,
@@ -273,9 +274,10 @@ class AnglerDashboard(App):
         assert self._demo_provider is not None
         table = self.query_one("#canary-table", DataTable)
         table.clear()
-        for result in self._demo_provider.verify_results():
+        for i, result in enumerate(self._demo_provider.verify_results(), start=1):
             style = _STATUS_STYLES.get(result.status, "white")
             table.add_row(
+                str(i),
                 result.canary_type,
                 result.template_name,
                 result.target,
@@ -340,8 +342,9 @@ class AnglerDashboard(App):
         self._canary_count = self._canary_index.count
 
         table = self.query_one("#canary-table", DataTable)
-        for path, rec in records:
+        for i, (path, rec) in enumerate(records, start=1):
             table.add_row(
+                str(i),
                 rec.get("canary_type", ""),
                 rec.get("template_name", ""),
                 rec.get("target_user") or rec.get("site_name", ""),
@@ -396,7 +399,7 @@ class AnglerDashboard(App):
         table = self.query_one("#canary-table", DataTable)
         table.clear()
 
-        for path, rec in self._live_records:
+        for i, (path, rec) in enumerate(self._live_records, start=1):
             canary_type = rec.get("canary_type", "")
             template_name = rec.get("template_name", "")
             target = rec.get("target_user") or rec.get("site_name", "")
@@ -406,7 +409,7 @@ class AnglerDashboard(App):
                 status_text = f"[{style}]{result.status.value}[/{style}]"
             except Exception:
                 status_text = "[yellow]ERROR[/yellow]"
-            table.add_row(canary_type, template_name, target, status_text)
+            table.add_row(str(i), canary_type, template_name, target, status_text)
 
     def _live_poll_tick(self) -> None:
         """Poll audit API for new events."""

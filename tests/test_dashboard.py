@@ -82,6 +82,17 @@ class TestAnglerDashboardApp:
             assert table.row_count == 5
 
     @pytest.mark.asyncio
+    async def test_canary_table_has_number_column_first(self):
+        from anglerfish.dashboard import AnglerDashboard
+
+        app = AnglerDashboard(demo=True)
+        async with app.run_test() as _pilot:
+            table = app.query_one(DataTable)
+            labels = [str(col.label) for col in table.columns.values()]
+            assert labels[0] == "#"
+            assert labels == ["#", "Type", "Template", "Target", "Status"]
+
+    @pytest.mark.asyncio
     async def test_q_key_exits_app(self):
         from anglerfish.dashboard import AnglerDashboard
 
