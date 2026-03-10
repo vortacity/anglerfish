@@ -11,7 +11,7 @@ Set Theme "Dracula"
 Set FontSize 16
 Set Width 1200
 Set Height 700
-Set TypingSpeed 80ms
+Set TypingSpeed 50ms
 
 # Activate venv
 Type "source .venv/bin/activate"
@@ -19,35 +19,9 @@ Enter
 Sleep 1s
 Ctrl+L
 
-# Launch interactive demo
-Type "anglerfish --demo"
+# Deploy canary non-interactively — command is the story, success panel is the payoff
+Type "anglerfish --demo --non-interactive --canary-type outlook --template 'Fake Password Reset' --target adele.vance@contoso.com"
 Enter
-Sleep 3s
-
-# Select canary type: Outlook (first item, already selected)
-Enter
-Sleep 1s
-
-# Select template: Fake Password Reset (first item, already selected)
-Enter
-Sleep 1s
-
-# Enter target name: Adele Vance
-Type "Adele Vance"
-Enter
-Sleep 1s
-
-# Select delivery mode: Draft (first item, already selected)
-Enter
-Sleep 1s
-
-# Accept default hidden folder name: IT Notifications
-Enter
-Sleep 1s
-
-# Enter target mailbox
-Type "adele.vance@contoso.com"
-Enter
-Sleep 8s
+Sleep 5s
 
 # End of recording
