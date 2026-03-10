@@ -107,7 +107,7 @@ For a full Azure AD app registration walkthrough, see [Demo Tenant Setup Guide](
 - Microsoft 365 tenant with E3/E5 (or equivalent with audit logging enabled)
 - Azure AD (Entra ID) app registration with appropriate Graph API permissions
 
-### Quickstart
+### Scripted Install (quickstart.sh)
 
 ```bash
 bash scripts/quickstart.sh
