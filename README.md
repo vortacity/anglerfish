@@ -451,6 +451,14 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for template schema documentation.
 - Deployment record writes (`--output-json`) are atomic (temp file + replace) to reduce partial-write risk.
 - Deployment record reads require a JSON object with `timestamp` and `canary_type` (or legacy `type`).
 
+## Known Limitations
+
+- **UAL ingest latency (~15–60 min):** M365 Unified Audit Log events are typically available within 15–60 minutes of access. Anglerfish is not a real-time detection system. Configure your SIEM to query on a schedule.
+- **Deploying service account appears in audit logs:** The app registration used to deploy canaries may generate its own `MailItemsAccessed` or `FileAccessed` events. Filter these out using `--exclude-app-id` or by excluding the deploying principal's UPN in your SIEM query.
+- **Coverage is point-in-time:** Canaries cover specific artifacts deployed at a specific time. Rotate them periodically and after suspected compromise to maintain coverage.
+
+See [threat-model.md](docs/threat-model.md) for the full limitations and permissions reference.
+
 ## Legal Authorization Requirement
 
 > [!CAUTION]
