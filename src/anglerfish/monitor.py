@@ -490,8 +490,6 @@ _DEMO_ALERTS = [
 
 def render_demo_alert(console: Console, count: int = 1) -> None:
     """Print simulated alerts for demo/offline mode."""
-    from datetime import datetime, timezone
-
     disp = AlertDispatcher(console=console)
     for i in range(count):
         data = _DEMO_ALERTS[i % len(_DEMO_ALERTS)]
