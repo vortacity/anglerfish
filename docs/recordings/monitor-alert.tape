@@ -8,14 +8,20 @@ Output docs/images/monitor-alert.gif
 # Output:   docs/images/monitor-alert.gif
 
 Set Theme "Dracula"
-Set FontSize 13
+Set FontSize 16
 Set Width 1200
 Set Height 400
-Set TypingSpeed 50ms
+Set TypingSpeed 80ms
 
-# Show simulated canary access alert
-Type "source .venv/bin/activate && anglerfish monitor --demo"
+# Activate venv
+Type "source .venv/bin/activate"
 Enter
-Sleep 3s
+Sleep 1s
+Ctrl+L
+
+# Stream three simulated canary alerts (Outlook → SharePoint → OneDrive)
+Type "anglerfish monitor --demo --count 3"
+Enter
+Sleep 10s
 
 # End of recording
