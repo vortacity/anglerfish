@@ -418,6 +418,14 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         default=False,
         help="Print a simulated alert and exit (no auth required).",
     )
+    monitor_parser.add_argument(
+        "--count",
+        type=int,
+        default=1,
+        metavar="N",
+        dest="demo_count",
+        help="Number of simulated alerts to print in --demo mode (default: 1).",
+    )
 
     batch_parser = subparsers.add_parser("batch", help="Deploy multiple canaries from a YAML manifest.")
     batch_parser.add_argument("manifest", metavar="MANIFEST", help="Path to batch manifest YAML file.")
@@ -1594,7 +1602,7 @@ def _run_monitor(args: argparse.Namespace, console: Console) -> int:
     _print_banner(console)
 
     if getattr(args, "demo", False):
-        render_demo_alert(console)
+        render_demo_alert(console, count=getattr(args, "demo_count", 1))
         return 0
 
     records = load_records(args.records_dir)

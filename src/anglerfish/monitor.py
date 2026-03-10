@@ -454,23 +454,55 @@ def run_monitor(
 # Demo mode
 # ------------------------------------------------------------------
 
+_DEMO_ALERTS = [
+    {
+        "canary_type": "outlook (draft)",
+        "template_name": "Fake Password Reset",
+        "artifact_label": "internet_message_id: <demo-msg-1@contoso.com>",
+        "accessed_by": "attacker@evil.com",
+        "source_ip": "203.0.113.42",
+        "operation": "MailItemsAccessed",
+        "client_info": "Client=OWA;Action=BindFolder",
+        "record_path": "~/.anglerfish/records/outlook-demo.json",
+    },
+    {
+        "canary_type": "sharepoint",
+        "template_name": "Employee Salary Bands",
+        "artifact_label": "item_id: item-demo-1",
+        "accessed_by": "recon@badactor.net",
+        "source_ip": "192.0.2.99",
+        "operation": "FileAccessed",
+        "client_info": "Client=SharePointWebPart",
+        "record_path": "~/.anglerfish/records/sharepoint-demo.json",
+    },
+    {
+        "canary_type": "onedrive",
+        "template_name": "VPN Credentials Backup",
+        "artifact_label": "item_id: item-demo-3",
+        "accessed_by": "scout@evil.com",
+        "source_ip": "198.51.100.7",
+        "operation": "FileDownloaded",
+        "client_info": "Client=OneDriveSync",
+        "record_path": "~/.anglerfish/records/onedrive-demo.json",
+    },
+]
 
-def render_demo_alert(console: Console) -> None:
-    """Print a simulated alert for demo/offline mode."""
-    alert = CanaryAlert(
-        canary_type="outlook (draft)",
-        template_name="Fake Password Reset",
-        artifact_label="internet_message_id: <demo-msg-id@contoso.com>",
-        accessed_by="attacker@evil.com",
-        source_ip="203.0.113.42",
-        timestamp="2026-03-05T14:22:00Z",
-        operation="MailItemsAccessed",
-        client_info="Client=OWA;Action=BindFolder",
-        record_path="~/.anglerfish/records/outlook-demo.json",
-    )
+
+def render_demo_alert(console: Console, count: int = 1) -> None:
+    """Print simulated alerts for demo/offline mode."""
+    from datetime import datetime, timezone
+
     disp = AlertDispatcher(console=console)
-    disp.dispatch(alert)
-    console.print("[bold yellow]Demo mode — this is a simulated alert.[/bold yellow]")
+    for i in range(count):
+        data = _DEMO_ALERTS[i % len(_DEMO_ALERTS)]
+        alert = CanaryAlert(
+            timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            **data,
+        )
+        disp.dispatch(alert)
+        if i < count - 1:
+            time.sleep(2)
+    console.print("[bold yellow]Demo mode — simulated alerts.[/bold yellow]")
 
 
 # ------------------------------------------------------------------
