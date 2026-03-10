@@ -774,17 +774,23 @@ def _prompt_auth_setup(
     return "certificate"
 
 
+_ASCII_BANNER = (
+    "    ___                __          _____      __  \n"
+    "   /   |  ____  ____ _/ /__  _____/ __(_)____/ /_ \n"
+    "  / /| | / __ \\/ __ `/ / _ \\/ ___/ /_/ / ___/ __ \\\n"
+    " / ___ |/ / / / /_/ / /  __/ /  / __/ (__  ) / / /\n"
+    "/_/  |_/_/ /_/\\__, /_/\\___/_/  /_/ /_/____/_/ /_/ \n"
+    "             /____/                               \n"
+)
+
+
 def _print_banner(console: Console) -> None:
-    title = Text.assemble(
-        ("  \U0001f3af Anglerfish", "bold blue"),
-        ("  v", "dim"),
-        (__version__, "dim"),
-    )
-    subtitle = Text("Microsoft 365 Canary Deployment", style="dim")
     banner = Text()
-    banner.append_text(title)
+    banner.append(_ASCII_BANNER, style="bold blue")
     banner.append("\n")
-    banner.append_text(subtitle)
+    banner.append("Microsoft 365 Canary Deployment", style="dim")
+    banner.append("  v", style="dim")
+    banner.append(__version__, style="dim")
     console.print(Panel(banner, expand=False, padding=(1, 4)))
 
 
