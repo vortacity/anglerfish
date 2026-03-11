@@ -3,7 +3,10 @@ import sys
 
 import pytest
 
-from anglerfish import cli
+from anglerfish.cli import main
+from anglerfish.cli import deploy as deploy_mod
+import anglerfish.cli._main as main_mod
+import anglerfish.cli.prompts as prompts_mod
 from anglerfish.models import OneDriveTemplate, OutlookTemplate, SharePointTemplate
 
 
@@ -16,26 +19,26 @@ class _Prompt:
 
 
 def test_main_version_flag():
-    assert cli.main(["--version"]) == 0
+    assert main(["--version"]) == 0
 
 
 def test_parse_args_accepts_onedrive_type():
-    args = cli._parse_args(["--canary-type", "onedrive"])
+    args = main_mod._parse_args(["--canary-type", "onedrive"])
     assert args.canary_type == "onedrive"
 
 
 def test_parse_args_rejects_removed_simulate_flag():
     with pytest.raises(SystemExit):
-        cli._parse_args(["--simulate"])
+        main_mod._parse_args(["--simulate"])
 
 
 def test_main_non_interactive_requires_canary_type():
-    assert cli.main(["--non-interactive"]) == 1
+    assert main(["--non-interactive"]) == 1
 
 
 def test_main_non_interactive_requires_template_for_outlook():
     assert (
-        cli.main(
+        main(
             [
                 "--non-interactive",
                 "--canary-type",
@@ -52,9 +55,9 @@ def test_main_non_interactive_requires_template_for_outlook():
 
 def test_main_sharepoint_flow_deploys(monkeypatch):
     monkeypatch.setenv("ANGLERFISH_CLIENT_ID", "client-id")
-    monkeypatch.setattr(cli, "_prompt_auth_setup", lambda *args, **kwargs: "")
-    monkeypatch.setattr(cli, "_print_auth_success", lambda *args, **kwargs: None)
-    monkeypatch.setattr(cli, "authenticate", lambda *args, **kwargs: "token-123")
+    monkeypatch.setattr(deploy_mod, "_prompt_auth_setup", lambda *args, **kwargs: "")
+    monkeypatch.setattr(deploy_mod, "_print_auth_success", lambda *args, **kwargs: None)
+    monkeypatch.setattr(deploy_mod, "authenticate", lambda *args, **kwargs: "token-123")
 
     template = SharePointTemplate(
         name="SharePoint Template",
@@ -66,13 +69,13 @@ def test_main_sharepoint_flow_deploys(monkeypatch):
         variables=[],
     )
     monkeypatch.setattr(
-        cli,
+        main_mod,
         "list_templates",
         lambda canary_type: [
             {"name": "SharePoint Template", "description": "desc", "path": "pkg://sharepoint/test.yaml"}
         ],
     )
-    monkeypatch.setattr(cli, "load_template", lambda path: template)
+    monkeypatch.setattr(main_mod, "load_template", lambda path: template)
 
     select_answers = {
         "Select canary type:": "sharepoint",
@@ -86,17 +89,17 @@ def test_main_sharepoint_flow_deploys(monkeypatch):
     }
 
     monkeypatch.setattr(
-        cli.questionary,
+        deploy_mod.questionary,
         "select",
         lambda message, *args, **kwargs: _Prompt(select_answers[message]),
     )
     monkeypatch.setattr(
-        cli.questionary,
+        deploy_mod.questionary,
         "text",
         lambda message, *args, **kwargs: _Prompt(text_answers[message]),
     )
     monkeypatch.setattr(
-        cli.questionary,
+        deploy_mod.questionary,
         "confirm",
         lambda *args, **kwargs: _Prompt(True),
     )
@@ -131,10 +134,10 @@ def test_main_sharepoint_flow_deploys(monkeypatch):
             observed["kwargs"] = kwargs
             return {"type": "sharepoint", "uploaded_count": "1"}
 
-    monkeypatch.setattr(cli, "GraphClient", FakeGraphClient)
-    monkeypatch.setattr(cli, "SharePointDeployer", FakeSharePointDeployer)
+    monkeypatch.setattr(deploy_mod, "GraphClient", FakeGraphClient)
+    monkeypatch.setattr(deploy_mod, "SharePointDeployer", FakeSharePointDeployer)
 
-    result = cli.main([])
+    result = main([])
 
     assert result == 0
     assert observed["token"] == "token-123"
@@ -148,9 +151,9 @@ def test_main_sharepoint_flow_deploys(monkeypatch):
 
 def test_main_sharepoint_flow_prompts_manual_when_no_discovered_sites(monkeypatch):
     monkeypatch.setenv("ANGLERFISH_CLIENT_ID", "client-id")
-    monkeypatch.setattr(cli, "_prompt_auth_setup", lambda *args, **kwargs: "")
-    monkeypatch.setattr(cli, "_print_auth_success", lambda *args, **kwargs: None)
-    monkeypatch.setattr(cli, "authenticate", lambda *args, **kwargs: "token-123")
+    monkeypatch.setattr(deploy_mod, "_prompt_auth_setup", lambda *args, **kwargs: "")
+    monkeypatch.setattr(deploy_mod, "_print_auth_success", lambda *args, **kwargs: None)
+    monkeypatch.setattr(deploy_mod, "authenticate", lambda *args, **kwargs: "token-123")
 
     template = SharePointTemplate(
         name="SharePoint Template",
@@ -162,13 +165,13 @@ def test_main_sharepoint_flow_prompts_manual_when_no_discovered_sites(monkeypatc
         variables=[],
     )
     monkeypatch.setattr(
-        cli,
+        main_mod,
         "list_templates",
         lambda canary_type: [
             {"name": "SharePoint Template", "description": "desc", "path": "pkg://sharepoint/test.yaml"}
         ],
     )
-    monkeypatch.setattr(cli, "load_template", lambda path: template)
+    monkeypatch.setattr(main_mod, "load_template", lambda path: template)
 
     select_answers = {
         "Select canary type:": "sharepoint",
@@ -182,17 +185,17 @@ def test_main_sharepoint_flow_prompts_manual_when_no_discovered_sites(monkeypatc
     }
 
     monkeypatch.setattr(
-        cli.questionary,
+        deploy_mod.questionary,
         "select",
         lambda message, *args, **kwargs: _Prompt(select_answers[message]),
     )
     monkeypatch.setattr(
-        cli.questionary,
+        deploy_mod.questionary,
         "text",
         lambda message, *args, **kwargs: _Prompt(text_answers[message]),
     )
     monkeypatch.setattr(
-        cli.questionary,
+        deploy_mod.questionary,
         "confirm",
         lambda *args, **kwargs: _Prompt(True),
     )
@@ -217,10 +220,10 @@ def test_main_sharepoint_flow_prompts_manual_when_no_discovered_sites(monkeypatc
             observed["kwargs"] = kwargs
             return {"type": "sharepoint", "uploaded_count": "1"}
 
-    monkeypatch.setattr(cli, "GraphClient", FakeGraphClient)
-    monkeypatch.setattr(cli, "SharePointDeployer", FakeSharePointDeployer)
+    monkeypatch.setattr(deploy_mod, "GraphClient", FakeGraphClient)
+    monkeypatch.setattr(deploy_mod, "SharePointDeployer", FakeSharePointDeployer)
 
-    result = cli.main([])
+    result = main([])
 
     assert result == 0
     assert observed["target_user"] == "ManualSite"
@@ -233,9 +236,9 @@ def test_main_sharepoint_flow_prompts_manual_when_no_discovered_sites(monkeypatc
 
 def test_main_outlook_flow_deploys(monkeypatch):
     monkeypatch.setenv("ANGLERFISH_CLIENT_ID", "client-id")
-    monkeypatch.setattr(cli, "_prompt_auth_setup", lambda *args, **kwargs: "")
-    monkeypatch.setattr(cli, "_print_auth_success", lambda *args, **kwargs: None)
-    monkeypatch.setattr(cli, "authenticate", lambda *args, **kwargs: "token-123")
+    monkeypatch.setattr(deploy_mod, "_prompt_auth_setup", lambda *args, **kwargs: "")
+    monkeypatch.setattr(deploy_mod, "_print_auth_success", lambda *args, **kwargs: None)
+    monkeypatch.setattr(deploy_mod, "authenticate", lambda *args, **kwargs: "token-123")
 
     template = OutlookTemplate(
         name="Outlook Template",
@@ -248,11 +251,11 @@ def test_main_outlook_flow_deploys(monkeypatch):
         variables=[],
     )
     monkeypatch.setattr(
-        cli,
+        main_mod,
         "list_templates",
         lambda canary_type: [{"name": "Outlook Template", "description": "desc", "path": "pkg://outlook/test.yaml"}],
     )
-    monkeypatch.setattr(cli, "load_template", lambda path: template)
+    monkeypatch.setattr(main_mod, "load_template", lambda path: template)
 
     select_answers = {
         "Select canary type:": "outlook",
@@ -265,17 +268,17 @@ def test_main_outlook_flow_deploys(monkeypatch):
     }
 
     monkeypatch.setattr(
-        cli.questionary,
+        deploy_mod.questionary,
         "select",
         lambda message, *args, **kwargs: _Prompt(select_answers[message]),
     )
     monkeypatch.setattr(
-        cli.questionary,
+        deploy_mod.questionary,
         "text",
         lambda message, *args, **kwargs: _Prompt(text_answers[message]),
     )
     monkeypatch.setattr(
-        cli.questionary,
+        deploy_mod.questionary,
         "confirm",
         lambda *args, **kwargs: _Prompt(True),
     )
@@ -295,10 +298,10 @@ def test_main_outlook_flow_deploys(monkeypatch):
             observed["kwargs"] = kwargs
             return {"delivery_mode": "draft", "folder_id": "folder-1", "message_id": "msg-1"}
 
-    monkeypatch.setattr(cli, "GraphClient", FakeGraphClient)
-    monkeypatch.setattr(cli, "OutlookDeployer", FakeOutlookDeployer)
+    monkeypatch.setattr(deploy_mod, "GraphClient", FakeGraphClient)
+    monkeypatch.setattr(deploy_mod, "OutlookDeployer", FakeOutlookDeployer)
 
-    result = cli.main([])
+    result = main([])
 
     assert result == 0
     assert observed["token"] == "token-123"
@@ -311,7 +314,7 @@ def test_main_cleanup_sharepoint_happy_path(monkeypatch, tmp_path):
     record_path.write_text("{}", encoding="utf-8")
 
     monkeypatch.setattr(
-        cli,
+        deploy_mod,
         "read_deployment_record",
         lambda path: {
             "type": "sharepoint",
@@ -321,25 +324,25 @@ def test_main_cleanup_sharepoint_happy_path(monkeypatch, tmp_path):
             "uploaded_files": "manual.txt",
         },
     )
-    monkeypatch.setattr(cli, "_prompt_auth_setup", lambda *args, **kwargs: "")
-    monkeypatch.setattr(cli, "authenticate", lambda *args, **kwargs: "token-123")
-    monkeypatch.setattr(cli, "_print_auth_success", lambda *args, **kwargs: None)
+    monkeypatch.setattr(deploy_mod, "_prompt_auth_setup", lambda *args, **kwargs: "")
+    monkeypatch.setattr(deploy_mod, "authenticate", lambda *args, **kwargs: "token-123")
+    monkeypatch.setattr(deploy_mod, "_print_auth_success", lambda *args, **kwargs: None)
 
     class FakeGraphClient:
         def __init__(self, token):
             assert token == "token-123"
 
-    monkeypatch.setattr(cli, "GraphClient", FakeGraphClient)
-    monkeypatch.setattr(cli, "sharepoint_remove_canary", lambda graph, record: {"removed": "true"})
+    monkeypatch.setattr(deploy_mod, "GraphClient", FakeGraphClient)
+    monkeypatch.setattr(deploy_mod, "sharepoint_remove_canary", lambda graph, record: {"removed": "true"})
 
     status_updates: list[tuple[str, str]] = []
     monkeypatch.setattr(
-        cli,
+        deploy_mod,
         "update_deployment_status",
         lambda path, status: status_updates.append((str(path), status)),
     )
 
-    result = cli.main(["cleanup", "--non-interactive", str(record_path)])
+    result = main(["cleanup", "--non-interactive", str(record_path)])
 
     assert result == 0
     assert status_updates == [(str(record_path), "cleaned_up")]
@@ -347,14 +350,14 @@ def test_main_cleanup_sharepoint_happy_path(monkeypatch, tmp_path):
 
 def test_main_list_returns_zero_when_records_dir_missing(tmp_path):
     missing = tmp_path / "does-not-exist"
-    assert cli.main(["list", "--records-dir", str(missing)]) == 0
+    assert main(["list", "--records-dir", str(missing)]) == 0
 
 
 def test_main_outlook_writes_output_json(monkeypatch, tmp_path):
     monkeypatch.setenv("ANGLERFISH_CLIENT_ID", "client-id")
-    monkeypatch.setattr(cli, "_prompt_auth_setup", lambda *args, **kwargs: "")
-    monkeypatch.setattr(cli, "_print_auth_success", lambda *args, **kwargs: None)
-    monkeypatch.setattr(cli, "authenticate", lambda *args, **kwargs: "token-123")
+    monkeypatch.setattr(deploy_mod, "_prompt_auth_setup", lambda *args, **kwargs: "")
+    monkeypatch.setattr(deploy_mod, "_print_auth_success", lambda *args, **kwargs: None)
+    monkeypatch.setattr(deploy_mod, "authenticate", lambda *args, **kwargs: "token-123")
 
     template = OutlookTemplate(
         name="Outlook Template",
@@ -367,11 +370,11 @@ def test_main_outlook_writes_output_json(monkeypatch, tmp_path):
         variables=[],
     )
     monkeypatch.setattr(
-        cli,
+        main_mod,
         "list_templates",
         lambda canary_type: [{"name": "Outlook Template", "description": "desc", "path": "pkg://outlook/test.yaml"}],
     )
-    monkeypatch.setattr(cli, "load_template", lambda path: template)
+    monkeypatch.setattr(main_mod, "load_template", lambda path: template)
 
     select_answers = {
         "Select canary type:": "outlook",
@@ -381,11 +384,13 @@ def test_main_outlook_writes_output_json(monkeypatch, tmp_path):
     text_answers = {
         "Target mailbox (UPN/email):": "victim@contoso.com",
     }
-    monkeypatch.setattr(cli.questionary, "select", lambda message, *args, **kwargs: _Prompt(select_answers[message]))
-    monkeypatch.setattr(cli.questionary, "text", lambda message, *args, **kwargs: _Prompt(text_answers[message]))
-    monkeypatch.setattr(cli.questionary, "confirm", lambda *args, **kwargs: _Prompt(True))
+    monkeypatch.setattr(
+        deploy_mod.questionary, "select", lambda message, *args, **kwargs: _Prompt(select_answers[message])
+    )
+    monkeypatch.setattr(deploy_mod.questionary, "text", lambda message, *args, **kwargs: _Prompt(text_answers[message]))
+    monkeypatch.setattr(deploy_mod.questionary, "confirm", lambda *args, **kwargs: _Prompt(True))
 
-    monkeypatch.setattr(cli, "GraphClient", lambda token: object())
+    monkeypatch.setattr(deploy_mod, "GraphClient", lambda token: object())
 
     class FakeOutlookDeployer:
         def __init__(self, graph, template_obj):
@@ -394,10 +399,10 @@ def test_main_outlook_writes_output_json(monkeypatch, tmp_path):
         def deploy(self, target_user: str, **kwargs):
             return {"delivery_mode": "send", "target_user": target_user, "inbox_message_id": "msg-1"}
 
-    monkeypatch.setattr(cli, "OutlookDeployer", FakeOutlookDeployer)
+    monkeypatch.setattr(deploy_mod, "OutlookDeployer", FakeOutlookDeployer)
 
     output = tmp_path / "record.json"
-    result = cli.main(["--output-json", str(output)])
+    result = main(["--output-json", str(output)])
 
     assert result == 0
     data = json.loads(output.read_text(encoding="utf-8"))
@@ -407,12 +412,13 @@ def test_main_outlook_writes_output_json(monkeypatch, tmp_path):
 
 
 def test_main_delegates_to_outlook_handler(monkeypatch):
-    monkeypatch.setattr(cli, "_print_banner", lambda *_: None)
-    monkeypatch.setattr(
-        cli,
-        "list_templates",
-        lambda canary_type: [{"name": "Outlook Template", "description": "desc", "path": "pkg://outlook/test.yaml"}],
-    )
+    monkeypatch.setattr(main_mod, "_print_banner", lambda *_: None)
+
+    def _fake_list(canary_type):
+        return [{"name": "Outlook Template", "description": "desc", "path": "pkg://outlook/test.yaml"}]
+
+    monkeypatch.setattr(main_mod, "list_templates", _fake_list)
+    monkeypatch.setattr(prompts_mod, "list_templates", _fake_list)
     template = OutlookTemplate(
         name="Outlook Template",
         description="desc",
@@ -423,7 +429,7 @@ def test_main_delegates_to_outlook_handler(monkeypatch):
         sender_email="it@contoso.com",
         variables=[],
     )
-    monkeypatch.setattr(cli, "load_template", lambda path: template)
+    monkeypatch.setattr(main_mod, "load_template", lambda path: template)
 
     observed: dict[str, object] = {}
 
@@ -434,14 +440,14 @@ def test_main_delegates_to_outlook_handler(monkeypatch):
         observed["cli_var_values"] = cli_var_values
         return 0
 
-    monkeypatch.setattr(cli, "_run_outlook_deploy", fake_outlook_handler)
+    monkeypatch.setattr(deploy_mod, "_run_outlook_deploy", fake_outlook_handler)
     monkeypatch.setattr(
-        cli,
+        deploy_mod,
         "_run_sharepoint_deploy",
         lambda *args, **kwargs: pytest.fail("SharePoint handler should not be called"),
     )
 
-    result = cli.main(
+    result = main(
         [
             "--non-interactive",
             "--canary-type",
@@ -463,14 +469,13 @@ def test_main_delegates_to_outlook_handler(monkeypatch):
 
 
 def test_main_delegates_to_sharepoint_handler(monkeypatch):
-    monkeypatch.setattr(cli, "_print_banner", lambda *_: None)
-    monkeypatch.setattr(
-        cli,
-        "list_templates",
-        lambda canary_type: [
-            {"name": "SharePoint Template", "description": "desc", "path": "pkg://sharepoint/test.yaml"}
-        ],
-    )
+    monkeypatch.setattr(main_mod, "_print_banner", lambda *_: None)
+
+    def _fake_list(canary_type):
+        return [{"name": "SharePoint Template", "description": "desc", "path": "pkg://sharepoint/test.yaml"}]
+
+    monkeypatch.setattr(main_mod, "list_templates", _fake_list)
+    monkeypatch.setattr(prompts_mod, "list_templates", _fake_list)
     template = SharePointTemplate(
         name="SharePoint Template",
         description="desc",
@@ -480,7 +485,7 @@ def test_main_delegates_to_sharepoint_handler(monkeypatch):
         content_text="Canary file: ${filename}",
         variables=[],
     )
-    monkeypatch.setattr(cli, "load_template", lambda path: template)
+    monkeypatch.setattr(main_mod, "load_template", lambda path: template)
 
     observed: dict[str, object] = {}
 
@@ -492,13 +497,13 @@ def test_main_delegates_to_sharepoint_handler(monkeypatch):
         return 0
 
     monkeypatch.setattr(
-        cli,
+        deploy_mod,
         "_run_outlook_deploy",
         lambda *args, **kwargs: pytest.fail("Outlook handler should not be called"),
     )
-    monkeypatch.setattr(cli, "_run_sharepoint_deploy", fake_sharepoint_handler)
+    monkeypatch.setattr(deploy_mod, "_run_sharepoint_deploy", fake_sharepoint_handler)
 
-    result = cli.main(
+    result = main(
         [
             "--non-interactive",
             "--canary-type",
@@ -523,9 +528,9 @@ def test_main_delegates_to_sharepoint_handler(monkeypatch):
 
 def test_main_onedrive_flow_deploys(monkeypatch):
     monkeypatch.setenv("ANGLERFISH_CLIENT_ID", "client-id")
-    monkeypatch.setattr(cli, "_prompt_auth_setup", lambda *args, **kwargs: "")
-    monkeypatch.setattr(cli, "_print_auth_success", lambda *args, **kwargs: None)
-    monkeypatch.setattr(cli, "authenticate", lambda *args, **kwargs: "token-123")
+    monkeypatch.setattr(deploy_mod, "_prompt_auth_setup", lambda *args, **kwargs: "")
+    monkeypatch.setattr(deploy_mod, "_print_auth_success", lambda *args, **kwargs: None)
+    monkeypatch.setattr(deploy_mod, "authenticate", lambda *args, **kwargs: "token-123")
 
     template = OneDriveTemplate(
         name="OneDrive Template",
@@ -536,11 +541,11 @@ def test_main_onedrive_flow_deploys(monkeypatch):
         variables=[],
     )
     monkeypatch.setattr(
-        cli,
+        main_mod,
         "list_templates",
         lambda canary_type: [{"name": "OneDrive Template", "description": "desc", "path": "pkg://onedrive/test.yaml"}],
     )
-    monkeypatch.setattr(cli, "load_template", lambda path: template)
+    monkeypatch.setattr(main_mod, "load_template", lambda path: template)
 
     select_answers = {
         "Select canary type:": "onedrive",
@@ -553,17 +558,17 @@ def test_main_onedrive_flow_deploys(monkeypatch):
     }
 
     monkeypatch.setattr(
-        cli.questionary,
+        deploy_mod.questionary,
         "select",
         lambda message, *args, **kwargs: _Prompt(select_answers[message]),
     )
     monkeypatch.setattr(
-        cli.questionary,
+        deploy_mod.questionary,
         "text",
         lambda message, *args, **kwargs: _Prompt(text_answers[message]),
     )
     monkeypatch.setattr(
-        cli.questionary,
+        deploy_mod.questionary,
         "confirm",
         lambda *args, **kwargs: _Prompt(True),
     )
@@ -584,10 +589,10 @@ def test_main_onedrive_flow_deploys(monkeypatch):
             observed["kwargs"] = kwargs
             return {"type": "onedrive", "uploaded_count": "1"}
 
-    monkeypatch.setattr(cli, "GraphClient", FakeGraphClient)
-    monkeypatch.setattr(cli, "OneDriveDeployer", FakeOneDriveDeployer)
+    monkeypatch.setattr(deploy_mod, "GraphClient", FakeGraphClient)
+    monkeypatch.setattr(deploy_mod, "OneDriveDeployer", FakeOneDriveDeployer)
 
-    result = cli.main([])
+    result = main([])
 
     assert result == 0
     assert observed["token"] == "token-123"
@@ -600,9 +605,9 @@ def test_main_onedrive_flow_deploys(monkeypatch):
 
 def test_main_onedrive_non_interactive_deploys(monkeypatch):
     monkeypatch.setenv("ANGLERFISH_CLIENT_ID", "client-id")
-    monkeypatch.setattr(cli, "_prompt_auth_setup", lambda *args, **kwargs: "")
-    monkeypatch.setattr(cli, "_print_auth_success", lambda *args, **kwargs: None)
-    monkeypatch.setattr(cli, "authenticate", lambda *args, **kwargs: "token-123")
+    monkeypatch.setattr(deploy_mod, "_prompt_auth_setup", lambda *args, **kwargs: "")
+    monkeypatch.setattr(deploy_mod, "_print_auth_success", lambda *args, **kwargs: None)
+    monkeypatch.setattr(deploy_mod, "authenticate", lambda *args, **kwargs: "token-123")
 
     template = OneDriveTemplate(
         name="OneDrive Template",
@@ -612,12 +617,13 @@ def test_main_onedrive_non_interactive_deploys(monkeypatch):
         content_text="Canary file: ${filename}",
         variables=[],
     )
-    monkeypatch.setattr(
-        cli,
-        "list_templates",
-        lambda canary_type: [{"name": "OneDrive Template", "description": "desc", "path": "pkg://onedrive/test.yaml"}],
-    )
-    monkeypatch.setattr(cli, "load_template", lambda path: template)
+
+    def _fake_list(canary_type):
+        return [{"name": "OneDrive Template", "description": "desc", "path": "pkg://onedrive/test.yaml"}]
+
+    monkeypatch.setattr(main_mod, "list_templates", _fake_list)
+    monkeypatch.setattr(prompts_mod, "list_templates", _fake_list)
+    monkeypatch.setattr(main_mod, "load_template", lambda path: template)
 
     observed: dict[str, object] = {}
 
@@ -634,10 +640,10 @@ def test_main_onedrive_non_interactive_deploys(monkeypatch):
             observed["kwargs"] = kwargs
             return {"type": "onedrive", "uploaded_count": "1"}
 
-    monkeypatch.setattr(cli, "GraphClient", FakeGraphClient)
-    monkeypatch.setattr(cli, "OneDriveDeployer", FakeOneDriveDeployer)
+    monkeypatch.setattr(deploy_mod, "GraphClient", FakeGraphClient)
+    monkeypatch.setattr(deploy_mod, "OneDriveDeployer", FakeOneDriveDeployer)
 
-    result = cli.main(
+    result = main(
         [
             "--non-interactive",
             "--canary-type",
@@ -662,7 +668,7 @@ def test_main_cleanup_onedrive_happy_path(monkeypatch, tmp_path):
     record_path.write_text("{}", encoding="utf-8")
 
     monkeypatch.setattr(
-        cli,
+        deploy_mod,
         "read_deployment_record",
         lambda path: {
             "type": "onedrive",
@@ -672,37 +678,38 @@ def test_main_cleanup_onedrive_happy_path(monkeypatch, tmp_path):
             "uploaded_files": "vpn_config.txt",
         },
     )
-    monkeypatch.setattr(cli, "_prompt_auth_setup", lambda *args, **kwargs: "")
-    monkeypatch.setattr(cli, "authenticate", lambda *args, **kwargs: "token-123")
-    monkeypatch.setattr(cli, "_print_auth_success", lambda *args, **kwargs: None)
+    monkeypatch.setattr(deploy_mod, "_prompt_auth_setup", lambda *args, **kwargs: "")
+    monkeypatch.setattr(deploy_mod, "authenticate", lambda *args, **kwargs: "token-123")
+    monkeypatch.setattr(deploy_mod, "_print_auth_success", lambda *args, **kwargs: None)
 
     class FakeGraphClient:
         def __init__(self, token):
             assert token == "token-123"
 
-    monkeypatch.setattr(cli, "GraphClient", FakeGraphClient)
-    monkeypatch.setattr(cli, "onedrive_remove_canary", lambda graph, record: {"removed": "true"})
+    monkeypatch.setattr(deploy_mod, "GraphClient", FakeGraphClient)
+    monkeypatch.setattr(deploy_mod, "onedrive_remove_canary", lambda graph, record: {"removed": "true"})
 
     status_updates: list[tuple[str, str]] = []
     monkeypatch.setattr(
-        cli,
+        deploy_mod,
         "update_deployment_status",
         lambda path, status: status_updates.append((str(path), status)),
     )
 
-    result = cli.main(["cleanup", "--non-interactive", str(record_path)])
+    result = main(["cleanup", "--non-interactive", str(record_path)])
 
     assert result == 0
     assert status_updates == [(str(record_path), "cleaned_up")]
 
 
 def test_main_delegates_to_onedrive_handler(monkeypatch):
-    monkeypatch.setattr(cli, "_print_banner", lambda *_: None)
-    monkeypatch.setattr(
-        cli,
-        "list_templates",
-        lambda canary_type: [{"name": "OneDrive Template", "description": "desc", "path": "pkg://onedrive/test.yaml"}],
-    )
+    monkeypatch.setattr(main_mod, "_print_banner", lambda *_: None)
+
+    def _fake_list(canary_type):
+        return [{"name": "OneDrive Template", "description": "desc", "path": "pkg://onedrive/test.yaml"}]
+
+    monkeypatch.setattr(main_mod, "list_templates", _fake_list)
+    monkeypatch.setattr(prompts_mod, "list_templates", _fake_list)
     template = OneDriveTemplate(
         name="OneDrive Template",
         description="desc",
@@ -711,7 +718,7 @@ def test_main_delegates_to_onedrive_handler(monkeypatch):
         content_text="Canary file: ${filename}",
         variables=[],
     )
-    monkeypatch.setattr(cli, "load_template", lambda path: template)
+    monkeypatch.setattr(main_mod, "load_template", lambda path: template)
 
     observed: dict[str, object] = {}
 
@@ -722,19 +729,19 @@ def test_main_delegates_to_onedrive_handler(monkeypatch):
         observed["cli_var_values"] = cli_var_values
         return 0
 
-    monkeypatch.setattr(cli, "_run_onedrive_deploy", fake_onedrive_handler)
+    monkeypatch.setattr(deploy_mod, "_run_onedrive_deploy", fake_onedrive_handler)
     monkeypatch.setattr(
-        cli,
+        deploy_mod,
         "_run_outlook_deploy",
         lambda *args, **kwargs: pytest.fail("Outlook handler should not be called"),
     )
     monkeypatch.setattr(
-        cli,
+        deploy_mod,
         "_run_sharepoint_deploy",
         lambda *args, **kwargs: pytest.fail("SharePoint handler should not be called"),
     )
 
-    result = cli.main(
+    result = main(
         [
             "--non-interactive",
             "--canary-type",
@@ -763,23 +770,23 @@ def test_main_delegates_to_onedrive_handler(monkeypatch):
 
 
 def test_parse_args_batch_subcommand():
-    args = cli._parse_args(["batch", "manifest.yaml"])
+    args = main_mod._parse_args(["batch", "manifest.yaml"])
     assert args.subcommand == "batch"
     assert args.manifest == "manifest.yaml"
 
 
 def test_parse_args_batch_with_output_dir():
-    args = cli._parse_args(["batch", "manifest.yaml", "--output-dir", "/tmp/records"])
+    args = main_mod._parse_args(["batch", "manifest.yaml", "--output-dir", "/tmp/records"])
     assert args.output_dir == "/tmp/records"
 
 
 def test_parse_args_batch_with_dry_run():
-    args = cli._parse_args(["batch", "manifest.yaml", "--dry-run"])
+    args = main_mod._parse_args(["batch", "manifest.yaml", "--dry-run"])
     assert args.dry_run is True
 
 
 def test_main_batch_missing_manifest_file():
-    assert cli.main(["batch", "/nonexistent/manifest.yaml"]) == 1
+    assert main(["batch", "/nonexistent/manifest.yaml"]) == 1
 
 
 def test_main_batch_happy_path(monkeypatch, tmp_path):
@@ -787,6 +794,8 @@ def test_main_batch_happy_path(monkeypatch, tmp_path):
     import yaml
 
     import anglerfish.batch as batch_mod
+
+    from anglerfish.cli import batch as cli_batch_mod
 
     manifest = tmp_path / "manifest.yaml"
     manifest.write_text(
@@ -805,12 +814,12 @@ def test_main_batch_happy_path(monkeypatch, tmp_path):
     )
     output_dir = tmp_path / "records"
 
-    monkeypatch.setattr(cli, "_prompt_auth_setup", lambda *args, **kwargs: "")
-    monkeypatch.setattr(cli, "_print_auth_success", lambda *args, **kwargs: None)
-    monkeypatch.setattr(cli, "authenticate", lambda *args, **kwargs: "token-123")
+    monkeypatch.setattr(cli_batch_mod, "_prompt_auth_setup", lambda *args, **kwargs: "")
+    monkeypatch.setattr(cli_batch_mod, "_print_auth_success", lambda *args, **kwargs: None)
+    monkeypatch.setattr(cli_batch_mod, "authenticate", lambda *args, **kwargs: "token-123")
 
     fake_graph = type("FakeGraph", (), {})()
-    monkeypatch.setattr(cli, "GraphClient", lambda token: fake_graph)
+    monkeypatch.setattr(cli_batch_mod, "GraphClient", lambda token: fake_graph)
 
     template = OutlookTemplate(
         name="Outlook Template",
@@ -836,7 +845,7 @@ def test_main_batch_happy_path(monkeypatch, tmp_path):
 
     monkeypatch.setattr(batch_mod, "OutlookDeployer", FakeOutlookDeployer)
 
-    result = cli.main(["batch", str(manifest), "--output-dir", str(output_dir)])
+    result = main(["batch", str(manifest), "--output-dir", str(output_dir)])
     assert result == 0
 
     records = list(output_dir.glob("*.json"))
@@ -849,7 +858,7 @@ def test_main_batch_happy_path(monkeypatch, tmp_path):
 
 
 def test_parse_args_verify_subcommand():
-    args = cli._parse_args(["verify", "--demo"])
+    args = main_mod._parse_args(["verify", "--demo"])
     assert args.subcommand == "verify"
     assert args.demo is True
 
@@ -875,13 +884,13 @@ def test_verify_demo_exits_one():
 
 
 def test_parse_args_dashboard_subcommand():
-    args = cli._parse_args(["dashboard", "--demo"])
+    args = main_mod._parse_args(["dashboard", "--demo"])
     assert args.subcommand == "dashboard"
     assert args.demo is True
 
 
 def test_parse_args_dashboard_with_intervals():
-    args = cli._parse_args(
+    args = main_mod._parse_args(
         [
             "dashboard",
             "--poll-interval",
@@ -910,10 +919,10 @@ def test_dashboard_demo_runs_briefly(monkeypatch):
             ran = True
             self.exit()
 
-    monkeypatch.setattr("anglerfish.cli.AnglerDashboard", FakeApp, raising=False)
+    monkeypatch.setattr("anglerfish.cli.dashboard.AnglerDashboard", FakeApp, raising=False)
 
     # We can't easily test the full Textual run loop in a CLI smoke test,
     # so just verify the parser accepts the args.
-    args = cli._parse_args(["dashboard", "--demo"])
+    args = main_mod._parse_args(["dashboard", "--demo"])
     assert args.subcommand == "dashboard"
     assert args.demo is True
