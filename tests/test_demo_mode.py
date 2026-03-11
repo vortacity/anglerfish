@@ -4,7 +4,10 @@ import json
 import tempfile
 from pathlib import Path
 
-from anglerfish import cli
+from anglerfish.cli import main
+from anglerfish.cli import deploy as deploy_mod
+import anglerfish.cli._main as main_mod
+import anglerfish.cli.prompts as prompts_mod
 from anglerfish.models import OneDriveTemplate, OutlookTemplate, SharePointTemplate
 
 
@@ -24,7 +27,7 @@ EXAMPLES_DIR = Path(__file__).resolve().parents[1] / "examples" / "demo-records"
 
 def test_demo_list_shows_fixture_records():
     """--demo list --records-dir examples/demo-records/ loads fixture JSON files."""
-    result = cli.main(["list", "--records-dir", str(EXAMPLES_DIR)])
+    result = main(["list", "--records-dir", str(EXAMPLES_DIR)])
     assert result == 0
 
 
@@ -53,21 +56,21 @@ def test_demo_list_fixture_records_are_valid():
 def test_demo_cleanup_skips_auth_and_api_calls():
     """--demo cleanup should print simulated output without auth or Graph calls."""
     record_path = EXAMPLES_DIR / "outlook-draft-record.json"
-    result = cli.main(["--demo", "cleanup", "--non-interactive", str(record_path)])
+    result = main(["--demo", "cleanup", "--non-interactive", str(record_path)])
     assert result == 0
 
 
 def test_demo_cleanup_works_for_sharepoint():
     """--demo cleanup with a SharePoint record."""
     record_path = EXAMPLES_DIR / "sharepoint-upload-record.json"
-    result = cli.main(["--demo", "cleanup", "--non-interactive", str(record_path)])
+    result = main(["--demo", "cleanup", "--non-interactive", str(record_path)])
     assert result == 0
 
 
 def test_demo_cleanup_works_for_onedrive():
     """--demo cleanup with a OneDrive record."""
     record_path = EXAMPLES_DIR / "onedrive-upload-record.json"
-    result = cli.main(["--demo", "cleanup", "--non-interactive", str(record_path)])
+    result = main(["--demo", "cleanup", "--non-interactive", str(record_path)])
     assert result == 0
 
 
@@ -76,7 +79,7 @@ def test_demo_cleanup_rejects_unknown_type():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         json.dump({"timestamp": "2026-01-01T00:00:00Z", "canary_type": "unknown"}, f)
         path = f.name
-    result = cli.main(["--demo", "cleanup", "--non-interactive", path])
+    result = main(["--demo", "cleanup", "--non-interactive", path])
     assert result == 1
 
 
@@ -95,14 +98,15 @@ def test_demo_deploy_outlook_skips_auth(monkeypatch):
         sender_email="it@contoso.com",
         variables=[],
     )
-    monkeypatch.setattr(
-        cli,
-        "list_templates",
-        lambda canary_type: [{"name": "Fake Password Reset", "description": "desc", "path": "pkg://outlook/test.yaml"}],
-    )
-    monkeypatch.setattr(cli, "load_template", lambda path: template)
 
-    result = cli.main(
+    def _fake_list(canary_type):
+        return [{"name": "Fake Password Reset", "description": "desc", "path": "pkg://outlook/test.yaml"}]
+
+    monkeypatch.setattr(main_mod, "list_templates", _fake_list)
+    monkeypatch.setattr(prompts_mod, "list_templates", _fake_list)
+    monkeypatch.setattr(main_mod, "load_template", lambda path: template)
+
+    result = main(
         [
             "--demo",
             "--non-interactive",
@@ -130,16 +134,15 @@ def test_demo_deploy_sharepoint_skips_auth(monkeypatch):
         content_text="Confidential data",
         variables=[],
     )
-    monkeypatch.setattr(
-        cli,
-        "list_templates",
-        lambda canary_type: [
-            {"name": "Employee Salary Bands", "description": "desc", "path": "pkg://sharepoint/test.yaml"}
-        ],
-    )
-    monkeypatch.setattr(cli, "load_template", lambda path: template)
 
-    result = cli.main(
+    def _fake_list(canary_type):
+        return [{"name": "Employee Salary Bands", "description": "desc", "path": "pkg://sharepoint/test.yaml"}]
+
+    monkeypatch.setattr(main_mod, "list_templates", _fake_list)
+    monkeypatch.setattr(prompts_mod, "list_templates", _fake_list)
+    monkeypatch.setattr(main_mod, "load_template", lambda path: template)
+
+    result = main(
         [
             "--demo",
             "--non-interactive",
@@ -168,16 +171,15 @@ def test_demo_deploy_onedrive_skips_auth(monkeypatch):
         content_text="Canary data",
         variables=[],
     )
-    monkeypatch.setattr(
-        cli,
-        "list_templates",
-        lambda canary_type: [
-            {"name": "VPN Credentials Backup", "description": "desc", "path": "pkg://onedrive/test.yaml"}
-        ],
-    )
-    monkeypatch.setattr(cli, "load_template", lambda path: template)
 
-    result = cli.main(
+    def _fake_list(canary_type):
+        return [{"name": "VPN Credentials Backup", "description": "desc", "path": "pkg://onedrive/test.yaml"}]
+
+    monkeypatch.setattr(main_mod, "list_templates", _fake_list)
+    monkeypatch.setattr(prompts_mod, "list_templates", _fake_list)
+    monkeypatch.setattr(main_mod, "load_template", lambda path: template)
+
+    result = main(
         [
             "--demo",
             "--non-interactive",
@@ -208,14 +210,15 @@ def test_demo_deploy_interactive_selects_template(monkeypatch):
         sender_email="finance@contoso.com",
         variables=[],
     )
-    monkeypatch.setattr(
-        cli,
-        "list_templates",
-        lambda canary_type: [{"name": "Fake Wire Transfer", "description": "desc", "path": "pkg://outlook/test.yaml"}],
-    )
-    monkeypatch.setattr(cli, "load_template", lambda path: template)
 
-    result = cli.main(
+    def _fake_list(canary_type):
+        return [{"name": "Fake Wire Transfer", "description": "desc", "path": "pkg://outlook/test.yaml"}]
+
+    monkeypatch.setattr(main_mod, "list_templates", _fake_list)
+    monkeypatch.setattr(prompts_mod, "list_templates", _fake_list)
+    monkeypatch.setattr(main_mod, "load_template", lambda path: template)
+
+    result = main(
         [
             "--demo",
             "--canary-type",
@@ -237,8 +240,8 @@ def test_demo_flag_never_calls_authenticate(monkeypatch):
     def fail_auth(*args, **kwargs):
         raise AssertionError("authenticate should not be called in demo mode")
 
-    monkeypatch.setattr(cli, "authenticate", fail_auth)
-    monkeypatch.setattr(cli, "_prompt_auth_setup", fail_auth)
+    monkeypatch.setattr(deploy_mod, "authenticate", fail_auth)
+    monkeypatch.setattr(deploy_mod, "_prompt_auth_setup", fail_auth)
 
     template = OutlookTemplate(
         name="Test",
@@ -250,14 +253,15 @@ def test_demo_flag_never_calls_authenticate(monkeypatch):
         sender_email="s@example.com",
         variables=[],
     )
-    monkeypatch.setattr(
-        cli,
-        "list_templates",
-        lambda canary_type: [{"name": "Test", "description": "desc", "path": "pkg://outlook/t.yaml"}],
-    )
-    monkeypatch.setattr(cli, "load_template", lambda path: template)
 
-    result = cli.main(
+    def _fake_list(canary_type):
+        return [{"name": "Test", "description": "desc", "path": "pkg://outlook/t.yaml"}]
+
+    monkeypatch.setattr(main_mod, "list_templates", _fake_list)
+    monkeypatch.setattr(prompts_mod, "list_templates", _fake_list)
+    monkeypatch.setattr(main_mod, "load_template", lambda path: template)
+
+    result = main(
         [
             "--demo",
             "--non-interactive",
