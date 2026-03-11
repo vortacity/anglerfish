@@ -16,7 +16,7 @@ echo "Creating virtual environment at ${VENV_DIR} ..."
 python3 -m venv "${VENV_DIR}"
 
 echo "Installing Anglerfish and dev dependencies ..."
-"${VENV_DIR}/bin/python" -m pip install --upgrade pip setuptools
+"${VENV_DIR}/bin/python" -m pip install --upgrade pip "setuptools>=78.1.1"
 "${VENV_DIR}/bin/pip" install -e ".[dev]"
 
 echo
