@@ -197,7 +197,7 @@ def test_demo_deploy_onedrive_skips_auth(monkeypatch):
 
 
 def test_demo_deploy_interactive_selects_template(monkeypatch):
-    """--demo in interactive mode runs template selection then prints simulated output."""
+    """--demo auto-enables non-interactive when stdin is not a TTY."""
     template = OutlookTemplate(
         name="Fake Wire Transfer",
         description="desc",
@@ -215,15 +215,8 @@ def test_demo_deploy_interactive_selects_template(monkeypatch):
     )
     monkeypatch.setattr(cli, "load_template", lambda path: template)
 
-    monkeypatch.setattr(
-        cli.questionary,
-        "select",
-        lambda message, *args, **kwargs: _Prompt(
-            "outlook" if "canary type" in message.lower() else "pkg://outlook/test.yaml"
-        ),
-    )
-
-    result = cli.main(["--demo"])
+    result = cli.main(["--demo", "--canary-type", "outlook", "--template", "Fake Wire Transfer",
+                        "--target", "test@contoso.com", "--delivery-mode", "draft"])
     assert result == 0
 
 

@@ -101,6 +101,8 @@ For a full Azure AD app registration walkthrough, see [Demo Tenant Setup Guide](
 
 ## Installation
 
+> **Note:** Anglerfish is installed from source. PyPI publishing is planned for a future release.
+
 ### Prerequisites
 
 - Python 3.10+
@@ -393,6 +395,8 @@ Expected layout:
 See [CONTRIBUTING.md](CONTRIBUTING.md) for template schema documentation.
 
 ## CLI Reference
+
+Each subcommand has its own `--help`: `anglerfish monitor --help`, `anglerfish batch --help`, etc.
 
 ### Global Flags (deploy command)
 

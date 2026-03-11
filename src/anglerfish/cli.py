@@ -1887,7 +1887,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     _print_banner(console)
 
+    # In demo mode, auto-enable non-interactive when stdin is not a TTY
+    # (e.g. CI, subprocess, Docker) to avoid questionary crashes.
     non_interactive = args.non_interactive
+    if not non_interactive and args.demo and not sys.stdin.isatty():
+        non_interactive = True
     total_steps = 4
 
     try:

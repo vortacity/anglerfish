@@ -132,8 +132,8 @@ class DemoDataProvider:
         return results
 
     def generate_alert(self) -> CanaryAlert:
-        rec_path, rec = random.choice(self._records)
-        attacker, ip = random.choice(_DEMO_ATTACKERS)
+        rec_path, rec = random.choice(self._records)  # nosec B311 — demo data only
+        attacker, ip = random.choice(_DEMO_ATTACKERS)  # nosec B311
         canary_type = rec["canary_type"]
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         artifact = rec.get("internet_message_id") or rec.get("item_id", "")
@@ -151,10 +151,10 @@ class DemoDataProvider:
 
     def cycle_verify_status(self) -> None:
         """Rotate one random status to simulate changes."""
-        idx = random.randint(0, len(self._verify_statuses) - 1)
+        idx = random.randint(0, len(self._verify_statuses) - 1)  # nosec B311 — demo data only
         current = self._verify_statuses[idx]
         choices = [s for s in VerifyStatus if s != current]
-        self._verify_statuses[idx] = random.choice(choices)
+        self._verify_statuses[idx] = random.choice(choices)  # nosec B311
 
 
 # ------------------------------------------------------------------
@@ -248,7 +248,7 @@ class AnglerDashboard(App):
             self._init_live_mode()
 
     def _populate_demo_canaries(self) -> None:
-        assert self._demo_provider is not None
+        assert self._demo_provider is not None  # nosec B101 — demo-only guard
         table = self.query_one("#canary-table", DataTable)
         for i, result in enumerate(self._demo_provider.verify_results(), start=1):
             style = _STATUS_STYLES.get(result.status, "white")
@@ -261,17 +261,17 @@ class AnglerDashboard(App):
             )
 
     def _demo_poll_tick(self) -> None:
-        assert self._demo_provider is not None
+        assert self._demo_provider is not None  # nosec B101 — demo-only guard
         alert = self._demo_provider.generate_alert()
         self._append_alert(alert)
 
     def _demo_verify_tick(self) -> None:
-        assert self._demo_provider is not None
+        assert self._demo_provider is not None  # nosec B101 — demo-only guard
         self._demo_provider.cycle_verify_status()
         self._refresh_canary_table_demo()
 
     def _refresh_canary_table_demo(self) -> None:
-        assert self._demo_provider is not None
+        assert self._demo_provider is not None  # nosec B101 — demo-only guard
         table = self.query_one("#canary-table", DataTable)
         table.clear()
         for i, result in enumerate(self._demo_provider.verify_results(), start=1):
@@ -459,7 +459,7 @@ class AnglerDashboard(App):
                     continue
                 try:
                     events = self._audit_client.fetch_content(content_uri)
-                except Exception:
+                except Exception:  # nosec B112 — skip individual blob failures to keep polling
                     continue
 
                 for event in events:

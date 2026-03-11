@@ -205,7 +205,7 @@ def load_records(records_dir: str | Path) -> list[tuple[str, dict]]:
     for json_file in sorted(records_path.glob("*.json")):
         try:
             rec = read_deployment_record(json_file)
-        except Exception:
+        except Exception:  # nosec B112 — skip malformed records, log elsewhere
             continue
         status = rec.get("status", "active")
         if status != "active":
