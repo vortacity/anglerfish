@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "anglerfish"
-version = "0.2.0"
+version = "1.0.0"
 description = "Deploy M365 canary tokens and detect unauthorized access via audit logs — no callbacks, no beacons"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -13,7 +13,7 @@ authors = [
   { name = "Anglerfish Contributors" }
 ]
 classifiers = [
-  "Development Status :: 4 - Beta",
+  "Development Status :: 5 - Production/Stable",
   "Environment :: Console",
   "Intended Audience :: Information Technology",
   "License :: OSI Approved :: MIT License",

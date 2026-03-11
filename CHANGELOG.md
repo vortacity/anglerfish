@@ -9,14 +9,37 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+_Nothing yet._
+
+---
+
+## [1.0.0] — 2026-03-11
+
+First public release, presented at Black Hat Arsenal.
+
 ### Added
 
-- **Slack alerting** — `--slack-webhook-url` flag on `monitor` sends Block Kit
-  formatted alerts to a Slack incoming webhook when canary access events are detected.
+- **`batch` subcommand** — deploy multiple canaries from a YAML manifest with
+  a single command. Authenticates once, deploys all entries sequentially, writes
+  one deployment record per canary. Supports `--dry-run` and `--demo` modes.
+
+- **`dashboard` subcommand** — full-screen Textual TUI showing canary status,
+  live alert feed, and summary statistics. Supports `--demo` mode for offline
+  demos, configurable poll and verify intervals, and alert log history.
 
 - **`verify` subcommand** — check that deployed canary artifacts still exist via
   Graph API health checks. Supports single records, directory scans, and `--demo`
   mode. Exit code 1 if any canary is gone or errored.
+
+- **Slack alerting** — `--slack-webhook-url` flag on `monitor` sends Block Kit
+  formatted alerts to a Slack incoming webhook when canary access events are
+  detected.
+
+- **`--demo` mode** — run any subcommand offline with simulated data. No
+  authentication or Graph API calls required. Useful for conference demos,
+  local testing, and CI validation.
+
+- **ASCII art banner** — slant-style ASCII art header displayed on CLI launch.
 
 - **Project logo** — added to README header.
 
@@ -39,8 +62,7 @@ This project uses [Semantic Versioning](https://semver.org/).
   Word documents or Excel spreadsheets in addition to plain text. File format is
   determined by the filename extension. Four new templates added: Board Meeting
   Minutes (.docx), Compensation Analysis (.xlsx), Performance Review Notes (.docx),
-  and Investment Portfolio (.xlsx). Shared rendering logic in
-  `src/anglerfish/deployers/content.py`.
+  and Investment Portfolio (.xlsx).
 
 - **OneDrive canary deployment** — upload deceptive files to personal OneDrive for
   Business storage to detect unauthorized file browsing. Uses
