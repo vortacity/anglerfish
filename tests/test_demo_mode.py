@@ -215,8 +215,19 @@ def test_demo_deploy_interactive_selects_template(monkeypatch):
     )
     monkeypatch.setattr(cli, "load_template", lambda path: template)
 
-    result = cli.main(["--demo", "--canary-type", "outlook", "--template", "Fake Wire Transfer",
-                        "--target", "test@contoso.com", "--delivery-mode", "draft"])
+    result = cli.main(
+        [
+            "--demo",
+            "--canary-type",
+            "outlook",
+            "--template",
+            "Fake Wire Transfer",
+            "--target",
+            "test@contoso.com",
+            "--delivery-mode",
+            "draft",
+        ]
+    )
     assert result == 0
 
 
