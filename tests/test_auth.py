@@ -68,6 +68,14 @@ class FakePublicAppError(FakePublicAppSuccess):
         return {"error": "authorization_pending", "error_description": "waiting for user sign-in"}
 
 
+class FakeConsole:
+    def __init__(self):
+        self.messages: list[str] = []
+
+    def print(self, message):
+        self.messages.append(str(message))
+
+
 def test_authenticate_application_requires_client_id(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(auth, "CLIENT_ID", "")
     monkeypatch.setattr(auth, "TENANT_ID", "tenant-id")
@@ -168,6 +176,20 @@ def test_authenticate_delegated_success(monkeypatch: pytest.MonkeyPatch):
     assert "openid" not in FakePublicAppSuccess.last_scopes
     assert "profile" not in FakePublicAppSuccess.last_scopes
     assert "offline_access" not in FakePublicAppSuccess.last_scopes
+
+
+def test_authenticate_delegated_prints_device_flow_message(monkeypatch: pytest.MonkeyPatch):
+    fake_console = FakeConsole()
+    monkeypatch.setattr(auth, "CLIENT_ID", "client-id")
+    monkeypatch.setattr(auth, "TENANT_ID", "tenant-id")
+    monkeypatch.setattr(auth, "GRAPH_DELEGATED_SCOPES", "")
+    monkeypatch.setattr(auth, "console", fake_console)
+    monkeypatch.setattr(auth.msal, "PublicClientApplication", FakePublicAppSuccess)
+
+    token = auth.authenticate(auth_mode="delegated")
+
+    assert token == "delegated-token-123"
+    assert fake_console.messages == ["To sign in, use a web browser to open https://microsoft.com/devicelogin."]
 
 
 def test_authenticate_delegated_uses_configured_scopes(monkeypatch: pytest.MonkeyPatch):

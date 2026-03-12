@@ -1,0 +1,11 @@
+{
+  "CreationTime": "2026-03-01T14:37:42",
+  "Operation": "MailItemsAccessed",
+  "ResultStatus": "Succeeded",
+  "UserId": "attacker@contoso.com",
+  "ClientIPAddress": "203.0.113.42",
+  "InternetMessageId": "<canary-fake-password-reset-001@contoso.com>",
+  "ClientAppId": "00000000-1111-2222-3333-444444444444",
+  "Workload": "Exchange",
+  "RecordType": 50
+}

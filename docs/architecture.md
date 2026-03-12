@@ -12,7 +12,7 @@ Current release scope:
 ## Layers
 
 ```text
-CLI (cli.py)
+CLI package (cli/_main.py, cli/deploy.py, cli/monitor.py, cli/batch.py, cli/dashboard.py)
   -> Auth (auth.py)
   -> Graph client (graph.py)
   -> Deployer (deployers/outlook.py, deployers/sharepoint.py, deployers/onedrive.py)

@@ -170,7 +170,8 @@ anglerfish --canary-type outlook --template "Your Template Name" \
 1. Create `src/anglerfish/deployers/<type>.py` implementing `BaseDeployer`.
 2. Add a corresponding `dataclass` model to `src/anglerfish/models.py`.
 3. Register the new type in `src/anglerfish/templates.py` (`_TEMPLATE_SCHEMA`).
-4. Wire up the new type in `src/anglerfish/cli.py` (template selection,
+4. Wire up the new type in the `src/anglerfish/cli/` package
+   (`_main.py`, `deploy.py`, and `prompts.py` as needed for template selection,
    auth mode, target prompts, and deployer instantiation).
 5. Add deployer unit tests in `tests/test_<type>_deployer.py`.
 6. Add at least one bundled template in `src/anglerfish/templates/<type>/`.

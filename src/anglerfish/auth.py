@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Sequence
 
 import msal
+from rich.console import Console
 
 from .config import (
     APP_CREDENTIAL_MODE,
@@ -28,6 +29,7 @@ from .config import (
 from .exceptions import AuthenticationError
 
 logger = logging.getLogger(__name__)
+console = Console(stderr=True)
 
 _DEFAULT_DELEGATED_SCOPES = (
     "User.Read",
@@ -90,7 +92,7 @@ def _authenticate_delegated(delegated_scopes: Sequence[str] | None = None) -> st
 
     message = str(flow.get("message", "")).strip()
     if message:
-        print(message)
+        console.print(message)
 
     result = app.acquire_token_by_device_flow(flow)
     if not isinstance(result, dict) or "access_token" not in result:

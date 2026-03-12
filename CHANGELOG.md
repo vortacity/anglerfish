@@ -15,7 +15,7 @@ _Nothing yet._
 
 ## [1.0.0] — 2026-03-11
 
-First public release, presented at Black Hat Arsenal.
+First public release, prepared for Black Hat Arsenal submission.
 
 ### Added
 

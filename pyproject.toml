@@ -12,6 +12,9 @@ license = { text = "MIT" }
 authors = [
   { name = "Anglerfish Contributors" }
 ]
+maintainers = [
+  { name = "vortacity" }
+]
 classifiers = [
   "Development Status :: 5 - Production/Stable",
   "Environment :: Console",
@@ -39,6 +42,7 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/vortacity/anglerfish"
 Repository = "https://github.com/vortacity/anglerfish"
+Maintainer = "https://github.com/vortacity"
 Issues = "https://github.com/vortacity/anglerfish/issues"
 Changelog = "https://github.com/vortacity/anglerfish/blob/main/CHANGELOG.md"
 

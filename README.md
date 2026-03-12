@@ -23,6 +23,16 @@ Anglerfish is a Python CLI that provisions deceptive artifacts (Outlook emails, 
 
 ![Monitor alert](docs/images/monitor-alert.gif)
 
+## Arsenal Materials
+
+- [Arsenal submission abstract](docs/arsenal-abstract.md)
+- [Arsenal demo runbook](docs/demo-runbook.md)
+- [Arsenal booth handout](docs/arsenal-handout.md)
+
+## Maintainer
+
+Maintained by [`@vortacity`](https://github.com/vortacity). Open usage bugs and feature requests in [GitHub Issues](https://github.com/vortacity/anglerfish/issues). Report sensitive problems through the [private security advisory form](https://github.com/vortacity/anglerfish/security/advisories/new).
+
 > [!WARNING]
 > **This tool is intended for security research, authorized testing, and defensive canary deployments only.**
 > Always validate and test thoroughly in a non-production environment before deploying to any production tenant. Deploying untested canaries in production can result in unintended access events, alert fatigue, and artifacts that are difficult to clean up. See the [Legal Authorization Requirement](#legal-authorization-requirement) section before proceeding.
@@ -38,6 +48,20 @@ Anglerfish is a Python CLI that provisions deceptive artifacts (Outlook emails, 
 No external infrastructure required.
 
 Most canary techniques rely on outbound callbacks — HTTP beacons, DNS lookups, or URL tokens — that require operator-controlled external infrastructure. Anglerfish takes a different approach: canaries are standard M365 objects (mail drafts, SharePoint files, OneDrive files), and detection relies entirely on Microsoft's own Unified Audit Log pipeline. There is no external endpoint to maintain, no firewall exception to request, and no phoning home. The signal is already in your SIEM.
+
+## Why This Is Different
+
+Anglerfish is not trying to replace every callback-based canary workflow. It is built for defenders who want M365-native canaries that fit directly into the Microsoft audit and SIEM pipeline they already operate.
+
+| Capability | Anglerfish | Callback-based canaries (for example Canarytokens / Thinkst-style tokens) |
+|---|---|---|
+| Detection path | Microsoft 365 Unified Audit Log events correlated to deployment records | Outbound HTTP, DNS, or URL callback to operator-controlled infrastructure |
+| Infrastructure required | Microsoft 365 tenant, Graph API app registration, existing SIEM or hunt workflow | External listener, hosted token service, or operator-managed callback endpoint |
+| Target surface | Native M365 artifacts: Outlook drafts, SharePoint files, OneDrive files | Broad internet-visible lures such as documents, links, web bugs, URLs, or files |
+| Operational fit | Best when defenders already investigate in UAL, Sentinel, or another M365-aware SIEM | Best when teams want immediate callback visibility across a wider set of lure types |
+| Firewall / egress dependency | No outbound beacon required from the canary itself | Detection depends on the callback reaching the operator-controlled endpoint |
+
+Many teams can use both approaches together. The point of Anglerfish is that it covers the Microsoft 365 access path without adding another external detection service to operate.
 
 ## What Detection Looks Like
 
@@ -80,7 +104,8 @@ git clone https://github.com/vortacity/anglerfish.git
 cd anglerfish
 pip install -e .
 
-# 2. Configure — copy .env.example and fill in your app registration
+# 2. Configure — export variables directly, or copy .env.example to .env,
+#    edit it, then load it yourself with: set -a; source .env; set +a
 export ANGLERFISH_TENANT_ID="..."
 export ANGLERFISH_CLIENT_ID="..."
 export ANGLERFISH_CLIENT_SECRET="..."
@@ -100,8 +125,6 @@ For a full Azure AD app registration walkthrough, see [Demo Tenant Setup Guide](
 | OneDrive | File upload to personal OneDrive for Business | Application | `FileAccessed`, `FileDownloaded` |
 
 ## Installation
-
-> **Note:** Anglerfish is installed from source. PyPI publishing is planned for a future release.
 
 ### Prerequisites
 
@@ -141,6 +164,8 @@ See [Demo Tenant Setup Guide](docs/demo-tenant-setup.md) for step-by-step instru
 
 ### Environment Variables
 
+Anglerfish reads configuration from the process environment. It does not auto-load a `.env` file, so either export these variables directly or source a file such as `.env` yourself before running the CLI.
+
 ```bash
 export ANGLERFISH_CLIENT_ID="<your-application-client-id>"
 export ANGLERFISH_TENANT_ID="<your-tenant-id-guid>"
@@ -148,7 +173,7 @@ export ANGLERFISH_APP_CREDENTIAL_MODE="secret"
 export ANGLERFISH_CLIENT_SECRET="<your-client-secret>"
 ```
 
-Certificate mode is also supported (`ANGLERFISH_APP_CREDENTIAL_MODE=certificate`). See `.env.example` for all options.
+Certificate mode is also supported (`ANGLERFISH_APP_CREDENTIAL_MODE=certificate`). See `.env.example` for a full example file you can adapt and source manually.
 
 ### Verify Installation
 
@@ -495,9 +520,17 @@ See [threat-model.md](docs/threat-model.md) for the full deployment checklist an
 
 ## Validation
 
+Run validation from a fully provisioned environment:
+
+- End-user install: `pip install -e .`
+- Contributor install: `pip install -e ".[dev]"`
+
 ```bash
 .venv/bin/python -m pytest -q
 .venv/bin/ruff check src tests
+.venv/bin/ruff format --check src tests
+.venv/bin/bandit -r src -ll
+.venv/bin/pip-audit  # requires network access
 ```
 
 ## License
