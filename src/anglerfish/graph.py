@@ -183,6 +183,11 @@ def _parse_json_response(response: Response) -> dict[str, Any]:
     try:
         payload = response.json()
     except ValueError:
+        logger.warning(
+            "Non-empty %d response could not be parsed as JSON (content-length: %s)",
+            response.status_code,
+            response.headers.get("Content-Length", "unknown"),
+        )
         return {}
 
     if isinstance(payload, dict):

@@ -23,8 +23,8 @@ from ..exceptions import (
     MonitorError,
     TemplateError,
 )
-from ..templates import list_templates, load_template
-from .prompts import _find_template_by_name, _parse_var_args, _render_deploy_template
+from ..templates import find_template_by_name as _find_template_by_name, list_templates, load_template
+from .prompts import _parse_var_args, _render_deploy_template
 
 _ASCII_BANNER = (
     "    ___                __          _____      __  \n"

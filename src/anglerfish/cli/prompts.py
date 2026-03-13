@@ -18,7 +18,7 @@ from ..exceptions import (
     TemplateError,
 )
 from ..models import OneDriveTemplate, OutlookTemplate, SharePointTemplate
-from ..templates import list_templates, render_template
+from ..templates import render_template
 
 _EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -112,21 +112,6 @@ def _validate_variable_value(value: str) -> bool | str:
     return True
 
 
-def _find_template_by_name(canary_type: str, template_name: str) -> str:
-    """Find a template path by name (case-insensitive). Raises TemplateError on failure."""
-    available = list_templates(canary_type)
-    if not available:
-        raise TemplateError(f"No {canary_type} templates found.")
-    name_lower = template_name.casefold()
-    matches = [t for t in available if t["name"].casefold() == name_lower]
-    if not matches:
-        names = ", ".join(repr(t["name"]) for t in available)
-        raise TemplateError(f"Template {template_name!r} not found for {canary_type}. Available: {names}")
-    if len(matches) > 1:
-        raise TemplateError(f"Multiple templates named {template_name!r} found for {canary_type}.")
-    return matches[0]["path"]
-
-
 def _parse_var_args(var_args: list[str]) -> dict[str, str]:
     """Parse a list of 'KEY=VALUE' strings into a dict."""
     result: dict[str, str] = {}
@@ -137,6 +122,8 @@ def _parse_var_args(var_args: list[str]) -> dict[str, str]:
         key = key.strip()
         if not key:
             raise TemplateError(f"Invalid --var argument {arg!r}. Key cannot be empty.")
+        if len(value) > 500:
+            raise TemplateError(f"Variable value for {key!r} exceeds 500 characters.")
         result[key] = value
     return result
 

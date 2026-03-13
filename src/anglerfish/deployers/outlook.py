@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timedelta, timezone
-from urllib.parse import quote
-
 from ..exceptions import DeploymentError, GraphApiError
 from ..models import OutlookTemplate
 from .base import BaseDeployer
+from ._paths import path_segment as _path_segment
 
 _VERIFY_ATTEMPTS = 3
 _SEND_VERIFY_ATTEMPTS = 5
@@ -198,10 +197,6 @@ class OutlookDeployer(BaseDeployer):
                 time.sleep(attempt + 1)
 
         raise DeploymentError("Outlook verification failed: sent message was not found in the Inbox.")
-
-
-def _path_segment(value: str) -> str:
-    return quote(value, safe="")
 
 
 def remove_canary(graph, record: dict[str, str]) -> dict[str, str]:

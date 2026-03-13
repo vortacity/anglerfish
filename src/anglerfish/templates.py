@@ -64,6 +64,21 @@ def list_templates(canary_type: str) -> list[dict[str, str]]:
     return _list_packaged_templates(canary_type)
 
 
+def find_template_by_name(canary_type: str, template_name: str) -> str:
+    """Find a template path by name (case-insensitive). Raises TemplateError on failure."""
+    available = list_templates(canary_type)
+    if not available:
+        raise TemplateError(f"No {canary_type} templates found.")
+    name_lower = template_name.casefold()
+    matches = [t for t in available if t["name"].casefold() == name_lower]
+    if not matches:
+        names = ", ".join(repr(t["name"]) for t in available)
+        raise TemplateError(f"Template {template_name!r} not found for {canary_type}. Available: {names}")
+    if len(matches) > 1:
+        raise TemplateError(f"Multiple templates named {template_name!r} found for {canary_type}.")
+    return matches[0]["path"]
+
+
 def load_template(path: str) -> OutlookTemplate | SharePointTemplate | OneDriveTemplate:
     """Load and validate a template from package or filesystem."""
     data = _load_template_data(path)

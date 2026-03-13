@@ -291,9 +291,9 @@ class TestNormalizeFolderPathTraversalProtection:
     """_normalize_folder_path() must reject path traversal attempts."""
 
     def _call(self, path: str) -> str:
-        from anglerfish.deployers.onedrive import _normalize_folder_path
+        from anglerfish.deployers._paths import normalize_folder_path
 
-        return _normalize_folder_path(path)
+        return normalize_folder_path(path)
 
     def test_rejects_dotdot_segment(self):
         with pytest.raises(DeploymentError, match="path traversal"):

@@ -12,10 +12,10 @@ import yaml
 from .deployers.onedrive import OneDriveDeployer
 from .deployers.outlook import OutlookDeployer
 from .deployers.sharepoint import SharePointDeployer
-from .exceptions import DeploymentError, TemplateError
+from .exceptions import DeploymentError
 from .inventory import write_deployment_record
 from .models import CanarySpec, OneDriveTemplate, SharePointTemplate
-from .templates import list_templates, load_template, render_template
+from .templates import find_template_by_name as _find_template_by_name, load_template, render_template
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,11 @@ def parse_manifest(path: str | Path) -> list[CanarySpec]:
     if isinstance(defaults, dict):
         raw_vars = defaults.get("vars")
         if isinstance(raw_vars, dict):
-            default_vars = {str(k): str(v) for k, v in raw_vars.items()}
+            for k, v in raw_vars.items():
+                val = str(v)
+                if len(val) > 500:
+                    raise DeploymentError(f"Default variable value for '{k}' exceeds 500 characters.")
+                default_vars[str(k)] = val
 
     specs: list[CanarySpec] = []
     for i, entry in enumerate(canaries_raw):
@@ -75,7 +79,11 @@ def parse_manifest(path: str | Path) -> list[CanarySpec]:
         entry_vars: dict[str, str] = {}
         raw_entry_vars = entry.get("vars")
         if isinstance(raw_entry_vars, dict):
-            entry_vars = {str(k): str(v) for k, v in raw_entry_vars.items()}
+            for k, v in raw_entry_vars.items():
+                val = str(v)
+                if len(val) > 500:
+                    raise DeploymentError(f"Canary entry {i + 1}: variable value for '{k}' exceeds 500 characters.")
+                entry_vars[str(k)] = val
 
         merged_vars = {**default_vars, **entry_vars}
 
@@ -92,21 +100,6 @@ def parse_manifest(path: str | Path) -> list[CanarySpec]:
         )
 
     return specs
-
-
-def _find_template_by_name(canary_type: str, template_name: str) -> str:
-    """Find a template path by name (case-insensitive)."""
-    available = list_templates(canary_type)
-    if not available:
-        raise TemplateError(f"No {canary_type} templates found.")
-    name_lower = template_name.casefold()
-    matches = [t for t in available if t["name"].casefold() == name_lower]
-    if not matches:
-        names = ", ".join(repr(t["name"]) for t in available)
-        raise TemplateError(f"Template {template_name!r} not found for {canary_type}. Available: {names}")
-    if len(matches) > 1:
-        raise TemplateError(f"Multiple templates named {template_name!r} found for {canary_type}.")
-    return matches[0]["path"]
 
 
 def run_batch(

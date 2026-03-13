@@ -7,7 +7,7 @@ from pathlib import Path
 from anglerfish.cli import main
 from anglerfish.cli import deploy as deploy_mod
 import anglerfish.cli._main as main_mod
-import anglerfish.cli.prompts as prompts_mod
+import anglerfish.templates as templates_mod
 from anglerfish.models import OneDriveTemplate, OutlookTemplate, SharePointTemplate
 
 
@@ -103,7 +103,7 @@ def test_demo_deploy_outlook_skips_auth(monkeypatch):
         return [{"name": "Fake Password Reset", "description": "desc", "path": "pkg://outlook/test.yaml"}]
 
     monkeypatch.setattr(main_mod, "list_templates", _fake_list)
-    monkeypatch.setattr(prompts_mod, "list_templates", _fake_list)
+    monkeypatch.setattr(templates_mod, "list_templates", _fake_list)
     monkeypatch.setattr(main_mod, "load_template", lambda path: template)
 
     result = main(
@@ -139,7 +139,7 @@ def test_demo_deploy_sharepoint_skips_auth(monkeypatch):
         return [{"name": "Employee Salary Bands", "description": "desc", "path": "pkg://sharepoint/test.yaml"}]
 
     monkeypatch.setattr(main_mod, "list_templates", _fake_list)
-    monkeypatch.setattr(prompts_mod, "list_templates", _fake_list)
+    monkeypatch.setattr(templates_mod, "list_templates", _fake_list)
     monkeypatch.setattr(main_mod, "load_template", lambda path: template)
 
     result = main(
@@ -176,7 +176,7 @@ def test_demo_deploy_onedrive_skips_auth(monkeypatch):
         return [{"name": "VPN Credentials Backup", "description": "desc", "path": "pkg://onedrive/test.yaml"}]
 
     monkeypatch.setattr(main_mod, "list_templates", _fake_list)
-    monkeypatch.setattr(prompts_mod, "list_templates", _fake_list)
+    monkeypatch.setattr(templates_mod, "list_templates", _fake_list)
     monkeypatch.setattr(main_mod, "load_template", lambda path: template)
 
     result = main(
@@ -215,7 +215,7 @@ def test_demo_deploy_interactive_selects_template(monkeypatch):
         return [{"name": "Fake Wire Transfer", "description": "desc", "path": "pkg://outlook/test.yaml"}]
 
     monkeypatch.setattr(main_mod, "list_templates", _fake_list)
-    monkeypatch.setattr(prompts_mod, "list_templates", _fake_list)
+    monkeypatch.setattr(templates_mod, "list_templates", _fake_list)
     monkeypatch.setattr(main_mod, "load_template", lambda path: template)
 
     result = main(
@@ -258,7 +258,7 @@ def test_demo_flag_never_calls_authenticate(monkeypatch):
         return [{"name": "Test", "description": "desc", "path": "pkg://outlook/t.yaml"}]
 
     monkeypatch.setattr(main_mod, "list_templates", _fake_list)
-    monkeypatch.setattr(prompts_mod, "list_templates", _fake_list)
+    monkeypatch.setattr(templates_mod, "list_templates", _fake_list)
     monkeypatch.setattr(main_mod, "load_template", lambda path: template)
 
     result = main(

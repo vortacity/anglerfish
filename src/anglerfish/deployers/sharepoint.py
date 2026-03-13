@@ -2,20 +2,16 @@
 
 from __future__ import annotations
 
-import re
 import time
 from string import Template as StringTemplate
-from urllib.parse import quote, unquote
 
 from ..exceptions import DeploymentError, GraphApiError
 from ..models import SharePointTemplate
 from .base import BaseDeployer
 from .content import render_file_content
+from ._paths import encode_drive_path, normalize_filenames, normalize_folder_path, path_segment
 
 _VERIFY_ATTEMPTS = 3
-_SHAREPOINT_LIBRARY_PREFIXES = {"shared documents", "documents"}
-# Percent-encoded slash (%2f), backslash (%5c), and dot (%2e) sequences used in traversal attacks.
-_TRAVERSAL_ENCODED_RE = re.compile(r"%2[ef]|%5c", re.IGNORECASE)
 
 
 class SharePointDeployer(BaseDeployer):
@@ -28,14 +24,16 @@ class SharePointDeployer(BaseDeployer):
             raise DeploymentError("Target SharePoint site name is required.")
         site_id = str(kwargs.get("site_id", "")).strip()
 
-        folder_path = _normalize_folder_path(str(kwargs.get("folder_path", self.template.folder_path)))
+        folder_path = normalize_folder_path(
+            str(kwargs.get("folder_path", self.template.folder_path)), strip_library_prefix=True
+        )
         if not folder_path:
             raise DeploymentError(
                 "Target SharePoint folder path is required (example: 'HR/Restricted'). "
                 "Do not include 'Shared Documents/'."
             )
 
-        filenames = _normalize_filenames(kwargs.get("filenames", self.template.filenames))
+        filenames = normalize_filenames(kwargs.get("filenames", self.template.filenames), label="SharePoint")
 
         try:
             encoded_site_id, site = self._resolve_site(site_name, site_id=site_id)
@@ -45,7 +43,7 @@ class SharePointDeployer(BaseDeployer):
             uploaded_names: list[str] = []
             uploaded_urls: list[str] = []
             for filename in filenames:
-                path = _encode_drive_path(folder_path, filename)
+                path = encode_drive_path(folder_path, filename)
                 rendered_text = self._render_content(filename)
                 content, content_type = render_file_content(rendered_text, filename)
                 item = self.graph.put(
@@ -118,10 +116,10 @@ class SharePointDeployer(BaseDeployer):
         if not site_id:
             raise DeploymentError("SharePoint site lookup returned an invalid site id.")
 
-        return _path_segment(site_id), site
+        return path_segment(site_id), site
 
     def _resolve_site_by_id(self, *, site_name: str, site_id: str) -> tuple[str, dict]:
-        encoded_site_id = _path_segment(site_id)
+        encoded_site_id = path_segment(site_id)
         try:
             site = self.graph.get(f"/sites/{encoded_site_id}")
         except GraphApiError as exc:
@@ -133,7 +131,7 @@ class SharePointDeployer(BaseDeployer):
             raise DeploymentError("SharePoint site lookup returned an invalid site response.")
 
         resolved_site_id = str(site.get("id", "")).strip() or site_id
-        return _path_segment(resolved_site_id), site
+        return path_segment(resolved_site_id), site
 
     def _render_content(self, filename: str) -> str:
         rendered = StringTemplate(self.template.content_text).safe_substitute({"filename": filename}).strip()
@@ -142,7 +140,7 @@ class SharePointDeployer(BaseDeployer):
         return rendered
 
     def _verify_uploaded_item(self, encoded_site_id: str, item_id: str, expected_name: str) -> dict:
-        encoded_item_id = _path_segment(item_id)
+        encoded_item_id = path_segment(item_id)
 
         for attempt in range(_VERIFY_ATTEMPTS):
             try:
@@ -160,82 +158,6 @@ class SharePointDeployer(BaseDeployer):
             return item
 
         raise DeploymentError("SharePoint verification failed: uploaded files were not readable after retries.")
-
-
-def _normalize_filenames(raw: object) -> list[str]:
-    if not isinstance(raw, list):
-        raise DeploymentError("SharePoint filenames must be provided as a list.")
-
-    filenames: list[str] = []
-    for entry in raw:
-        name = str(entry).strip()
-        if not name:
-            raise DeploymentError("SharePoint filenames cannot be empty.")
-        if "/" in name or "\\" in name:
-            raise DeploymentError("SharePoint filenames must not contain path separators.")
-        filenames.append(name)
-
-    if not filenames:
-        raise DeploymentError("At least one SharePoint filename is required.")
-    if len(filenames) != 1:
-        raise DeploymentError("SharePoint deployment currently supports exactly one filename.")
-    return filenames
-
-
-def _normalize_folder_path(raw_path: str) -> str:
-    segments: list[str] = []
-    for raw_segment in raw_path.strip().strip("/").split("/"):
-        value = raw_segment.strip()
-        if value:
-            segments.append(value)
-
-    if not segments:
-        return ""
-
-    first_segment = unquote(segments[0]).strip().casefold()
-    if first_segment in _SHAREPOINT_LIBRARY_PREFIXES:
-        segments = segments[1:]
-
-    # Path traversal protection: reject dangerous segments after stripping the
-    # optional library prefix so we validate the actual user-supplied path.
-    for segment in segments:
-        decoded = unquote(segment)
-        # Reject null bytes (in raw or decoded form).
-        if "\x00" in segment or "\x00" in decoded:
-            raise DeploymentError(f"Invalid folder path segment '{segment}': null bytes are not permitted.")
-        # Reject percent-encoded slashes, backslashes, or dots first — this check
-        # runs before the decoded-value checks so the error message is accurate.
-        if _TRAVERSAL_ENCODED_RE.search(segment):
-            raise DeploymentError(
-                f"Invalid folder path segment '{segment}': percent-encoded traversal "
-                "sequences (%2e, %2f, %5c) are not permitted."
-            )
-        # Reject raw backslashes — not valid in SharePoint URL paths and used
-        # for Windows-style traversal (e.g. "..\..\" sequences).
-        if "\\" in segment:
-            raise DeploymentError(
-                f"Invalid folder path segment '{segment}': "
-                "backslashes are not permitted (path traversal is not permitted)."
-            )
-        # Reject traversal dot sequences (e.g. "..", "../").
-        if decoded.strip() in ("..", "."):
-            raise DeploymentError(f"Invalid folder path segment '{segment}': path traversal is not permitted.")
-
-    return "/".join(segments)
-
-
-def _encode_drive_path(folder_path: str, filename: str) -> str:
-    segments: list[str] = []
-    for segment in folder_path.split("/"):
-        value = segment.strip()
-        if value:
-            segments.append(value)
-    segments.append(filename.strip())
-    return "/".join(quote(segment, safe="") for segment in segments)
-
-
-def _path_segment(value: str) -> str:
-    return quote(value, safe="")
 
 
 def _describe_candidate(candidate: dict) -> str:
@@ -257,7 +179,7 @@ def remove_canary(graph, record: dict[str, str]) -> dict[str, str]:
     if not site_id:
         raise DeploymentError("Deployment record missing 'site_id'.")
 
-    encoded_site_id = _path_segment(site_id)
+    encoded_site_id = path_segment(site_id)
 
     # If item_id not in record (old record), resolve by path
     if not item_id:
@@ -268,7 +190,7 @@ def remove_canary(graph, record: dict[str, str]) -> dict[str, str]:
                 "Deployment record missing 'item_id', 'folder_path', and 'uploaded_files'. "
                 "Cannot resolve file to delete."
             )
-        path = _encode_drive_path(folder_path, filename)
+        path = encode_drive_path(folder_path, filename)
         try:
             item = graph.get(f"/sites/{encoded_site_id}/drive/root:/{path}")
         except GraphApiError as exc:
@@ -277,7 +199,7 @@ def remove_canary(graph, record: dict[str, str]) -> dict[str, str]:
         if not item_id:
             raise DeploymentError("SharePoint cleanup failed: could not resolve file item ID.")
 
-    encoded_item_id = _path_segment(item_id)
+    encoded_item_id = path_segment(item_id)
     try:
         graph.delete(f"/sites/{encoded_site_id}/drive/items/{encoded_item_id}")
     except GraphApiError as exc:

@@ -2,19 +2,16 @@
 
 from __future__ import annotations
 
-import re
 import time
 from string import Template as StringTemplate
-from urllib.parse import quote, unquote
 
 from ..exceptions import DeploymentError, GraphApiError
 from ..models import OneDriveTemplate
 from .base import BaseDeployer
 from .content import render_file_content
+from ._paths import encode_drive_path, normalize_filenames, normalize_folder_path, path_segment
 
 _VERIFY_ATTEMPTS = 3
-# Percent-encoded slash (%2f), backslash (%5c), and dot (%2e) sequences used in traversal attacks.
-_TRAVERSAL_ENCODED_RE = re.compile(r"%2[ef]|%5c", re.IGNORECASE)
 
 
 class OneDriveDeployer(BaseDeployer):
@@ -26,17 +23,17 @@ class OneDriveDeployer(BaseDeployer):
         if not upn or "@" not in upn:
             raise DeploymentError("Target user must be a valid UPN or email address containing '@'.")
 
-        folder_path = _normalize_folder_path(str(kwargs.get("folder_path", self.template.folder_path)))
-        filenames = _normalize_filenames(kwargs.get("filenames", self.template.filenames))
+        folder_path = normalize_folder_path(str(kwargs.get("folder_path", self.template.folder_path)))
+        filenames = normalize_filenames(kwargs.get("filenames", self.template.filenames), label="OneDrive")
 
-        encoded_upn = _path_segment(upn)
+        encoded_upn = path_segment(upn)
 
         try:
             uploaded_names: list[str] = []
             uploaded_urls: list[str] = []
             item_id = ""
             for filename in filenames:
-                path = _encode_drive_path(folder_path, filename)
+                path = encode_drive_path(folder_path, filename)
                 rendered_text = self._render_content(filename)
                 content, content_type = render_file_content(rendered_text, filename)
                 item = self.graph.put(
@@ -77,7 +74,7 @@ class OneDriveDeployer(BaseDeployer):
         return rendered
 
     def _verify_uploaded_item(self, encoded_upn: str, item_id: str, expected_name: str) -> dict:
-        encoded_item_id = _path_segment(item_id)
+        encoded_item_id = path_segment(item_id)
 
         for attempt in range(_VERIFY_ATTEMPTS):
             try:
@@ -97,77 +94,6 @@ class OneDriveDeployer(BaseDeployer):
         raise DeploymentError("OneDrive verification failed: uploaded files were not readable after retries.")
 
 
-def _normalize_filenames(raw: object) -> list[str]:
-    if not isinstance(raw, list):
-        raise DeploymentError("OneDrive filenames must be provided as a list.")
-
-    filenames: list[str] = []
-    for entry in raw:
-        name = str(entry).strip()
-        if not name:
-            raise DeploymentError("OneDrive filenames cannot be empty.")
-        if "/" in name or "\\" in name:
-            raise DeploymentError("OneDrive filenames must not contain path separators.")
-        filenames.append(name)
-
-    if not filenames:
-        raise DeploymentError("At least one OneDrive filename is required.")
-    if len(filenames) != 1:
-        raise DeploymentError("OneDrive deployment currently supports exactly one filename.")
-    return filenames
-
-
-def _normalize_folder_path(raw_path: str) -> str:
-    segments: list[str] = []
-    for raw_segment in raw_path.strip().strip("/").split("/"):
-        value = raw_segment.strip()
-        if value:
-            segments.append(value)
-
-    if not segments:
-        return ""
-
-    # Path traversal protection: reject dangerous segments.
-    for segment in segments:
-        decoded = unquote(segment)
-        # Reject null bytes (in raw or decoded form).
-        if "\x00" in segment or "\x00" in decoded:
-            raise DeploymentError(f"Invalid folder path segment '{segment}': null bytes are not permitted.")
-        # Reject percent-encoded slashes, backslashes, or dots first — this check
-        # runs before the decoded-value checks so the error message is accurate.
-        if _TRAVERSAL_ENCODED_RE.search(segment):
-            raise DeploymentError(
-                f"Invalid folder path segment '{segment}': percent-encoded traversal "
-                "sequences (%2e, %2f, %5c) are not permitted."
-            )
-        # Reject raw backslashes — not valid in OneDrive URL paths and used
-        # for Windows-style traversal (e.g. "..\..\" sequences).
-        if "\\" in segment:
-            raise DeploymentError(
-                f"Invalid folder path segment '{segment}': "
-                "backslashes are not permitted (path traversal is not permitted)."
-            )
-        # Reject traversal dot sequences (e.g. "..", "../").
-        if decoded.strip() in ("..", "."):
-            raise DeploymentError(f"Invalid folder path segment '{segment}': path traversal is not permitted.")
-
-    return "/".join(segments)
-
-
-def _encode_drive_path(folder_path: str, filename: str) -> str:
-    segments: list[str] = []
-    for segment in folder_path.split("/"):
-        value = segment.strip()
-        if value:
-            segments.append(value)
-    segments.append(filename.strip())
-    return "/".join(quote(segment, safe="") for segment in segments)
-
-
-def _path_segment(value: str) -> str:
-    return quote(value, safe="")
-
-
 def remove_canary(graph, record: dict[str, str]) -> dict[str, str]:
     """Remove a deployed OneDrive canary file."""
     target_user = record.get("target_user", "").strip()
@@ -178,8 +104,8 @@ def remove_canary(graph, record: dict[str, str]) -> dict[str, str]:
     if not item_id:
         raise DeploymentError("Deployment record missing 'item_id'.")
 
-    encoded_upn = _path_segment(target_user)
-    encoded_item_id = _path_segment(item_id)
+    encoded_upn = path_segment(target_user)
+    encoded_item_id = path_segment(item_id)
 
     try:
         graph.delete(f"/users/{encoded_upn}/drive/items/{encoded_item_id}")

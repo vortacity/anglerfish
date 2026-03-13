@@ -36,7 +36,7 @@ def test_verify_outlook_ok():
 
     assert result.status == VerifyStatus.OK
     assert result.canary_type == "outlook"
-    graph.get.assert_called_once_with("/users/alice@contoso.com/mailFolders/folder-abc")
+    graph.get.assert_called_once_with("/users/alice%40contoso.com/mailFolders/folder-abc")
 
 
 def test_verify_outlook_gone():
@@ -70,7 +70,7 @@ def test_verify_sharepoint_ok():
     result = verify_record(graph, record)
 
     assert result.status == VerifyStatus.OK
-    graph.get.assert_called_once_with("/sites/contoso.sharepoint.com,abc,def/drive/items/item-sp-001")
+    graph.get.assert_called_once_with("/sites/contoso.sharepoint.com%2Cabc%2Cdef/drive/items/item-sp-001")
 
 
 def test_verify_sharepoint_gone():
@@ -104,7 +104,7 @@ def test_verify_onedrive_ok():
     result = verify_record(graph, record)
 
     assert result.status == VerifyStatus.OK
-    graph.get.assert_called_once_with("/users/j.smith@contoso.com/drive/items/item-od-001")
+    graph.get.assert_called_once_with("/users/j.smith%40contoso.com/drive/items/item-od-001")
 
 
 def test_verify_onedrive_gone():

@@ -6,7 +6,7 @@ import pytest
 from anglerfish.cli import main
 from anglerfish.cli import deploy as deploy_mod
 import anglerfish.cli._main as main_mod
-import anglerfish.cli.prompts as prompts_mod
+import anglerfish.templates as templates_mod
 from anglerfish.models import OneDriveTemplate, OutlookTemplate, SharePointTemplate
 
 
@@ -418,7 +418,7 @@ def test_main_delegates_to_outlook_handler(monkeypatch):
         return [{"name": "Outlook Template", "description": "desc", "path": "pkg://outlook/test.yaml"}]
 
     monkeypatch.setattr(main_mod, "list_templates", _fake_list)
-    monkeypatch.setattr(prompts_mod, "list_templates", _fake_list)
+    monkeypatch.setattr(templates_mod, "list_templates", _fake_list)
     template = OutlookTemplate(
         name="Outlook Template",
         description="desc",
@@ -475,7 +475,7 @@ def test_main_delegates_to_sharepoint_handler(monkeypatch):
         return [{"name": "SharePoint Template", "description": "desc", "path": "pkg://sharepoint/test.yaml"}]
 
     monkeypatch.setattr(main_mod, "list_templates", _fake_list)
-    monkeypatch.setattr(prompts_mod, "list_templates", _fake_list)
+    monkeypatch.setattr(templates_mod, "list_templates", _fake_list)
     template = SharePointTemplate(
         name="SharePoint Template",
         description="desc",
@@ -622,7 +622,7 @@ def test_main_onedrive_non_interactive_deploys(monkeypatch):
         return [{"name": "OneDrive Template", "description": "desc", "path": "pkg://onedrive/test.yaml"}]
 
     monkeypatch.setattr(main_mod, "list_templates", _fake_list)
-    monkeypatch.setattr(prompts_mod, "list_templates", _fake_list)
+    monkeypatch.setattr(templates_mod, "list_templates", _fake_list)
     monkeypatch.setattr(main_mod, "load_template", lambda path: template)
 
     observed: dict[str, object] = {}
@@ -709,7 +709,7 @@ def test_main_delegates_to_onedrive_handler(monkeypatch):
         return [{"name": "OneDrive Template", "description": "desc", "path": "pkg://onedrive/test.yaml"}]
 
     monkeypatch.setattr(main_mod, "list_templates", _fake_list)
-    monkeypatch.setattr(prompts_mod, "list_templates", _fake_list)
+    monkeypatch.setattr(templates_mod, "list_templates", _fake_list)
     template = OneDriveTemplate(
         name="OneDrive Template",
         description="desc",

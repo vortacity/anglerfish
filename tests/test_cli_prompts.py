@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-import anglerfish.cli.prompts as prompts_mod
+import anglerfish.templates as templates_mod
+from anglerfish.templates import find_template_by_name as _find_template_by_name
 from anglerfish.cli.prompts import (
-    _find_template_by_name,
     _normalize_sharepoint_folder_path,
     _parse_var_args,
     _validate_email,
@@ -235,7 +235,7 @@ class TestParseVarArgs:
 class TestFindTemplateByName:
     def test_found(self, monkeypatch):
         monkeypatch.setattr(
-            prompts_mod,
+            templates_mod,
             "list_templates",
             lambda ct: [{"name": "Outlook Template", "path": "pkg://outlook/test.yaml"}],
         )
@@ -243,7 +243,7 @@ class TestFindTemplateByName:
 
     def test_case_insensitive(self, monkeypatch):
         monkeypatch.setattr(
-            prompts_mod,
+            templates_mod,
             "list_templates",
             lambda ct: [{"name": "Outlook Template", "path": "pkg://outlook/test.yaml"}],
         )
@@ -251,7 +251,7 @@ class TestFindTemplateByName:
 
     def test_not_found_raises_template_error(self, monkeypatch):
         monkeypatch.setattr(
-            prompts_mod,
+            templates_mod,
             "list_templates",
             lambda ct: [{"name": "Outlook Template", "path": "pkg://outlook/test.yaml"}],
         )
@@ -259,6 +259,6 @@ class TestFindTemplateByName:
             _find_template_by_name("outlook", "Missing Template")
 
     def test_no_templates_raises_template_error(self, monkeypatch):
-        monkeypatch.setattr(prompts_mod, "list_templates", lambda ct: [])
+        monkeypatch.setattr(templates_mod, "list_templates", lambda ct: [])
         with pytest.raises(TemplateError, match="No outlook templates"):
             _find_template_by_name("outlook", "Any")

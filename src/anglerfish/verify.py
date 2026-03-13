@@ -6,6 +6,7 @@ import enum
 import logging
 from dataclasses import dataclass
 
+from .deployers._paths import path_segment
 from .exceptions import GraphApiError
 from .graph import GraphClient
 
@@ -82,7 +83,7 @@ def _verify_outlook(graph: GraphClient, record: dict, template_name: str) -> Ver
             status=VerifyStatus.ERROR,
             detail="Record missing target_user or folder_id",
         )
-    graph.get(f"/users/{target_user}/mailFolders/{folder_id}")
+    graph.get(f"/users/{path_segment(target_user)}/mailFolders/{path_segment(folder_id)}")
     return VerifyResult(
         canary_type="outlook",
         template_name=template_name,
@@ -102,7 +103,7 @@ def _verify_sharepoint(graph: GraphClient, record: dict, template_name: str) -> 
             status=VerifyStatus.ERROR,
             detail="Record missing site_id or item_id",
         )
-    graph.get(f"/sites/{site_id}/drive/items/{item_id}")
+    graph.get(f"/sites/{path_segment(site_id)}/drive/items/{path_segment(item_id)}")
     return VerifyResult(
         canary_type="sharepoint",
         template_name=template_name,
@@ -122,7 +123,7 @@ def _verify_onedrive(graph: GraphClient, record: dict, template_name: str) -> Ve
             status=VerifyStatus.ERROR,
             detail="Record missing target_user or item_id",
         )
-    graph.get(f"/users/{target_user}/drive/items/{item_id}")
+    graph.get(f"/users/{path_segment(target_user)}/drive/items/{path_segment(item_id)}")
     return VerifyResult(
         canary_type="onedrive",
         template_name=template_name,
