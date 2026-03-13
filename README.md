@@ -317,8 +317,8 @@ Deletion behavior:
 Run the CLI without a live M365 tenant, useful for conference demos or local testing:
 
 ```bash
-# List pre-staged fixture records
-anglerfish --demo list --records-dir examples/demo-records/
+# List pre-staged fixture records (list reads local files — no auth needed)
+anglerfish list --records-dir examples/demo-records/
 
 # Simulated interactive deployment (no auth, no writes)
 anglerfish --demo
@@ -452,12 +452,14 @@ Each subcommand has its own `--help`: `anglerfish monitor --help`, `anglerfish b
 | `cleanup <record>` | Remove a deployed canary artifact using its deployment record |
 | `cleanup --non-interactive` | Skip confirmation prompt |
 | `monitor` | Poll audit logs for canary access events |
+| `monitor --records-dir DIR` | Directory of deployment records (default: `~/.anglerfish/records`) |
 | `monitor --once` | Poll once and exit |
 | `monitor --interval N` | Poll interval in seconds (default: 300) |
 | `monitor --exclude-app-id ID` | Exclude app IDs from matching (repeatable) |
 | `monitor --slack-webhook-url URL` | Slack incoming webhook URL for alert notifications |
 | `monitor --alert-log PATH` | JSONL file to append alert records to |
 | `monitor --no-console` | Suppress Rich console output (daemon mode) |
+| `monitor --state-file PATH` | Persistent state file (default: `~/.anglerfish/monitor-state.json`) |
 | `monitor --demo` | Print a simulated alert and exit (no auth required) |
 | `batch <manifest>` | Deploy multiple canaries from a YAML manifest |
 | `batch --output-dir DIR` | Output directory for deployment records (default: `~/.anglerfish/records`) |
@@ -465,7 +467,9 @@ Each subcommand has its own `--help`: `anglerfish monitor --help`, `anglerfish b
 | `batch --demo` | Run with simulated data (no auth, no API calls) |
 | `verify [RECORD]` | Check deployed canaries still exist via Graph API |
 | `verify --records-dir DIR` | Directory of records to verify (default: `~/.anglerfish/records`) |
+| `verify --demo` | Show simulated verify output (no auth required) |
 | `dashboard` | Full-screen TUI with canary status, live alerts, and stats |
+| `dashboard --records-dir DIR` | Directory of deployment records (default: `~/.anglerfish/records`) |
 | `dashboard --demo` | Run with simulated data (no auth required) |
 | `dashboard --poll-interval N` | Audit log poll interval in seconds (default: 300) |
 | `dashboard --verify-interval N` | Health check refresh interval in seconds (default: 300) |
