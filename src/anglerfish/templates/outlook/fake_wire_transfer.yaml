@@ -3,13 +3,19 @@ description: Hidden email containing fake wire transfer banking details
 type: outlook
 
 variables:
+  - name: sender_name
+    description: Display name for the sender (e.g. "Dana Sawyer (CFO)")
+    default: Dana Sawyer (CFO)
+  - name: sender_email
+    description: Sender email address
+    default: dana.sawyer@contoso.com
   - name: canary_account
     description: Canary bank account number to embed in the wire transfer
 
 folder_name: Finance - Confidential
 subject: "Wire Transfer Instructions - Q4 Vendor Payment"
-sender_name: Dana Sawyer (CFO)
-sender_email: dana.sawyer@contoso.com
+sender_name: ${sender_name}
+sender_email: ${sender_email}
 body_html: |
   <html>
   <body>
