@@ -42,7 +42,7 @@ Maintained by [`@vortacity`](https://github.com/vortacity). Open usage bugs and 
 ```text
 1. Deploy     anglerfish → Graph API → canary artifact lands in M365
 2. Trigger    attacker reads email / opens file → UAL audit event fires
-3. Detect     SIEM queries UAL for artifact IDs from deployment record → alert
+3. Alert      anglerfish monitor polls UAL → matches deployment records → alert
 ```
 
 No external infrastructure required.
@@ -65,7 +65,13 @@ Many teams can use both approaches together. The point of Anglerfish is that it 
 
 ## What Detection Looks Like
 
-When an attacker accesses a canary, the M365 Unified Audit Log generates an event your SIEM can alert on:
+When an attacker accesses a canary, the M365 Unified Audit Log generates an event. Anglerfish's built-in `monitor` polls the Management Activity API, matches events against your deployment records, and fires alerts (console, Slack, JSONL log):
+
+```bash
+anglerfish monitor --records-dir ~/.anglerfish/records
+```
+
+The underlying UAL event looks like this:
 
 ```json
 {
@@ -77,7 +83,7 @@ When an attacker accesses a canary, the M365 Unified Audit Log generates an even
 }
 ```
 
-**Microsoft Sentinel KQL** — alert when any canary is accessed:
+You can also query these events directly from your SIEM. **Microsoft Sentinel KQL** example:
 
 ```kql
 OfficeActivity
