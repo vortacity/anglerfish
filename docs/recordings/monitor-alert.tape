@@ -4,7 +4,7 @@ Output docs/images/monitor-alert.gif
 #   cd /path/to/anglerfish
 #   vhs docs/recordings/monitor-alert.tape
 #
-# Requires: vhs, ffmpeg, ttyd (see docs/plans/2026-03-08-arsenal-readme-improvements.md)
+# Requires: vhs, ffmpeg, ttyd
 # Output:   docs/images/monitor-alert.gif
 
 Set Theme "Dracula"

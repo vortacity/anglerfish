@@ -24,7 +24,7 @@ CLI package (cli/_main.py, cli/deploy.py, cli/monitor.py, cli/batch.py, cli/dash
 
 ## Auth Model
 
-Both supported canary types use **application authentication** via MSAL `ConfidentialClientApplication`.
+All supported canary types use **application authentication** via MSAL `ConfidentialClientApplication`.
 
 Credential types:
 - Client secret

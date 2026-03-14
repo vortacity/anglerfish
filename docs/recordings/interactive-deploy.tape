@@ -4,7 +4,7 @@ Output docs/images/interactive-deploy.gif
 #   cd /path/to/anglerfish
 #   vhs docs/recordings/interactive-deploy.tape
 #
-# Requires: vhs, ffmpeg, ttyd (see docs/plans/2026-03-08-arsenal-readme-improvements.md)
+# Requires: vhs, ffmpeg, ttyd
 # Output:   docs/images/interactive-deploy.gif
 
 Set Theme "Dracula"

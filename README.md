@@ -23,11 +23,11 @@ Anglerfish is a Python CLI that provisions deceptive artifacts (Outlook emails, 
 
 ![Monitor alert](docs/images/monitor-alert.gif)
 
-## Arsenal Materials
+## Documentation
 
-- [Arsenal submission abstract](docs/arsenal-abstract.md)
-- [Arsenal demo runbook](docs/demo-runbook.md)
-- [Arsenal booth handout](docs/arsenal-handout.md)
+- [Demo tenant setup guide](docs/demo-tenant-setup.md)
+- [Threat model](docs/threat-model.md)
+- [Architecture notes](docs/architecture.md)
 
 ## Maintainer
 

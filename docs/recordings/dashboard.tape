@@ -4,7 +4,7 @@ Output docs/images/dashboard.gif
 #   cd /path/to/anglerfish
 #   vhs docs/recordings/dashboard.tape
 #
-# Requires: vhs, ffmpeg, ttyd (see docs/plans/2026-03-08-arsenal-readme-improvements.md)
+# Requires: vhs, ffmpeg, ttyd
 # Output:   docs/images/dashboard.gif
 
 Set Theme "Dracula"
