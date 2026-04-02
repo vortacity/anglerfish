@@ -121,7 +121,7 @@ def _format_exception_message(exc: BaseException) -> str:
     return "\n".join(lines)
 
 
-def _print_auth_success(console: Console, *, auth_mode: str = "application") -> None:
+def _print_auth_success(console: Console, **_unused: object) -> None:
     console.print("[bold green]\u2713[/bold green] Authenticated using [green]application permissions[/green]")
 
 

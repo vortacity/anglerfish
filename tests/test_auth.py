@@ -121,6 +121,32 @@ def test_authenticate_rejects_delegated_after_reset():
         auth.authenticate(auth_mode="delegated")
 
 
+def test_authenticate_management_api_requests_management_scope(monkeypatch: pytest.MonkeyPatch):
+    called: dict[str, str | None] = {}
+
+    def fake_acquire_app_token(*, scope: str, app_credential_mode: str | None = None) -> str:
+        called["scope"] = scope
+        called["mode"] = app_credential_mode
+        return "management-token-123"
+
+    monkeypatch.setattr(auth, "MANAGEMENT_API_SCOPE", "https://manage.office.com/.default")
+    monkeypatch.setattr(auth, "GRAPH_APP_SCOPE", "https://graph.microsoft.com/.default")
+    monkeypatch.setattr(auth, "_acquire_app_token", fake_acquire_app_token)
+
+    token = auth.authenticate_management_api(app_credential_mode="certificate")
+
+    assert token == "management-token-123"
+    assert called["scope"] == "https://manage.office.com/.default"
+    assert called["scope"] != auth.GRAPH_APP_SCOPE
+    assert called["mode"] == "certificate"
+
+
+def test_authenticate_management_api_rejects_non_application_mode(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("ANGLERFISH_AUTH_MODE", "delegated")
+    with pytest.raises(AuthenticationError, match="application auth"):
+        auth.authenticate_management_api()
+
+
 def test_authenticate_application_with_pfx_certificate(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     pfx_file = tmp_path / "client-cert.pfx"
     pfx_file.write_bytes(b"fake-pfx-content")

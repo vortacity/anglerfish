@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import inspect
+
 import pytest
 from rich.console import Console
 
@@ -185,9 +187,12 @@ class TestParseArgs:
 
 
 class TestPrintAuthSuccess:
-    def test_delegated_mode_still_prints_application_success(self):
+    def test_application_mode_prints_application_success(self):
         console = Console(record=True)
-        _print_auth_success(console, auth_mode="delegated")
+        _print_auth_success(console)
         output = console.export_text()
         assert "application permissions" in output
-        assert "delegated permissions" not in output
+
+    def test_application_mode_helper_signature_has_no_auth_mode_param(self):
+        parameters = inspect.signature(_print_auth_success).parameters
+        assert "auth_mode" not in parameters

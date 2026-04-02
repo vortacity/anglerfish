@@ -266,13 +266,37 @@ class TestFindTemplateByName:
 
 
 class TestPromptAuthSetup:
-    def test_prompt_auth_setup_non_interactive_application_returns_secret_or_certificate(self, monkeypatch):
-        args = type("Args", (), {"tenant_id": None, "client_id": None, "credential_mode": None})()
+    def test_prompt_auth_setup_non_interactive_application_secret_only_returns_secret(self, monkeypatch):
+        args = type("Args", (), {"tenant_id": None, "client_id": None, "credential_mode": "auto"})()
         monkeypatch.setenv("ANGLERFISH_TENANT_ID", "tenant-id")
         monkeypatch.setenv("ANGLERFISH_CLIENT_ID", "client-id")
         monkeypatch.setenv("ANGLERFISH_CLIENT_SECRET", "secret")
+
         result = _prompt_auth_setup(args, console=None, auth_mode="application", non_interactive=True)
-        assert result in {"secret", "certificate"}
+
+        assert result == "secret"
+
+    def test_prompt_auth_setup_non_interactive_application_certificate_only_returns_certificate(self, monkeypatch):
+        args = type("Args", (), {"tenant_id": None, "client_id": None, "credential_mode": "auto"})()
+        monkeypatch.setenv("ANGLERFISH_TENANT_ID", "tenant-id")
+        monkeypatch.setenv("ANGLERFISH_CLIENT_ID", "client-id")
+        monkeypatch.setenv("ANGLERFISH_CLIENT_CERT_PFX_PATH", "/tmp/client.pfx")
+
+        result = _prompt_auth_setup(args, console=None, auth_mode="application", non_interactive=True)
+
+        assert result == "certificate"
+
+    def test_prompt_auth_setup_non_interactive_application_mixed_defaults_to_secret(self, monkeypatch):
+        args = type("Args", (), {"tenant_id": None, "client_id": None, "credential_mode": "auto"})()
+        monkeypatch.setenv("ANGLERFISH_TENANT_ID", "tenant-id")
+        monkeypatch.setenv("ANGLERFISH_CLIENT_ID", "client-id")
+        monkeypatch.setenv("ANGLERFISH_CLIENT_SECRET", "secret")
+        monkeypatch.setenv("ANGLERFISH_CLIENT_CERT_PRIVATE_KEY_PATH", "/tmp/client.key")
+        monkeypatch.setenv("ANGLERFISH_CLIENT_CERT_THUMBPRINT", "ABCDEF")
+
+        result = _prompt_auth_setup(args, console=None, auth_mode="application", non_interactive=True)
+
+        assert result == "secret"
 
     def test_prompt_auth_setup_rejects_delegated_auth_mode(self, monkeypatch):
         args = type("Args", (), {"tenant_id": None, "client_id": None, "credential_mode": None})()
