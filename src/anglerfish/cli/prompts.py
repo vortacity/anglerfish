@@ -7,7 +7,6 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import unquote
 
 import questionary
 from questionary import Style
@@ -40,7 +39,6 @@ _STYLE = Style(
 
 _QMARK = "\u2022"
 _POINTER = ">"
-_SHAREPOINT_LIBRARY_PREFIXES = {"shared documents", "documents"}
 
 
 @dataclass(frozen=True)
@@ -91,32 +89,6 @@ def _validate_single_filename(value: str) -> bool | str:
         return "Enter exactly one filename."
     if "/" in filename or "\\" in filename:
         return "Filename must not contain path separators."
-    return True
-
-
-def _normalize_sharepoint_folder_path(value: str) -> str:
-    segments: list[str] = []
-    for raw_segment in value.strip().strip("/").split("/"):
-        segment = raw_segment.strip()
-        if segment:
-            segments.append(segment)
-
-    if not segments:
-        return ""
-
-    first_segment = unquote(segments[0]).strip().casefold()
-    if first_segment in _SHAREPOINT_LIBRARY_PREFIXES:
-        segments = segments[1:]
-
-    return "/".join(segments)
-
-
-def _validate_sharepoint_folder_path(value: str) -> bool | str:
-    normalized = _normalize_sharepoint_folder_path(value)
-    if not normalized:
-        return "Enter a folder path under the site (example: HR/Restricted)."
-    if len(normalized) > 400:
-        return "Folder path must not exceed 400 characters."
     return True
 
 

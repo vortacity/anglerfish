@@ -14,13 +14,11 @@ from anglerfish.cli import deploy as deploy_mod
 from anglerfish.templates import find_template_by_name as _find_template_by_name
 from anglerfish.cli.prompts import (
     AuthPromptResult,
-    _normalize_sharepoint_folder_path,
     _parse_var_args,
     _prompt_auth_setup,
     _validate_email,
     _validate_file_path,
     _validate_non_empty,
-    _validate_sharepoint_folder_path,
     _validate_single_filename,
     _validate_subject,
     _validate_variable_value,
@@ -160,54 +158,6 @@ class TestValidateVariableValue:
 
     def test_max_length_500(self):
         assert _validate_variable_value("x" * 500) is True
-
-
-# ---------------------------------------------------------------------------
-# _validate_sharepoint_folder_path
-# ---------------------------------------------------------------------------
-
-
-class TestValidateSharepointFolderPath:
-    def test_valid(self):
-        assert _validate_sharepoint_folder_path("HR/Restricted") is True
-
-    def test_empty(self):
-        result = _validate_sharepoint_folder_path("")
-        assert isinstance(result, str)
-        assert "folder path" in result.lower()
-
-    def test_too_long(self):
-        result = _validate_sharepoint_folder_path("a" * 401)
-        assert isinstance(result, str)
-        assert "400" in result
-
-
-# ---------------------------------------------------------------------------
-# _normalize_sharepoint_folder_path
-# ---------------------------------------------------------------------------
-
-
-class TestNormalizeSharepointFolderPath:
-    def test_strips_shared_documents_prefix(self):
-        assert _normalize_sharepoint_folder_path("Shared Documents/HR/Restricted") == "HR/Restricted"
-
-    def test_strips_documents_prefix(self):
-        assert _normalize_sharepoint_folder_path("Documents/Finance") == "Finance"
-
-    def test_no_prefix(self):
-        assert _normalize_sharepoint_folder_path("HR/Restricted") == "HR/Restricted"
-
-    def test_empty(self):
-        assert _normalize_sharepoint_folder_path("") == ""
-
-    def test_whitespace(self):
-        assert _normalize_sharepoint_folder_path("   ") == ""
-
-    def test_case_insensitive_prefix(self):
-        assert _normalize_sharepoint_folder_path("shared documents/IT") == "IT"
-
-    def test_strips_leading_trailing_slashes(self):
-        assert _normalize_sharepoint_folder_path("/HR/Restricted/") == "HR/Restricted"
 
 
 # ---------------------------------------------------------------------------

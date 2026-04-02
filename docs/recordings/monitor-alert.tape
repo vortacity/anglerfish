@@ -19,7 +19,7 @@ Enter
 Sleep 1s
 Ctrl+L
 
-# Stream three simulated canary alerts (Outlook → SharePoint → OneDrive)
+# Stream three simulated Outlook demo alerts
 Type "anglerfish monitor --demo --count 3"
 Enter
 Sleep 10s
