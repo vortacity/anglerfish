@@ -43,51 +43,6 @@ from .prompts import (
     _validate_non_empty,
 )
 
-
-def _search_sharepoint_sites(graph: GraphClient, search_term: str) -> list[dict[str, str]]:
-    try:
-        response = graph.get("/sites", params={"search": search_term})
-    except GraphApiError as exc:
-        raise DeploymentError(f"SharePoint site discovery failed: {exc}") from exc
-
-    raw_sites = response.get("value", [])
-    if not isinstance(raw_sites, list):
-        return []
-
-    sites: list[dict[str, str]] = []
-    seen_ids: set[str] = set()
-    for raw in raw_sites:
-        if not isinstance(raw, dict):
-            continue
-
-        site_id = str(raw.get("id", "")).strip()
-        if not site_id or site_id in seen_ids:
-            continue
-        seen_ids.add(site_id)
-
-        display_name = str(raw.get("displayName", "")).strip()
-        short_name = str(raw.get("name", "")).strip()
-        web_url = str(raw.get("webUrl", "")).strip()
-        site_name = display_name or short_name or site_id
-
-        if web_url:
-            label = f"{site_name} ({web_url})"
-        elif short_name and short_name != site_name:
-            label = f"{site_name} ({short_name})"
-        else:
-            label = site_name
-
-        sites.append(
-            {
-                "id": site_id,
-                "name": site_name,
-                "label": label,
-            }
-        )
-
-    return sites
-
-
 def _print_cleanup_summary(console: Console, record: dict) -> None:
     canary_type = str(record.get("type", record.get("canary_type", ""))).strip().lower()
     rows: list[tuple[str, str]] = [("Canary type", canary_type)]
@@ -99,20 +54,6 @@ def _print_cleanup_summary(console: Console, record: dict) -> None:
             rows.append(("Folder ID", str(record.get("folder_id", ""))))
         else:
             rows.append(("Inbox message ID", str(record.get("inbox_message_id", ""))))
-    elif canary_type == "sharepoint":
-        rows.append(("Site ID", str(record.get("site_id", ""))))
-        rows.append(("Folder path", str(record.get("folder_path", ""))))
-        rows.append(("File", str(record.get("uploaded_files", ""))))
-        item_id = str(record.get("item_id", "")).strip()
-        if item_id:
-            rows.append(("Item ID", item_id))
-    elif canary_type == "onedrive":
-        rows.append(("Target user", str(record.get("target_user", ""))))
-        rows.append(("Folder path", str(record.get("folder_path", ""))))
-        rows.append(("File", str(record.get("uploaded_files", ""))))
-        item_id = str(record.get("item_id", "")).strip()
-        if item_id:
-            rows.append(("Item ID", item_id))
     _print_summary_table(console, rows)
 
 
@@ -207,8 +148,8 @@ def _run_cleanup(args: argparse.Namespace, console: Console) -> int:
         _step_rule(console, 1, total_steps, "Read Record")
         record = read_deployment_record(args.record)
         canary_type = str(record.get("type", record.get("canary_type", ""))).strip().lower()
-        if canary_type not in ("outlook", "sharepoint", "onedrive"):
-            raise DeploymentError(f"Unknown canary type in record: '{canary_type}'.")
+        if canary_type != "outlook":
+            raise DeploymentError("Only outlook canaries are supported in this release.")
         _print_cleanup_summary(console, record)
 
         if demo:
@@ -235,12 +176,7 @@ def _run_cleanup(args: argparse.Namespace, console: Console) -> int:
                 console.print("[yellow]Cancelled.[/yellow]")
                 return 0
 
-        if canary_type == "outlook":
-            result = outlook_remove_canary(graph, record)
-        elif canary_type == "onedrive":
-            raise DeploymentError("OneDrive cleanup is no longer supported.")
-        else:
-            raise DeploymentError("SharePoint cleanup is no longer supported.")
+        result = outlook_remove_canary(graph, record)
 
         _print_cleanup_success(console, result)
         try:
@@ -255,17 +191,6 @@ def _run_cleanup(args: argparse.Namespace, console: Console) -> int:
     except KeyboardInterrupt:
         console.print("\n[yellow]Cancelled.[/yellow]")
         return 130
-
-
-def _run_sharepoint_deploy(
-    args: argparse.Namespace,
-    console: Console,
-    template: OutlookTemplate,
-    non_interactive: bool,
-    total_steps: int,
-    cli_var_values: dict[str, str],
-) -> int:
-    raise DeploymentError("SharePoint deployment is no longer supported.")
 
 
 def _run_outlook_deploy(
@@ -413,17 +338,6 @@ def _run_demo_deploy(
     _print_success(console, {"status": "deployed (demo)", "canary_type": canary_type, "template": template.name})
     console.print("[bold yellow]Demo mode \u2014 no authentication or Graph API calls were made.[/bold yellow]")
     return 0
-
-
-def _run_onedrive_deploy(
-    args: argparse.Namespace,
-    console: Console,
-    template: OutlookTemplate,
-    non_interactive: bool,
-    total_steps: int,
-    cli_var_values: dict[str, str],
-) -> int:
-    raise DeploymentError("OneDrive deployment is no longer supported.")
 
 
 def _run_verify(args: argparse.Namespace, console: Console) -> int:

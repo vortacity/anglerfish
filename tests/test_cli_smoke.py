@@ -63,7 +63,7 @@ def test_main_non_interactive_requires_template_for_outlook():
     )
 
 
-def test_main_outlook_flow_deploys(monkeypatch):
+def test_main_outlook_flow_still_deploys(monkeypatch):
     monkeypatch.setenv("ANGLERFISH_CLIENT_ID", "client-id")
     monkeypatch.setattr(deploy_mod, "_prompt_auth_setup", lambda *args, **kwargs: "")
     monkeypatch.setattr(deploy_mod, "_print_auth_success", lambda *args, **kwargs: None)
