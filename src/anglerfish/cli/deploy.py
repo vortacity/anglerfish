@@ -14,6 +14,8 @@ from rich.panel import Panel
 from rich.table import Table
 
 from ..auth import authenticate
+from ..deployers.outlook import OutlookDeployer
+from ..deployers.outlook import remove_canary as outlook_remove_canary
 from ..exceptions import (
     AnglerfishError,
     AuthenticationError,
@@ -40,15 +42,6 @@ from .prompts import (
     _validate_email,
     _validate_non_empty,
 )
-
-try:
-    from ..deployers.outlook import OutlookDeployer
-    from ..deployers.outlook import remove_canary as outlook_remove_canary
-except ImportError:
-    OutlookDeployer = None
-
-    def outlook_remove_canary(graph, record: dict[str, str]) -> dict[str, str]:
-        raise DeploymentError("Outlook cleanup is unavailable in this build.")
 
 
 def _search_sharepoint_sites(graph: GraphClient, search_term: str) -> list[dict[str, str]]:
@@ -379,9 +372,6 @@ def _run_outlook_deploy(
 
     # Step 4: Deploy
     _step_rule(console, 4, total_steps, "Deploy")
-
-    if OutlookDeployer is None:
-        raise DeploymentError("Outlook deployer is unavailable in this build.")
 
     deployer = OutlookDeployer(graph, template)
     with console.status("[bold green]Deploying canary..."):

@@ -307,3 +307,25 @@ def test_verify_demo_exits_one():
     )
     assert result.returncode == 1
     assert "Canary Verification" in result.stdout or "GONE" in result.stdout
+
+
+def test_deploy_module_keeps_outlook_deployer_available():
+    assert deploy_mod.OutlookDeployer is not None
+
+
+def test_verify_demo_runs_with_src_pythonpath():
+    import os
+    import subprocess
+
+    env = os.environ.copy()
+    env["PYTHONPATH"] = "src"
+    result = subprocess.run(
+        ["/home/odie/code/deploy/.venv/bin/python", "-m", "anglerfish", "verify", "--demo"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env=env,
+        cwd="/home/odie/code/deploy/.worktrees/anglerfish-outlook-mvp-reset",
+    )
+    assert result.returncode == 1
+    assert "Canary Verification" in result.stdout or "GONE" in result.stdout

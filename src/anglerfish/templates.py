@@ -15,7 +15,7 @@ from .exceptions import TemplateError
 from .models import OutlookTemplate
 
 _PACKAGE_PATH_PREFIX = "pkg://"
-_SUPPORTED_TEMPLATE_TYPES = ("outlook",)
+_SUPPORTED_TEMPLATE_TYPES = (TEMPLATE_KIND_OUTLOOK,)
 _REQUIRED_OUTLOOK_FIELDS = (
     "name",
     "description",
