@@ -419,6 +419,17 @@ def _run_verify(args: argparse.Namespace, console: Console) -> int:
                 )
                 continue
 
+            folder_id = str(record.get("folder_id", ""))
+            if not target_user or not folder_id:
+                ordered_results[index] = VerifyResult(
+                    canary_type="outlook",
+                    template_name=template_name,
+                    target=target_user,
+                    status=VerifyStatus.ERROR,
+                    detail="Record missing target_user or folder_id",
+                )
+                continue
+
             pending_graph_checks.append((index, record_item))
 
         if pending_graph_checks:

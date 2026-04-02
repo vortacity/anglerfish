@@ -386,6 +386,45 @@ def test_verify_unsupported_record_returns_error_without_auth(monkeypatch):
     assert auth_calls == []
 
 
+def test_verify_malformed_draft_record_returns_error_without_auth(monkeypatch):
+    monkeypatch.setattr(
+        deploy_mod,
+        "read_deployment_record",
+        lambda _path: {
+            "canary_type": "outlook",
+            "delivery_mode": "draft",
+            "target_user": "alice@contoso.com",
+            "template_name": "Fake Password Reset",
+            # Missing folder_id
+        },
+    )
+    auth_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+    auth_setup_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def _fake_authenticate(*args, **kwargs):
+        auth_calls.append((args, kwargs))
+        return "token-123"
+
+    def _fake_prompt_auth_setup(*args, **kwargs):
+        auth_setup_calls.append((args, kwargs))
+        return ""
+
+    monkeypatch.setattr(deploy_mod, "_prompt_auth_setup", _fake_prompt_auth_setup)
+    monkeypatch.setattr(deploy_mod, "authenticate", _fake_authenticate)
+    monkeypatch.setattr(auth_mod, "authenticate", _fake_authenticate)
+    monkeypatch.setattr(
+        deploy_mod,
+        "GraphClient",
+        lambda _token: object(),
+    )
+
+    result = main(["verify", "record.json"])
+
+    assert result == 1
+    assert auth_setup_calls == []
+    assert auth_calls == []
+
+
 def test_deploy_module_keeps_outlook_deployer_available():
     assert deploy_mod.OutlookDeployer is not None
 
