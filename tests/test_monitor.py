@@ -270,6 +270,7 @@ def test_run_monitor_once_with_state_and_dispatcher(tmp_path):
     )
 
     assert rc == 0
+    client.ensure_subscriptions.assert_called_once_with(["Audit.Exchange"])
 
     # State was persisted.
     assert state_path.is_file()

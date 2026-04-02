@@ -17,8 +17,8 @@ _MAX_WINDOW_HOURS = 24
 _TIME_FORMAT = "%Y-%m-%dT%H:%M:%S"
 _MANAGEMENT_API_URL_PREFIX = "https://manage.office.com/"
 
-# Content types relevant to canary monitoring.
-CONTENT_TYPES = ("Audit.Exchange", "Audit.SharePoint", "Audit.General")
+# Outlook-only content feed for canary monitoring.
+CONTENT_TYPES = ("Audit.Exchange",)
 
 
 class AuditClient:

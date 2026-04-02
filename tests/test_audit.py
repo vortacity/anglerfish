@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 import requests
 
-from anglerfish.audit import AuditClient, _compute_backoff, _parse_retry_after
+from anglerfish.audit import CONTENT_TYPES, AuditClient, _compute_backoff, _parse_retry_after
 from anglerfish.exceptions import AuditApiError
 
 
@@ -47,6 +47,10 @@ def _client(session: MagicMock, **kwargs) -> AuditClient:
 # ------------------------------------------------------------------
 # ensure_subscriptions
 # ------------------------------------------------------------------
+
+
+def test_content_types_outlook_only():
+    assert CONTENT_TYPES == ("Audit.Exchange",)
 
 
 def test_ensure_subscriptions_starts_missing_types():
