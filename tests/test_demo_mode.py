@@ -31,13 +31,10 @@ def test_demo_list_shows_fixture_records():
     assert result == 0
 
 
-def test_demo_list_shows_outlook_sharepoint_and_onedrive_fixtures():
-    """Verify the fixture directory contains the expected files."""
+def test_demo_list_only_shows_outlook_fixture_records():
+    """Verify the fixture directory contains only the supported Outlook fixtures."""
     files = sorted(EXAMPLES_DIR.glob("*.json"))
-    names = [f.name for f in files]
-    assert "outlook-draft-record.json" in names
-    assert "sharepoint-upload-record.json" in names
-    assert "onedrive-upload-record.json" in names
+    assert [f.name for f in files] == ["outlook-draft-record.json", "outlook-send-record.json"]
 
 
 def test_demo_list_fixture_records_are_valid():
@@ -46,7 +43,7 @@ def test_demo_list_fixture_records_are_valid():
         data = json.loads(path.read_text(encoding="utf-8"))
         assert "timestamp" in data, f"{path.name} missing 'timestamp'"
         assert "canary_type" in data, f"{path.name} missing 'canary_type'"
-        assert data["canary_type"] in ("outlook", "sharepoint", "onedrive")
+        assert data["canary_type"] == "outlook"
         assert data["status"] == "active"
 
 
@@ -60,18 +57,11 @@ def test_demo_cleanup_skips_auth_and_api_calls():
     assert result == 0
 
 
-def test_demo_cleanup_rejects_removed_sharepoint_record():
-    """--demo cleanup rejects SharePoint records in outlook-only mode."""
-    record_path = EXAMPLES_DIR / "sharepoint-upload-record.json"
+def test_demo_cleanup_send_record_skips_auth_and_api_calls():
+    """--demo cleanup supports send-mode Outlook records without auth or Graph calls."""
+    record_path = EXAMPLES_DIR / "outlook-send-record.json"
     result = main(["--demo", "cleanup", "--non-interactive", str(record_path)])
-    assert result == 1
-
-
-def test_demo_cleanup_rejects_removed_onedrive_record():
-    """--demo cleanup rejects OneDrive records in outlook-only mode."""
-    record_path = EXAMPLES_DIR / "onedrive-upload-record.json"
-    result = main(["--demo", "cleanup", "--non-interactive", str(record_path)])
-    assert result == 1
+    assert result == 0
 
 
 def test_demo_cleanup_rejects_unknown_type():

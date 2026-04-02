@@ -5,19 +5,15 @@
 
 [![CI](https://github.com/vortacity/anglerfish/actions/workflows/ci.yml/badge.svg)](https://github.com/vortacity/anglerfish/actions/workflows/ci.yml)
 
-Deploy M365 canary tokens and detect unauthorized access: no callback URLs, no DNS beacons, no external infrastructure.
+Deploy Outlook canaries and detect Outlook access events in Microsoft 365.
 
-Anglerfish is a Python CLI that provisions deceptive artifacts (Outlook emails, SharePoint documents, OneDrive files) in Microsoft 365 tenants via the Graph API. When an attacker accesses a canary token, the M365 Unified Audit Log generates an event (`MailItemsAccessed`, `FileAccessed`, `FileDownloaded`) that your SIEM can alert on. Detection is entirely access-based; the canary never phones home.
+Anglerfish is a Python CLI for planting deceptive Outlook messages with Microsoft Graph and detecting `MailItemsAccessed` events from the Microsoft 365 Unified Audit Log. It supports hidden-folder draft canaries, inbox send canaries, local deployment records, health checks for draft deployments, and access monitoring without external callback infrastructure.
 
 ## Demo
 
 **Interactive deployment** (`anglerfish`):
 
 ![Interactive deployment](docs/images/interactive-deploy.gif)
-
-**Live dashboard** (`anglerfish dashboard`):
-
-![Dashboard TUI](docs/images/dashboard.gif)
 
 **Alert detection** (`anglerfish monitor`):
 
@@ -26,527 +22,226 @@ Anglerfish is a Python CLI that provisions deceptive artifacts (Outlook emails, 
 ## Documentation
 
 - [Demo tenant setup guide](docs/demo-tenant-setup.md)
-- [Threat model](docs/threat-model.md)
 - [Architecture notes](docs/architecture.md)
-
-## Maintainer
-
-Maintained by [`@vortacity`](https://github.com/vortacity). Open usage bugs and feature requests in [GitHub Issues](https://github.com/vortacity/anglerfish/issues). Report sensitive problems through the [private security advisory form](https://github.com/vortacity/anglerfish/security/advisories/new).
+- [Threat model](docs/threat-model.md)
 
 > [!WARNING]
-> **This tool is intended for security research, authorized testing, and defensive canary deployments only.**
-> Always validate and test thoroughly in a non-production environment before deploying to any production tenant. Deploying untested canaries in production can result in unintended access events, alert fatigue, and artifacts that are difficult to clean up. See the [Legal Authorization Requirement](#legal-authorization-requirement) section before proceeding.
+> This tool is for authorized security testing and defensive canary deployments only. Use a non-production tenant unless your organization has explicitly approved the permissions and mailbox scope involved.
 
 ## How It Works
 
 ```text
-1. Deploy     anglerfish → Graph API → canary artifact lands in M365
-2. Trigger    attacker reads email / opens file → UAL audit event fires
-3. Alert      anglerfish monitor polls UAL → matches deployment records → alert
+1. Deploy     anglerfish -> Microsoft Graph -> Outlook draft or inbox canary
+2. Access     mailbox activity -> Microsoft 365 Unified Audit Log -> MailItemsAccessed
+3. Detect     anglerfish monitor -> correlates audit event to deployment record -> alert
 ```
 
-No external infrastructure required.
+Anglerfish is intentionally narrow in this release: Outlook only, application authentication only, and one primary workflow built around deploy, list, verify, cleanup, and monitor.
 
-Most canary techniques rely on outbound callbacks — HTTP beacons, DNS lookups, or URL tokens — that require operator-controlled external infrastructure. Anglerfish takes a different approach: canaries are standard M365 objects (mail drafts, SharePoint files, OneDrive files), and detection relies entirely on Microsoft's own Unified Audit Log pipeline. There is no external endpoint to maintain, no firewall exception to request, and no phoning home. The signal is already in your SIEM.
+## Supported Surface
 
-## Why This Is Different
+| Command | Purpose |
+| --- | --- |
+| `anglerfish` | Interactive Outlook canary deploy |
+| `anglerfish list` | List deployment records |
+| `anglerfish verify` | Check active draft-mode Outlook canaries |
+| `anglerfish cleanup <record>` | Remove a deployed Outlook canary |
+| `anglerfish monitor` | Poll for Outlook access alerts |
 
-Anglerfish is not trying to replace every callback-based canary workflow. It is built for defenders who want M365-native canaries that fit directly into the Microsoft audit and SIEM pipeline they already operate.
-
-| Capability | Anglerfish | Callback-based canaries (for example Canarytokens / Thinkst-style tokens) |
-|---|---|---|
-| Detection path | Microsoft 365 Unified Audit Log events correlated to deployment records | Outbound HTTP, DNS, or URL callback to operator-controlled infrastructure |
-| Infrastructure required | Microsoft 365 tenant, Graph API app registration, existing SIEM or hunt workflow | External listener, hosted token service, or operator-managed callback endpoint |
-| Target surface | Native M365 artifacts: Outlook drafts, SharePoint files, OneDrive files | Broad internet-visible lures such as documents, links, web bugs, URLs, or files |
-| Operational fit | Best when defenders already investigate in UAL, Sentinel, or another M365-aware SIEM | Best when teams want immediate callback visibility across a wider set of lure types |
-| Firewall / egress dependency | No outbound beacon required from the canary itself | Detection depends on the callback reaching the operator-controlled endpoint |
-
-Many teams can use both approaches together. The point of Anglerfish is that it covers the Microsoft 365 access path without adding another external detection service to operate.
-
-## What Detection Looks Like
-
-When an attacker accesses a canary, the M365 Unified Audit Log generates an event. Anglerfish's built-in `monitor` polls the Management Activity API, matches events against your deployment records, and fires alerts (console, Slack, JSONL log):
-
-```bash
-anglerfish monitor --records-dir ~/.anglerfish/records
-```
-
-The underlying UAL event looks like this:
-
-```json
-{
-  "Operation": "MailItemsAccessed",
-  "UserId": "attacker@contoso.com",
-  "ClientIPAddress": "203.0.113.42",
-  "InternetMessageId": "<artifact-id-from-deployment-record>",
-  "ResultStatus": "Succeeded"
-}
-```
-
-You can also query these events directly from your SIEM. **Microsoft Sentinel KQL** example:
-
-```kql
-OfficeActivity
-| where Operation in ("MailItemsAccessed", "FileAccessed", "FileDownloaded")
-| where OfficeObjectId in (canary_ids)  // artifact IDs from --output-json records
-| project TimeGenerated, UserId, ClientIPAddress, Operation, OfficeObjectId
-```
-
-Replace `canary_ids` with the artifact IDs from your `--output-json` deployment records.
-
-## Attack Scenarios
-
-| Threat scenario | Canary type | Detection event |
-|---|---|---|
-| Attacker reads mail in a compromised executive mailbox | Outlook draft | `MailItemsAccessed` |
-| Insider threat browses a restricted HR document library | SharePoint | `FileAccessed` |
-| Credential-stuffing actor enumerates a personal OneDrive | OneDrive | `FileAccessed`, `FileDownloaded` |
+Notes:
+- `draft` is the default and best-supported operator path.
+- `send` is supported for deploy, cleanup, list, and monitor.
+- `verify` is draft-only because send-mode records do not keep a hidden folder to inspect.
 
 ## Quickstart
 
 ```bash
-# 1. Clone and install
 git clone https://github.com/vortacity/anglerfish.git
 cd anglerfish
-pip install -e .
-
-# 2. Configure — export variables directly, or copy .env.example to .env,
-#    edit it, then load it yourself with: set -a; source .env; set +a
-export ANGLERFISH_TENANT_ID="..."
-export ANGLERFISH_CLIENT_ID="..."
-export ANGLERFISH_CLIENT_SECRET="..."
-
-# 3. Try it offline — no tenant required
-anglerfish --demo
-```
-
-For a full Azure AD app registration walkthrough, see [Demo Tenant Setup Guide](docs/demo-tenant-setup.md).
-
-## Supported Canary Types
-
-| Type | Delivery | Auth | Detection event |
-|------|----------|------|-----------------|
-| Outlook | Draft in hidden folder, or send to Inbox | Application | `MailItemsAccessed` |
-| SharePoint | File upload to an existing site folder | Application | `FileAccessed`, `FileDownloaded` |
-| OneDrive | File upload to personal OneDrive for Business | Application | `FileAccessed`, `FileDownloaded` |
-
-## Installation
-
-### Prerequisites
-
-- Python 3.10+
-- Microsoft 365 tenant with E3/E5 (or equivalent with audit logging enabled)
-- Azure AD (Entra ID) app registration with appropriate Graph API permissions
-
-### Scripted Install (quickstart.sh)
-
-```bash
-bash scripts/quickstart.sh
-```
-
-### Manual Install
-
-```bash
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-pip install -e .         # end-user install
-pip install -e ".[dev]"  # contributor install (adds pytest, ruff, bandit)
+pip install -e .
 ```
 
-### Azure AD App Registration
-
-See [Demo Tenant Setup Guide](docs/demo-tenant-setup.md) for step-by-step instructions including app registration, permission grants, and admin consent.
-
-### Required Graph Permissions
-
-| Canary type | Permission | Type |
-|-------------|-----------|------|
-| Outlook (draft) | `Mail.ReadWrite` | Application |
-| Outlook (send) | `Mail.ReadWrite`, `Mail.Send` | Application |
-| SharePoint | `Sites.ReadWrite.All`, `Files.ReadWrite.All` | Application |
-| OneDrive | `Files.ReadWrite.All` | Application |
-| Monitor | `ActivityFeed.Read` | Application (Office 365 Management APIs) |
-
-### Environment Variables
-
-Anglerfish reads configuration from the process environment. It does not auto-load a `.env` file, so either export these variables directly or source a file such as `.env` yourself before running the CLI.
+Anglerfish reads credentials from the process environment. It does not auto-load `.env`, so export values directly or source a file yourself before running commands.
 
 ```bash
-export ANGLERFISH_CLIENT_ID="<your-application-client-id>"
-export ANGLERFISH_TENANT_ID="<your-tenant-id-guid>"
+export ANGLERFISH_TENANT_ID="..."
+export ANGLERFISH_CLIENT_ID="..."
 export ANGLERFISH_APP_CREDENTIAL_MODE="secret"
-export ANGLERFISH_CLIENT_SECRET="<your-client-secret>"
+export ANGLERFISH_CLIENT_SECRET="..."
 ```
 
-Certificate mode is also supported (`ANGLERFISH_APP_CREDENTIAL_MODE=certificate`). See `.env.example` for a full example file you can adapt and source manually.
-
-### Verify Installation
+Dry-run the default Outlook workflow:
 
 ```bash
-anglerfish --version
-anglerfish --dry-run --non-interactive --canary-type outlook \
-  --template "Fake Password Reset" --target test@example.com --delivery-mode draft
+anglerfish --dry-run --non-interactive \
+  --canary-type outlook \
+  --template "Fake Password Reset" \
+  --target adele.vance@contoso.com \
+  --delivery-mode draft
 ```
 
----
+Deploy a real canary and write a local record:
+
+```bash
+anglerfish --non-interactive \
+  --canary-type outlook \
+  --template "Fake Password Reset" \
+  --target adele.vance@contoso.com \
+  --delivery-mode draft \
+  --output-json ~/.anglerfish/records/adele-password-reset.json
+```
+
+Try the product offline:
+
+```bash
+anglerfish --demo
+anglerfish monitor --demo --count 2
+```
+
+For a complete Entra app registration walkthrough, see [Demo tenant setup guide](docs/demo-tenant-setup.md).
+
+## Authentication
+
+Application authentication is the only supported auth model in this release.
+
+Credential selection:
+- `--credential-mode secret` or `ANGLERFISH_APP_CREDENTIAL_MODE=secret`
+- `--credential-mode certificate` or `ANGLERFISH_APP_CREDENTIAL_MODE=certificate`
+- `auto` is also accepted and chooses whichever single credential type is configured
+
+Secret mode:
+
+```bash
+export ANGLERFISH_TENANT_ID="<tenant-guid>"
+export ANGLERFISH_CLIENT_ID="<app-client-id>"
+export ANGLERFISH_APP_CREDENTIAL_MODE="secret"
+export ANGLERFISH_CLIENT_SECRET="<client-secret>"
+```
+
+Certificate mode:
+
+```bash
+export ANGLERFISH_TENANT_ID="<tenant-guid>"
+export ANGLERFISH_CLIENT_ID="<app-client-id>"
+export ANGLERFISH_APP_CREDENTIAL_MODE="certificate"
+export ANGLERFISH_CLIENT_CERT_PFX_PATH="/path/to/app-cert.pfx"
+export ANGLERFISH_CLIENT_CERT_PASSPHRASE="<optional-passphrase>"
+```
+
+PEM certificate configuration is also supported. See `.env.example` for the full variable set.
+
+## Required Permissions
+
+| Workflow | Permission | API |
+| --- | --- | --- |
+| Draft deploy, cleanup, verify | `Mail.ReadWrite` | Microsoft Graph |
+| Send deploy | `Mail.ReadWrite`, `Mail.Send` | Microsoft Graph |
+| Monitor | `ActivityFeed.Read` | Office 365 Management Activity API |
+
+Grant admin consent after adding the permissions. `Mail.ReadWrite` is tenant-wide mailbox access, so do not grant it casually in production.
+
+## Templates
+
+Bundled Outlook templates:
+
+- `Fake Password Reset`
+- `Fake Wire Transfer`
+- `IT Compliance Audit`
+- `Payroll Direct Deposit Update`
+
+Custom Outlook YAML templates are supported through `ANGLERFISH_TEMPLATES_DIR`:
+
+```bash
+export ANGLERFISH_TEMPLATES_DIR="$PWD/custom-templates"
+anglerfish --non-interactive \
+  --canary-type outlook \
+  --template "Fake Password Reset" \
+  --target adele.vance@contoso.com \
+  --delivery-mode draft \
+  --var company_name="Contoso"
+```
+
+`--template` names are case-insensitive. Repeat `--var KEY=VALUE` to fill template variables.
 
 ## Usage
 
-### Interactive Deployment
+Interactive deploy:
 
 ```bash
 anglerfish
 ```
 
-The CLI walks through canary type selection, template choice, target configuration, and confirmation before deploying.
-
-### Non-Interactive / Scripted Deployment
+Non-interactive draft deploy:
 
 ```bash
-anglerfish \
-  --non-interactive \
+anglerfish --non-interactive \
+  --canary-type outlook \
+  --template "Fake Password Reset" \
+  --target adele.vance@contoso.com \
+  --delivery-mode draft \
+  --output-json ~/.anglerfish/records/adele-draft.json
+```
+
+Non-interactive send deploy:
+
+```bash
+anglerfish --non-interactive \
   --canary-type outlook \
   --template "Fake Wire Transfer" \
-  --target victim@contoso.com \
-  --delivery-mode draft \
-  --output-json ./deployment-record.json
-
-anglerfish \
-  --non-interactive \
-  --canary-type sharepoint \
-  --template "Employee Salary Bands" \
-  --target HRSite \
-  --folder-path "Compensation/Restricted" \
-  --filename "2026_Salary_Bands_Engineering.txt" \
-  --output-json ./deployment-record.json
-
-anglerfish \
-  --non-interactive \
-  --canary-type onedrive \
-  --template "VPN Credentials Backup" \
-  --target j.smith@contoso.com \
-  --folder-path "IT/Backups" \
-  --filename "VPN_Config_GlobalProtect_Backup.txt" \
-  --output-json ./deployment-record.json
+  --target adele.vance@contoso.com \
+  --delivery-mode send \
+  --output-json ~/.anglerfish/records/adele-send.json
 ```
 
-### Batch Deployment
-
-Deploy multiple canaries from a YAML manifest:
+List records:
 
 ```bash
-anglerfish batch manifest.yaml --output-dir ./records/
-```
-
-Manifest format:
-
-```yaml
-defaults:
-  vars:
-    company_name: "Contoso Ltd"
-
-canaries:
-  - canary_type: outlook
-    template: "Fake Password Reset"
-    target: cfo@contoso.com
-    delivery_mode: draft
-    vars:
-      target_name: "Jane Chen"
-
-  - canary_type: sharepoint
-    template: "Employee Salary Bands"
-    target: HRSite
-    folder_path: "Compensation/Restricted"
-    filename: "2026_Salary_Bands_Engineering.txt"
-
-  - canary_type: onedrive
-    template: "VPN Credentials Backup"
-    target: j.smith@contoso.com
-    folder_path: "IT/Backups"
-    filename: "VPN_Config_GlobalProtect_Backup.txt"
-```
-
-Authenticates once, deploys all entries sequentially, writes one deployment record per canary to `--output-dir`. Failures are logged and skipped; remaining canaries still deploy.
-
-Dry run: `anglerfish batch manifest.yaml --dry-run`
-
-Demo: `anglerfish batch manifest.yaml --demo`
-
-### Dry Run
-
-Validate configuration and authenticate without performing any writes:
-
-```bash
-anglerfish \
-  --non-interactive \
-  --dry-run \
-  --canary-type sharepoint \
-  --template "Employee Salary Bands" \
-  --target HRSite \
-  --folder-path "Compensation/Restricted" \
-  --filename "2026_Salary_Bands_Engineering.txt"
-```
-
-### Listing Deployments
-
-```bash
-anglerfish list
 anglerfish list --records-dir ~/.anglerfish/records
 ```
 
-### Cleanup / Rollback
-
-Use the deployment record from `--output-json`:
+Verify draft-mode records:
 
 ```bash
-anglerfish cleanup ./deployment-record.json
+anglerfish verify --records-dir ~/.anglerfish/records
+anglerfish verify ~/.anglerfish/records/adele-draft.json
 ```
 
-Non-interactive cleanup:
+Cleanup:
 
 ```bash
-anglerfish cleanup --non-interactive ./deployment-record.json
+anglerfish cleanup --non-interactive ~/.anglerfish/records/adele-draft.json
+anglerfish cleanup --non-interactive ~/.anglerfish/records/adele-send.json
 ```
 
-Deletion behavior:
-
-| Canary type | Deletion endpoint | Result |
-|-------------|-------------------|--------|
-| Outlook draft | `DELETE /users/{upn}/mailFolders/{folder_id}` | Permanent (folder + draft message) |
-| Outlook send | `DELETE /users/{upn}/mailFolders/inbox/messages/{id}` | Moves to Deleted Items |
-| SharePoint | `DELETE /sites/{site_id}/drive/items/{item_id}` | Recycle bin behavior |
-| OneDrive | `DELETE /users/{upn}/drive/items/{item_id}` | Recycle bin behavior |
-
-### Demo Mode (Offline)
-
-Run the CLI without a live M365 tenant, useful for conference demos or local testing:
+Monitor for access:
 
 ```bash
-# List pre-staged fixture records (list reads local files — no auth needed)
-anglerfish list --records-dir examples/demo-records/
-
-# Simulated interactive deployment (no auth, no writes)
-anglerfish --demo
-
-# Simulated cleanup
-anglerfish --demo cleanup examples/demo-records/outlook-draft-record.json
-
-# Simulated monitoring alert
-anglerfish monitor --demo
-
-# Dashboard with simulated data
-anglerfish dashboard --demo
-
-```
-
-### Monitoring
-
-Poll the Office 365 Management Activity API for canary access events:
-
-```bash
-# Continuous monitoring (polls every 5 minutes)
 anglerfish monitor --records-dir ~/.anglerfish/records
-
-# Single poll
-anglerfish monitor --records-dir ~/.anglerfish/records --once
-
-# Custom interval, exclude your own app ID
+anglerfish monitor --once --records-dir ~/.anglerfish/records
 anglerfish monitor --records-dir ~/.anglerfish/records \
-  --interval 60 \
-  --exclude-app-id "your-app-client-id"
-
-# With Slack alerting
-anglerfish monitor --records-dir ~/.anglerfish/records \
-  --slack-webhook-url https://hooks.slack.com/services/T.../B.../xxx
+  --alert-log ~/.anglerfish/alerts.jsonl \
+  --slack-webhook-url https://hooks.slack.com/services/...
 ```
 
-### Canary Health Check
-
-Verify that deployed canaries still exist:
+Demo mode:
 
 ```bash
-# Check a single record
-anglerfish verify ./deployment-record.json
-
-# Check all records in default directory
-anglerfish verify
-
-# Check all records in a specific directory
-anglerfish verify --records-dir ~/.anglerfish/records/
-
-# Demo mode (simulated output)
+anglerfish list --records-dir examples/demo-records
+anglerfish cleanup --demo --non-interactive examples/demo-records/outlook-draft-record.json
+anglerfish cleanup --demo --non-interactive examples/demo-records/outlook-send-record.json
 anglerfish verify --demo
+anglerfish monitor --demo --count 2
 ```
 
-Exit code 0 if all canaries are OK, 1 if any are GONE or ERROR.
-
-### Dashboard (Live TUI)
-
-Full-screen terminal dashboard showing canary status, live alert feed, and summary stats:
+## CLI Help
 
 ```bash
-# Demo mode (simulated data, no auth required)
-anglerfish dashboard --demo
-
-# Live mode with default intervals (polls every 5 minutes)
-anglerfish dashboard --records-dir ~/.anglerfish/records
-
-# Custom intervals and alert log
-anglerfish dashboard \
-  --records-dir ~/.anglerfish/records \
-  --poll-interval 60 \
-  --verify-interval 120 \
-  --alert-log ./alerts.jsonl \
-  --exclude-app-id "your-app-client-id"
+anglerfish --help
+anglerfish verify --help
+anglerfish monitor --help
 ```
 
-Key bindings: **q** to quit, **r** to manual refresh.
-
-### Custom Templates
-
-Built-in templates are loaded from package data. Custom templates directory:
-
-```bash
-export ANGLERFISH_TEMPLATES_DIR="/absolute/path/to/templates"
-```
-
-Expected layout:
-
-```text
-<custom-dir>/
-├── outlook/
-│   └── *.yaml
-├── sharepoint/
-│   └── *.yaml
-└── onedrive/
-    └── *.yaml
-```
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for template schema documentation.
-
-## CLI Reference
-
-Each subcommand has its own `--help`: `anglerfish monitor --help`, `anglerfish batch --help`, etc.
-
-### Global Flags (deploy command)
-
-| Flag | Description |
-|------|-------------|
-| `--non-interactive` | Skip prompts |
-| `--canary-type` | `outlook`, `sharepoint`, or `onedrive` |
-| `--template` | Template name (case-insensitive) |
-| `--target` | Mailbox UPN/email (Outlook), site name (SharePoint), or UPN (OneDrive) |
-| `--delivery-mode` | `draft` or `send` (Outlook only) |
-| `--folder-path` | SharePoint or OneDrive destination folder path |
-| `--filename` | SharePoint or OneDrive filename |
-| `--var KEY=VALUE` | Template variable override (repeatable) |
-| `--dry-run` | Authenticate and validate without write calls |
-| `--output-json` | Write deployment record JSON |
-| `--demo` | Run in offline demo mode (no auth, no API calls) |
-| `--tenant-id` | Microsoft Entra tenant ID (overrides `ANGLERFISH_TENANT_ID`) |
-| `--client-id` | Microsoft Entra application (client) ID (overrides `ANGLERFISH_CLIENT_ID`) |
-| `--credential-mode` | Credential type: `auto`, `secret`, or `certificate` |
-| `-v, --verbose` | Enable debug logging for API calls and auth flow |
-
-### Subcommands
-
-| Command | Description |
-|---------|-------------|
-| `list` | List deployed canary artifacts |
-| `list --records-dir DIR` | Records directory (default: `~/.anglerfish/records`) |
-| `cleanup <record>` | Remove a deployed canary artifact using its deployment record |
-| `cleanup --non-interactive` | Skip confirmation prompt |
-| `monitor` | Poll audit logs for canary access events |
-| `monitor --records-dir DIR` | Directory of deployment records (default: `~/.anglerfish/records`) |
-| `monitor --once` | Poll once and exit |
-| `monitor --interval N` | Poll interval in seconds (default: 300) |
-| `monitor --exclude-app-id ID` | Exclude app IDs from matching (repeatable) |
-| `monitor --slack-webhook-url URL` | Slack incoming webhook URL for alert notifications |
-| `monitor --alert-log PATH` | JSONL file to append alert records to |
-| `monitor --no-console` | Suppress Rich console output (daemon mode) |
-| `monitor --state-file PATH` | Persistent state file (default: `~/.anglerfish/monitor-state.json`) |
-| `monitor --demo` | Print a simulated alert and exit (no auth required) |
-| `batch <manifest>` | Deploy multiple canaries from a YAML manifest |
-| `batch --output-dir DIR` | Output directory for deployment records (default: `~/.anglerfish/records`) |
-| `batch --dry-run` | Validate manifest and authenticate without deploying |
-| `batch --demo` | Run with simulated data (no auth, no API calls) |
-| `verify [RECORD]` | Check deployed canaries still exist via Graph API |
-| `verify --records-dir DIR` | Directory of records to verify (default: `~/.anglerfish/records`) |
-| `verify --demo` | Show simulated verify output (no auth required) |
-| `dashboard` | Full-screen TUI with canary status, live alerts, and stats |
-| `dashboard --records-dir DIR` | Directory of deployment records (default: `~/.anglerfish/records`) |
-| `dashboard --demo` | Run with simulated data (no auth required) |
-| `dashboard --poll-interval N` | Audit log poll interval in seconds (default: 300) |
-| `dashboard --verify-interval N` | Health check refresh interval in seconds (default: 300) |
-| `dashboard --alert-log PATH` | JSONL alert log file (loads history on startup) |
-| `dashboard --exclude-app-id ID` | App/client IDs to exclude from matching (repeatable) |
-
-## Reliability Notes
-
-- Graph retries are side-effect-safe by default:
-  - `GET` and `DELETE` retry on transient network errors, `429`, and `5xx`.
-  - `POST` and `PUT` do not auto-retry unless explicitly marked safe in code.
-- Deployment record writes (`--output-json`) are atomic (temp file + replace) to reduce partial-write risk.
-- Deployment record reads require a JSON object with `timestamp` and `canary_type` (or legacy `type`).
-
-## Known Limitations
-
-- **UAL ingest latency (~15–60 min):** M365 Unified Audit Log events are typically available within 15–60 minutes of access. Anglerfish is not a real-time detection system. Configure your SIEM to query on a schedule.
-- **Deploying service account appears in audit logs:** The app registration used to deploy canaries may generate its own `MailItemsAccessed` or `FileAccessed` events. Filter these out using `--exclude-app-id` or by excluding the deploying principal's UPN in your SIEM query.
-- **Coverage is point-in-time:** Canaries cover specific artifacts deployed at a specific time. Rotate them periodically and after suspected compromise to maintain coverage.
-
-See [threat-model.md](docs/threat-model.md) for the full limitations and permissions reference.
-
-## Legal Authorization Requirement
-
-> [!CAUTION]
-> **Do not deploy canaries without explicit written authorization.**
->
-> Deploying canary artifacts in a Microsoft 365 tenant you do not own or administer without permission may violate computer fraud and unauthorized access laws in your jurisdiction. Before deploying Anglerfish in any environment:
->
-> - **Obtain written authorization** from the asset owner and the organization that owns the tenant. Verbal approval is not sufficient.
-> - **Consult your legal department.** Laws governing monitoring, deception, and access to computer systems vary by country, state, and industry. Your legal team must review and approve the deployment before you proceed.
-> - **Notify your security and compliance stakeholders.** SOC teams, privacy officers, and HR may have standing policies that govern this type of activity.
-> - **Never deploy in a tenant you do not have explicit authority over**, including client environments, partner tenants, or shared infrastructure, without a signed agreement and legal review.
->
-> This tool is intended for authorized security testing, red team operations, and defensive canary deployments by teams with proper authorization. Misuse is the sole responsibility of the operator.
-
-> [!WARNING]
-> **`Mail.ReadWrite` is an application-level permission that grants access to ALL mailboxes in the tenant.** Grant this permission only in dedicated security/canary tenants or after your organization's security team has reviewed and approved the scope. Use least-privilege: grant only the permissions required for the canary types you intend to deploy.
-
-## Safety Checklist
-
-- [ ] **Written authorization obtained from asset owner before deploying to production**
-- [ ] Legal department consulted and deployment approved
-- [ ] SOC / detection team notified of canary type, template, and target
-- [ ] App registration created with least-privilege permissions
-- [ ] `--output-json` path specified so the record is saved for later cleanup
-- [ ] Cleanup plan documented (who, when, `anglerfish cleanup <record>`)
-- [ ] Test in a non-production tenant first
-- [ ] Do not commit secrets, certs, or tokens
-
-See [threat-model.md](docs/threat-model.md) for the full deployment checklist and permissions reference.
-
-## Validation
-
-Run validation from a fully provisioned environment:
-
-- End-user install: `pip install -e .`
-- Contributor install: `pip install -e ".[dev]"`
-
-```bash
-.venv/bin/python -m pytest -q
-.venv/bin/ruff check src tests
-.venv/bin/ruff format --check src tests
-.venv/bin/bandit -r src -ll
-.venv/bin/pip-audit  # requires network access
-```
-
-## License
-
-MIT. See [LICENSE](LICENSE).
-
-## Changelog
-
-See [CHANGELOG.md](CHANGELOG.md).
+Those help screens are the source of truth for the current command surface. This release only supports Outlook deploy/detect workflows.

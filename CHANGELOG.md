@@ -9,7 +9,18 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Breaking
+
+- Reset the public MVP around Outlook canaries only. SharePoint deployment,
+  OneDrive deployment, batch manifests, and the dashboard are no longer part of
+  the supported surface area.
+
+### Changed
+
+- Rewrote the README, architecture notes, and demo tenant guide around the
+  supported Outlook deploy, list, verify, cleanup, and monitor workflow.
+- Demo fixtures now cover the two supported Outlook delivery modes: `draft` and
+  `send`.
 
 ---
 

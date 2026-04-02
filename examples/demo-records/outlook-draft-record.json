@@ -5,10 +5,11 @@
   "auth_mode": "application",
   "status": "active",
   "delivery_mode": "draft",
-  "target_user": "j.smith@contoso.com",
+  "target_user": "adele.vance@contoso.com",
   "folder_id": "AAMkADAwMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMAA_demo_folder",
   "message_id": "AAMkADAwMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMABG_demo_msg_001",
   "folder_name": "IT Security Notifications",
   "subject": "[ACTION REQUIRED] Password Expiry Notice",
-  "internet_message_id": "<canary-fake-password-reset-001@contoso.com>"
+  "internet_message_id": "<canary-fake-password-reset-001@contoso.com>",
+  "verified": "true"
 }

@@ -15,7 +15,7 @@ def test_render_demo_alert_default_count():
 
 
 def test_render_demo_alert_count_3():
-    """count=3 dispatches three alerts cycling through canary types."""
+    """count=3 dispatches three alerts while cycling draft/send demo alerts."""
     console = MagicMock()
     with patch("anglerfish.monitor.AlertDispatcher") as MockDispatcher:
         with patch("anglerfish.monitor.time") as mock_time:
