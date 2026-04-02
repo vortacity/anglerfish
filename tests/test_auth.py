@@ -45,37 +45,6 @@ class FakeConfidentialAppError(FakeConfidentialAppSuccess):
         return {"error": "invalid_client", "error_description": "client secret invalid"}
 
 
-class FakePublicAppSuccess:
-    last_scopes = None
-
-    def __init__(self, client_id, authority):
-        self.client_id = client_id
-        self.authority = authority
-
-    def initiate_device_flow(self, scopes):
-        FakePublicAppSuccess.last_scopes = scopes
-        return {
-            "user_code": "ABCD-1234",
-            "message": "To sign in, use a web browser to open https://microsoft.com/devicelogin.",
-        }
-
-    def acquire_token_by_device_flow(self, flow):
-        return {"access_token": "delegated-token-123"}
-
-
-class FakePublicAppError(FakePublicAppSuccess):
-    def acquire_token_by_device_flow(self, flow):
-        return {"error": "authorization_pending", "error_description": "waiting for user sign-in"}
-
-
-class FakeConsole:
-    def __init__(self):
-        self.messages: list[str] = []
-
-    def print(self, message):
-        self.messages.append(str(message))
-
-
 def test_authenticate_application_requires_client_id(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(auth, "CLIENT_ID", "")
     monkeypatch.setattr(auth, "TENANT_ID", "tenant-id")
@@ -143,95 +112,12 @@ def test_authenticate_application_error_raises(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_authenticate_invalid_mode_raises():
-    with pytest.raises(AuthenticationError, match="Supported values are 'application' and 'delegated'"):
+    with pytest.raises(AuthenticationError, match="application auth"):
         auth.authenticate(auth_mode="bad-mode")
 
 
-def test_authenticate_delegated_requires_client_id(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(auth, "CLIENT_ID", "")
-    monkeypatch.setattr(auth, "TENANT_ID", "tenant-id")
-
-    with pytest.raises(AuthenticationError, match="ANGLERFISH_CLIENT_ID"):
-        auth.authenticate(auth_mode="delegated")
-
-
-def test_authenticate_delegated_requires_tenant_id(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(auth, "CLIENT_ID", "client-id")
-    monkeypatch.setattr(auth, "TENANT_ID", "")
-
-    with pytest.raises(AuthenticationError, match="ANGLERFISH_TENANT_ID"):
-        auth.authenticate(auth_mode="delegated")
-
-
-def test_authenticate_delegated_success(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(auth, "CLIENT_ID", "client-id")
-    monkeypatch.setattr(auth, "TENANT_ID", "tenant-id")
-    monkeypatch.setattr(auth, "GRAPH_DELEGATED_SCOPES", "")
-    monkeypatch.setattr(auth.msal, "PublicClientApplication", FakePublicAppSuccess)
-
-    token = auth.authenticate(auth_mode="delegated")
-
-    assert token == "delegated-token-123"
-    assert FakePublicAppSuccess.last_scopes
-    assert "openid" not in FakePublicAppSuccess.last_scopes
-    assert "profile" not in FakePublicAppSuccess.last_scopes
-    assert "offline_access" not in FakePublicAppSuccess.last_scopes
-
-
-def test_authenticate_delegated_prints_device_flow_message(monkeypatch: pytest.MonkeyPatch):
-    fake_console = FakeConsole()
-    monkeypatch.setattr(auth, "CLIENT_ID", "client-id")
-    monkeypatch.setattr(auth, "TENANT_ID", "tenant-id")
-    monkeypatch.setattr(auth, "GRAPH_DELEGATED_SCOPES", "")
-    monkeypatch.setattr(auth, "console", fake_console)
-    monkeypatch.setattr(auth.msal, "PublicClientApplication", FakePublicAppSuccess)
-
-    token = auth.authenticate(auth_mode="delegated")
-
-    assert token == "delegated-token-123"
-    assert fake_console.messages == ["To sign in, use a web browser to open https://microsoft.com/devicelogin."]
-
-
-def test_authenticate_delegated_uses_configured_scopes(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(auth, "CLIENT_ID", "client-id")
-    monkeypatch.setattr(auth, "TENANT_ID", "tenant-id")
-    monkeypatch.setattr(auth, "GRAPH_DELEGATED_SCOPES", "User.Read,ChatMessage.Send")
-    monkeypatch.setattr(auth.msal, "PublicClientApplication", FakePublicAppSuccess)
-
-    token = auth.authenticate(auth_mode="delegated")
-
-    assert token == "delegated-token-123"
-    assert FakePublicAppSuccess.last_scopes == ["User.Read", "ChatMessage.Send"]
-
-
-def test_authenticate_delegated_filters_reserved_scopes_in_configured_scopes(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(auth, "CLIENT_ID", "client-id")
-    monkeypatch.setattr(auth, "TENANT_ID", "tenant-id")
-    monkeypatch.setattr(auth, "GRAPH_DELEGATED_SCOPES", "openid,profile,User.Read,offline_access,ChatMessage.Send")
-    monkeypatch.setattr(auth.msal, "PublicClientApplication", FakePublicAppSuccess)
-
-    token = auth.authenticate(auth_mode="delegated")
-
-    assert token == "delegated-token-123"
-    assert FakePublicAppSuccess.last_scopes == ["User.Read", "ChatMessage.Send"]
-
-
-def test_authenticate_delegated_rejects_reserved_scopes_only(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(auth, "CLIENT_ID", "client-id")
-    monkeypatch.setattr(auth, "TENANT_ID", "tenant-id")
-    monkeypatch.setattr(auth, "GRAPH_DELEGATED_SCOPES", "openid,profile,offline_access")
-
-    with pytest.raises(AuthenticationError, match="ANGLERFISH_GRAPH_DELEGATED_SCOPES must include at least one"):
-        auth.authenticate(auth_mode="delegated")
-
-
-def test_authenticate_delegated_error_raises(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(auth, "CLIENT_ID", "client-id")
-    monkeypatch.setattr(auth, "TENANT_ID", "tenant-id")
-    monkeypatch.setattr(auth, "GRAPH_DELEGATED_SCOPES", "")
-    monkeypatch.setattr(auth.msal, "PublicClientApplication", FakePublicAppError)
-
-    with pytest.raises(AuthenticationError, match="Delegated authentication failed"):
+def test_authenticate_rejects_delegated_after_reset():
+    with pytest.raises(AuthenticationError, match="application auth"):
         auth.authenticate(auth_mode="delegated")
 
 
@@ -465,40 +351,6 @@ def test_authenticate_application_pem_key_file_not_found_raises(monkeypatch: pyt
 
     with pytest.raises(AuthenticationError, match="ANGLERFISH_CLIENT_CERT_PRIVATE_KEY_PATH"):
         auth.authenticate()
-
-
-def test_authenticate_delegated_with_explicit_scopes_filters_reserved(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(auth, "CLIENT_ID", "client-id")
-    monkeypatch.setattr(auth, "TENANT_ID", "tenant-id")
-    monkeypatch.setattr(auth, "GRAPH_DELEGATED_SCOPES", "")
-    monkeypatch.setattr(auth.msal, "PublicClientApplication", FakePublicAppSuccess)
-
-    token = auth.authenticate(auth_mode="delegated", delegated_scopes=["openid", "User.Read", "offline_access"])
-
-    assert token == "delegated-token-123"
-    assert FakePublicAppSuccess.last_scopes == ["User.Read"]
-
-
-def test_authenticate_delegated_explicit_scopes_all_reserved_raises(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(auth, "CLIENT_ID", "client-id")
-    monkeypatch.setattr(auth, "TENANT_ID", "tenant-id")
-
-    with pytest.raises(AuthenticationError, match="at least one Microsoft Graph permission"):
-        auth.authenticate(auth_mode="delegated", delegated_scopes=["openid", "profile"])
-
-
-def test_authenticate_delegated_device_flow_missing_user_code_raises(monkeypatch: pytest.MonkeyPatch):
-    class BadFlowApp(FakePublicAppSuccess):
-        def initiate_device_flow(self, scopes):
-            return {"some_key": "no_user_code"}
-
-    monkeypatch.setattr(auth, "CLIENT_ID", "client-id")
-    monkeypatch.setattr(auth, "TENANT_ID", "tenant-id")
-    monkeypatch.setattr(auth, "GRAPH_DELEGATED_SCOPES", "")
-    monkeypatch.setattr(auth.msal, "PublicClientApplication", BadFlowApp)
-
-    with pytest.raises(AuthenticationError, match="Failed to start delegated device code flow"):
-        auth.authenticate(auth_mode="delegated")
 
 
 def test_resolve_auth_mode_empty_string_maps_to_application(monkeypatch: pytest.MonkeyPatch):

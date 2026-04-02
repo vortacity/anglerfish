@@ -136,8 +136,10 @@ def _prompt_auth_setup(
     non_interactive: bool = False,
 ) -> str | None:
     selected_auth_mode = auth_mode.strip().lower()
-    if selected_auth_mode not in ("application", "delegated"):
-        raise AuthenticationError(f"Unsupported auth mode: {auth_mode}")
+    if selected_auth_mode in ("", "application"):
+        selected_auth_mode = "application"
+    else:
+        raise AuthenticationError("Only application auth is supported in this release.")
 
     cli_tenant_id = str(args.tenant_id or "").strip()
     if cli_tenant_id:
@@ -179,8 +181,6 @@ def _prompt_auth_setup(
         os.environ["ANGLERFISH_CLIENT_ID"] = client_id.strip()
 
     os.environ["ANGLERFISH_AUTH_MODE"] = selected_auth_mode
-    if selected_auth_mode == "delegated":
-        return "delegated"
 
     current_mode = args.credential_mode or os.environ.get("ANGLERFISH_APP_CREDENTIAL_MODE", "auto").strip().lower()
     if current_mode not in ("auto", "secret", "certificate"):

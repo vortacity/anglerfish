@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import pytest
+from rich.console import Console
 
 from anglerfish.cli._main import (
     _find_graph_api_error,
     _format_exception_message,
     _parse_args,
+    _print_auth_success,
 )
 from anglerfish.exceptions import DeploymentError, GraphApiError
 
@@ -180,3 +182,12 @@ class TestParseArgs:
     def test_output_json(self):
         args = _parse_args(["--output-json", "/tmp/out.json"])
         assert args.output_json == "/tmp/out.json"
+
+
+class TestPrintAuthSuccess:
+    def test_delegated_mode_still_prints_application_success(self):
+        console = Console(record=True)
+        _print_auth_success(console, auth_mode="delegated")
+        output = console.export_text()
+        assert "application permissions" in output
+        assert "delegated permissions" not in output

@@ -122,9 +122,6 @@ def _format_exception_message(exc: BaseException) -> str:
 
 
 def _print_auth_success(console: Console, *, auth_mode: str = "application") -> None:
-    if auth_mode == "delegated":
-        console.print("[bold green]\u2713[/bold green] Authenticated using [green]delegated permissions[/green]")
-        return
     console.print("[bold green]\u2713[/bold green] Authenticated using [green]application permissions[/green]")
 
 

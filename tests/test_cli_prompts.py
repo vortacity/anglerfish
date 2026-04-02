@@ -9,6 +9,7 @@ from anglerfish.templates import find_template_by_name as _find_template_by_name
 from anglerfish.cli.prompts import (
     _normalize_sharepoint_folder_path,
     _parse_var_args,
+    _prompt_auth_setup,
     _validate_email,
     _validate_file_path,
     _validate_non_empty,
@@ -17,7 +18,7 @@ from anglerfish.cli.prompts import (
     _validate_subject,
     _validate_variable_value,
 )
-from anglerfish.exceptions import TemplateError
+from anglerfish.exceptions import AuthenticationError, TemplateError
 
 
 # ---------------------------------------------------------------------------
@@ -262,3 +263,21 @@ class TestFindTemplateByName:
         monkeypatch.setattr(templates_mod, "list_templates", lambda ct: [])
         with pytest.raises(TemplateError, match="No outlook templates"):
             _find_template_by_name("outlook", "Any")
+
+
+class TestPromptAuthSetup:
+    def test_prompt_auth_setup_non_interactive_application_returns_secret_or_certificate(self, monkeypatch):
+        args = type("Args", (), {"tenant_id": None, "client_id": None, "credential_mode": None})()
+        monkeypatch.setenv("ANGLERFISH_TENANT_ID", "tenant-id")
+        monkeypatch.setenv("ANGLERFISH_CLIENT_ID", "client-id")
+        monkeypatch.setenv("ANGLERFISH_CLIENT_SECRET", "secret")
+        result = _prompt_auth_setup(args, console=None, auth_mode="application", non_interactive=True)
+        assert result in {"secret", "certificate"}
+
+    def test_prompt_auth_setup_rejects_delegated_auth_mode(self, monkeypatch):
+        args = type("Args", (), {"tenant_id": None, "client_id": None, "credential_mode": None})()
+        monkeypatch.setenv("ANGLERFISH_TENANT_ID", "tenant-id")
+        monkeypatch.setenv("ANGLERFISH_CLIENT_ID", "client-id")
+        monkeypatch.setenv("ANGLERFISH_CLIENT_SECRET", "secret")
+        with pytest.raises(AuthenticationError, match="application auth"):
+            _prompt_auth_setup(args, console=None, auth_mode="delegated", non_interactive=True)
