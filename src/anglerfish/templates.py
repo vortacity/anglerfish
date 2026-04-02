@@ -10,21 +10,12 @@ from string import Template as StringTemplate
 
 import yaml
 
-from .config import (
-    TEMPLATE_KIND_ONEDRIVE,
-    TEMPLATE_KIND_OUTLOOK,
-    TEMPLATE_KIND_SHAREPOINT,
-    TEMPLATES_ENV_VAR,
-)
+from .config import TEMPLATE_KIND_OUTLOOK, TEMPLATES_ENV_VAR
 from .exceptions import TemplateError
-from .models import OneDriveTemplate, OutlookTemplate, SharePointTemplate
+from .models import OutlookTemplate
 
 _PACKAGE_PATH_PREFIX = "pkg://"
-_SUPPORTED_TEMPLATE_TYPES = (
-    TEMPLATE_KIND_OUTLOOK,
-    TEMPLATE_KIND_SHAREPOINT,
-    TEMPLATE_KIND_ONEDRIVE,
-)
+_SUPPORTED_TEMPLATE_TYPES = ("outlook",)
 _REQUIRED_OUTLOOK_FIELDS = (
     "name",
     "description",
@@ -33,21 +24,6 @@ _REQUIRED_OUTLOOK_FIELDS = (
     "body_html",
     "sender_name",
     "sender_email",
-)
-_REQUIRED_SHAREPOINT_FIELDS = (
-    "name",
-    "description",
-    "site_name",
-    "folder_path",
-    "filenames",
-    "content_text",
-)
-_REQUIRED_ONEDRIVE_FIELDS = (
-    "name",
-    "description",
-    "folder_path",
-    "filenames",
-    "content_text",
 )
 
 
@@ -79,17 +55,13 @@ def find_template_by_name(canary_type: str, template_name: str) -> str:
     return matches[0]["path"]
 
 
-def load_template(path: str) -> OutlookTemplate | SharePointTemplate | OneDriveTemplate:
+def load_template(path: str) -> OutlookTemplate:
     """Load and validate a template from package or filesystem."""
     data = _load_template_data(path)
 
     template_type = str(data.get("type", TEMPLATE_KIND_OUTLOOK)).strip().lower()
     if template_type == TEMPLATE_KIND_OUTLOOK:
         return _load_outlook_template(data)
-    if template_type == TEMPLATE_KIND_SHAREPOINT:
-        return _load_sharepoint_template(data)
-    if template_type == TEMPLATE_KIND_ONEDRIVE:
-        return _load_onedrive_template(data)
 
     supported = ", ".join(_SUPPORTED_TEMPLATE_TYPES)
     raise TemplateError(f"Template type must be one of: {supported}. Found '{template_type}'")
@@ -110,55 +82,6 @@ def _load_outlook_template(data: dict) -> OutlookTemplate:
         body_html=str(data["body_html"]),
         sender_name=str(data["sender_name"]),
         sender_email=str(data["sender_email"]),
-        variables=variables,
-    )
-
-
-def _load_sharepoint_template(data: dict) -> SharePointTemplate:
-    missing = [field for field in _REQUIRED_SHAREPOINT_FIELDS if field not in data]
-    if missing:
-        raise TemplateError(f"Template missing required fields: {', '.join(missing)}")
-    if not str(data.get("name", "")).strip() or not str(data.get("description", "")).strip():
-        raise TemplateError("Template missing required fields: name, description")
-    if not str(data.get("site_name", "")).strip():
-        raise TemplateError("Template missing required fields: site_name")
-    if not str(data.get("folder_path", "")).strip():
-        raise TemplateError("Template missing required fields: folder_path")
-    if not str(data.get("content_text", "")).strip():
-        raise TemplateError("Template missing required fields: content_text")
-
-    filenames = _parse_filenames(data.get("filenames"))
-    variables = _parse_variables(data.get("variables"))
-
-    return SharePointTemplate(
-        name=str(data["name"]),
-        description=str(data["description"]),
-        site_name=str(data["site_name"]),
-        folder_path=str(data["folder_path"]),
-        filenames=filenames,
-        content_text=str(data["content_text"]),
-        variables=variables,
-    )
-
-
-def _load_onedrive_template(data: dict) -> OneDriveTemplate:
-    missing = [field for field in _REQUIRED_ONEDRIVE_FIELDS if field not in data]
-    if missing:
-        raise TemplateError(f"Template missing required fields: {', '.join(missing)}")
-    if not str(data.get("name", "")).strip() or not str(data.get("description", "")).strip():
-        raise TemplateError("Template missing required fields: name, description")
-    if not str(data.get("content_text", "")).strip():
-        raise TemplateError("Template missing required fields: content_text")
-
-    filenames = _parse_filenames(data.get("filenames"))
-    variables = _parse_variables(data.get("variables"))
-
-    return OneDriveTemplate(
-        name=str(data["name"]),
-        description=str(data["description"]),
-        folder_path=str(data.get("folder_path", "")),
-        filenames=filenames,
-        content_text=str(data["content_text"]),
         variables=variables,
     )
 
@@ -262,32 +185,13 @@ def _parse_variables(raw: object) -> list[dict[str, str]]:
     return variables
 
 
-def _parse_filenames(raw: object) -> list[str]:
-    if not isinstance(raw, list):
-        raise TemplateError("'filenames' must be a list")
-
-    filenames: list[str] = []
-    for entry in raw:
-        name = str(entry).strip()
-        if not name:
-            raise TemplateError("Each entry in 'filenames' must be a non-empty string")
-        filenames.append(name)
-
-    if not filenames:
-        raise TemplateError("'filenames' must include at least one value")
-    if len(filenames) != 1:
-        raise TemplateError("'filenames' must include exactly one value")
-
-    return filenames
-
-
 _OUTLOOK_RENDER_FIELDS = ("subject", "body_html", "sender_name", "sender_email", "folder_name")
 
 
 def render_template(
-    template: OutlookTemplate | SharePointTemplate | OneDriveTemplate,
+    template: OutlookTemplate,
     values: dict[str, str],
-) -> OutlookTemplate | SharePointTemplate | OneDriveTemplate:
+) -> OutlookTemplate:
     """Substitute template variables and return a new template instance."""
     # Build defaults from variable definitions
     defaults: dict[str, str] = {}
@@ -308,45 +212,5 @@ def render_template(
             original = getattr(template, field)
             updates[field] = StringTemplate(original).safe_substitute(merged)
         return dataclasses.replace(template, **updates)
-
-    if isinstance(template, SharePointTemplate):
-        site_name = StringTemplate(template.site_name).safe_substitute(merged).strip()
-        folder_path = StringTemplate(template.folder_path).safe_substitute(merged).strip()
-        filenames = [StringTemplate(filename).safe_substitute(merged).strip() for filename in template.filenames]
-        content_text = StringTemplate(template.content_text).safe_substitute(merged).strip()
-        if not site_name:
-            raise TemplateError("Rendered template produced an empty site_name")
-        if not folder_path:
-            raise TemplateError("Rendered template produced an empty folder_path")
-        if not all(filenames):
-            raise TemplateError("Rendered template produced empty filename entries")
-        if len(filenames) != 1:
-            raise TemplateError("Rendered template produced multiple filenames; exactly one is required")
-        if not content_text:
-            raise TemplateError("Rendered template produced empty content_text")
-        return dataclasses.replace(
-            template,
-            site_name=site_name,
-            folder_path=folder_path,
-            filenames=filenames,
-            content_text=content_text,
-        )
-
-    if isinstance(template, OneDriveTemplate):
-        folder_path = StringTemplate(template.folder_path).safe_substitute(merged).strip()
-        filenames = [StringTemplate(filename).safe_substitute(merged).strip() for filename in template.filenames]
-        content_text = StringTemplate(template.content_text).safe_substitute(merged).strip()
-        if not all(filenames):
-            raise TemplateError("Rendered template produced empty filename entries")
-        if len(filenames) != 1:
-            raise TemplateError("Rendered template produced multiple filenames; exactly one is required")
-        if not content_text:
-            raise TemplateError("Rendered template produced empty content_text")
-        return dataclasses.replace(
-            template,
-            folder_path=folder_path,
-            filenames=filenames,
-            content_text=content_text,
-        )
 
     raise TemplateError("Unsupported template object")
