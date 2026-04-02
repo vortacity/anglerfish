@@ -53,72 +53,19 @@ def test_verify_outlook_gone():
     assert result.status == VerifyStatus.GONE
 
 
-# ------------------------------------------------------------------
-# SharePoint
-# ------------------------------------------------------------------
-
-
-def test_verify_sharepoint_ok():
+def test_verify_outlook_send_record_returns_error():
     record = {
-        "timestamp": "2026-03-01T00:00:00Z",
-        "canary_type": "sharepoint",
-        "site_id": "contoso.sharepoint.com,abc,def",
-        "item_id": "item-sp-001",
-        "template_name": "Employee Salary Bands",
+        "canary_type": "outlook",
+        "delivery_mode": "send",
+        "target_user": "alice@contoso.com",
+        "inbox_message_id": "msg-123",
     }
     graph = _mock_graph()
     result = verify_record(graph, record)
 
-    assert result.status == VerifyStatus.OK
-    graph.get.assert_called_once_with("/sites/contoso.sharepoint.com%2Cabc%2Cdef/drive/items/item-sp-001")
-
-
-def test_verify_sharepoint_gone():
-    record = {
-        "timestamp": "2026-03-01T00:00:00Z",
-        "canary_type": "sharepoint",
-        "site_id": "contoso.sharepoint.com,abc,def",
-        "item_id": "item-sp-001",
-        "template_name": "Employee Salary Bands",
-    }
-    graph = _mock_graph(side_effect=GraphApiError("Not found", status_code=404))
-    result = verify_record(graph, record)
-
-    assert result.status == VerifyStatus.GONE
-
-
-# ------------------------------------------------------------------
-# OneDrive
-# ------------------------------------------------------------------
-
-
-def test_verify_onedrive_ok():
-    record = {
-        "timestamp": "2026-03-01T00:00:00Z",
-        "canary_type": "onedrive",
-        "target_user": "j.smith@contoso.com",
-        "item_id": "item-od-001",
-        "template_name": "VPN Credentials Backup",
-    }
-    graph = _mock_graph()
-    result = verify_record(graph, record)
-
-    assert result.status == VerifyStatus.OK
-    graph.get.assert_called_once_with("/users/j.smith%40contoso.com/drive/items/item-od-001")
-
-
-def test_verify_onedrive_gone():
-    record = {
-        "timestamp": "2026-03-01T00:00:00Z",
-        "canary_type": "onedrive",
-        "target_user": "j.smith@contoso.com",
-        "item_id": "item-od-001",
-        "template_name": "VPN Credentials Backup",
-    }
-    graph = _mock_graph(side_effect=GraphApiError("Not found", status_code=404))
-    result = verify_record(graph, record)
-
-    assert result.status == VerifyStatus.GONE
+    assert result.status == VerifyStatus.ERROR
+    assert "draft" in result.detail.lower()
+    graph.get.assert_not_called()
 
 
 # ------------------------------------------------------------------
@@ -172,9 +119,9 @@ def test_run_verify_returns_results_for_multiple_records():
             "rec2.json",
             {
                 "timestamp": "t",
-                "canary_type": "sharepoint",
-                "site_id": "s1",
-                "item_id": "i1",
+                "canary_type": "outlook",
+                "target_user": "b@contoso.com",
+                "folder_id": "f2",
                 "template_name": "T2",
             },
         ),
@@ -194,9 +141,9 @@ def test_run_verify_mixed_results():
             "ok.json",
             {
                 "timestamp": "t",
-                "canary_type": "onedrive",
+                "canary_type": "outlook",
                 "target_user": "u@contoso.com",
-                "item_id": "i1",
+                "folder_id": "f1",
                 "template_name": "T1",
             },
         ),

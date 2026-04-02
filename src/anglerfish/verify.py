@@ -42,10 +42,6 @@ def verify_record(graph: GraphClient, record: dict) -> VerifyResult:
     try:
         if canary_type == "outlook":
             return _verify_outlook(graph, record, template_name)
-        elif canary_type == "sharepoint":
-            return _verify_sharepoint(graph, record, template_name)
-        elif canary_type == "onedrive":
-            return _verify_onedrive(graph, record, template_name)
         else:
             return VerifyResult(
                 canary_type=canary_type,
@@ -74,6 +70,16 @@ def verify_record(graph: GraphClient, record: dict) -> VerifyResult:
 
 def _verify_outlook(graph: GraphClient, record: dict, template_name: str) -> VerifyResult:
     target_user = record.get("target_user", "")
+    delivery_mode = str(record.get("delivery_mode", "draft")).strip().lower()
+    if delivery_mode == "send":
+        return VerifyResult(
+            canary_type="outlook",
+            template_name=template_name,
+            target=target_user,
+            status=VerifyStatus.ERROR,
+            detail="Verify only supports draft-mode outlook records",
+        )
+
     folder_id = record.get("folder_id", "")
     if not target_user or not folder_id:
         return VerifyResult(
@@ -86,46 +92,6 @@ def _verify_outlook(graph: GraphClient, record: dict, template_name: str) -> Ver
     graph.get(f"/users/{path_segment(target_user)}/mailFolders/{path_segment(folder_id)}")
     return VerifyResult(
         canary_type="outlook",
-        template_name=template_name,
-        target=target_user,
-        status=VerifyStatus.OK,
-    )
-
-
-def _verify_sharepoint(graph: GraphClient, record: dict, template_name: str) -> VerifyResult:
-    site_id = record.get("site_id", "")
-    item_id = record.get("item_id", "")
-    if not site_id or not item_id:
-        return VerifyResult(
-            canary_type="sharepoint",
-            template_name=template_name,
-            target=record.get("site_name", ""),
-            status=VerifyStatus.ERROR,
-            detail="Record missing site_id or item_id",
-        )
-    graph.get(f"/sites/{path_segment(site_id)}/drive/items/{path_segment(item_id)}")
-    return VerifyResult(
-        canary_type="sharepoint",
-        template_name=template_name,
-        target=record.get("site_name", site_id),
-        status=VerifyStatus.OK,
-    )
-
-
-def _verify_onedrive(graph: GraphClient, record: dict, template_name: str) -> VerifyResult:
-    target_user = record.get("target_user", "")
-    item_id = record.get("item_id", "")
-    if not target_user or not item_id:
-        return VerifyResult(
-            canary_type="onedrive",
-            template_name=template_name,
-            target=target_user,
-            status=VerifyStatus.ERROR,
-            detail="Record missing target_user or item_id",
-        )
-    graph.get(f"/users/{path_segment(target_user)}/drive/items/{path_segment(item_id)}")
-    return VerifyResult(
-        canary_type="onedrive",
         template_name=template_name,
         target=target_user,
         status=VerifyStatus.OK,
@@ -145,8 +111,6 @@ def run_verify(
 
 
 def _get_target(record: dict, canary_type: str) -> str:
-    if canary_type in ("outlook", "onedrive"):
+    if canary_type == "outlook":
         return record.get("target_user", "")
-    if canary_type == "sharepoint":
-        return record.get("site_name", "")
     return ""

@@ -358,17 +358,18 @@ def _run_verify(args: argparse.Namespace, console: Console) -> int:
                 status=VerifyStatus.OK,
             ),
             VerifyResult(
-                canary_type="sharepoint",
-                template_name="Employee Salary Bands",
-                target="HRSite",
+                canary_type="outlook",
+                template_name="Payroll Direct Deposit Update",
+                target="hr@contoso.com",
                 status=VerifyStatus.GONE,
-                detail="404 Not Found",
+                detail="Draft folder not found (404)",
             ),
             VerifyResult(
-                canary_type="onedrive",
-                template_name="VPN Credentials Backup",
-                target="j.smith@contoso.com",
-                status=VerifyStatus.OK,
+                canary_type="outlook",
+                template_name="Wire Transfer Exception",
+                target="finance@contoso.com",
+                status=VerifyStatus.ERROR,
+                detail="Verify only supports draft-mode outlook records",
             ),
         ]
     else:
