@@ -17,7 +17,7 @@ from ..exceptions import (
     DeploymentError,
     TemplateError,
 )
-from ..models import OneDriveTemplate, OutlookTemplate, SharePointTemplate
+from ..models import OutlookTemplate
 from ..templates import render_template
 
 _EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -336,37 +336,20 @@ def _prompt_auth_setup(
 
 
 def _render_deploy_template(
-    template: OutlookTemplate | SharePointTemplate | OneDriveTemplate,
+    template: OutlookTemplate,
     *,
     canary_type: str,
     console: Console,
     non_interactive: bool,
     cli_var_values: dict[str, str],
-) -> OutlookTemplate | SharePointTemplate | OneDriveTemplate | None:
+) -> OutlookTemplate | None:
     if not template.variables:
         return template
 
     var_values: dict[str, str] = {}
-    skipped_sharepoint_vars = {"site_name", "folder_path", "canary_url"}
-    skipped_onedrive_vars = {"folder_path", "canary_url"}
-    if canary_type == "sharepoint":
-        if isinstance(template, SharePointTemplate):
-            # SharePoint site and folder are collected with dedicated prompts.
-            var_values["site_name"] = template.site_name
-            var_values["folder_path"] = template.folder_path
-        # Canary callback is intentionally no longer prompted.
-        var_values["canary_url"] = ""
-    elif canary_type == "onedrive":
-        if isinstance(template, OneDriveTemplate):
-            var_values["folder_path"] = template.folder_path
-        var_values["canary_url"] = ""
 
     for var in template.variables:
         name = str(var.get("name", "")).strip()
-        if canary_type == "sharepoint" and name in skipped_sharepoint_vars:
-            continue
-        if canary_type == "onedrive" and name in skipped_onedrive_vars:
-            continue
 
         if non_interactive:
             # Use --var overrides first, then fall back to template default.

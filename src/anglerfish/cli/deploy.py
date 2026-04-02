@@ -14,22 +14,15 @@ from rich.panel import Panel
 from rich.table import Table
 
 from ..auth import authenticate
-from ..deployers.onedrive import OneDriveDeployer
-from ..deployers.onedrive import remove_canary as onedrive_remove_canary
-from ..deployers.outlook import OutlookDeployer
-from ..deployers.outlook import remove_canary as outlook_remove_canary
-from ..deployers.sharepoint import SharePointDeployer
-from ..deployers.sharepoint import remove_canary as sharepoint_remove_canary
 from ..exceptions import (
     AnglerfishError,
     AuthenticationError,
     DeploymentError,
     GraphApiError,
-    TemplateError,
 )
 from ..graph import GraphClient
 from ..inventory import read_deployment_record, update_deployment_status, write_deployment_record
-from ..models import OneDriveTemplate, OutlookTemplate, SharePointTemplate
+from ..models import OutlookTemplate
 from ._main import (
     _format_exception_message,
     _print_auth_success,
@@ -43,13 +36,19 @@ from .prompts import (
     _POINTER,
     _QMARK,
     _STYLE,
-    _normalize_sharepoint_folder_path,
     _prompt_auth_setup,
     _validate_email,
     _validate_non_empty,
-    _validate_sharepoint_folder_path,
-    _validate_single_filename,
 )
+
+try:
+    from ..deployers.outlook import OutlookDeployer
+    from ..deployers.outlook import remove_canary as outlook_remove_canary
+except ImportError:
+    OutlookDeployer = None
+
+    def outlook_remove_canary(graph, record: dict[str, str]) -> dict[str, str]:
+        raise DeploymentError("Outlook cleanup is unavailable in this build.")
 
 
 def _search_sharepoint_sites(graph: GraphClient, search_term: str) -> list[dict[str, str]]:
@@ -246,9 +245,9 @@ def _run_cleanup(args: argparse.Namespace, console: Console) -> int:
         if canary_type == "outlook":
             result = outlook_remove_canary(graph, record)
         elif canary_type == "onedrive":
-            result = onedrive_remove_canary(graph, record)
+            raise DeploymentError("OneDrive cleanup is no longer supported.")
         else:
-            result = sharepoint_remove_canary(graph, record)
+            raise DeploymentError("SharePoint cleanup is no longer supported.")
 
         _print_cleanup_success(console, result)
         try:
@@ -268,206 +267,22 @@ def _run_cleanup(args: argparse.Namespace, console: Console) -> int:
 def _run_sharepoint_deploy(
     args: argparse.Namespace,
     console: Console,
-    template: OutlookTemplate | SharePointTemplate | OneDriveTemplate,
+    template: OutlookTemplate,
     non_interactive: bool,
     total_steps: int,
     cli_var_values: dict[str, str],
 ) -> int:
-    if not isinstance(template, SharePointTemplate):
-        raise TemplateError("Selected template is not a SharePoint template.")
-
-    # Step 2: Authentication
-    _step_rule(console, 2, total_steps, "Authentication")
-
-    app_credential_mode = _prompt_auth_setup(args, console, auth_mode="application", non_interactive=non_interactive)
-    if app_credential_mode is None:
-        console.print("[yellow]Cancelled.[/yellow]")
-        return 130
-
-    console.print("Authenticating with Microsoft Graph...")
-    token = authenticate(
-        auth_mode="application",
-        app_credential_mode=app_credential_mode,
-    )
-    graph = GraphClient(token)
-
-    _print_auth_success(console, auth_mode="application")
-
-    selected_site_id = ""
-    if non_interactive:
-        if not args.target:
-            raise DeploymentError(
-                "--target (SharePoint site name) is required in --non-interactive mode. "
-                "Run `anglerfish --canary-type sharepoint` interactively to search and select sites."
-            )
-        site_name = args.target.strip()
-    else:
-        site_search = questionary.text(
-            "Search SharePoint sites:",
-            default=template.site_name,
-            validate=_validate_non_empty,
-            style=_STYLE,
-            qmark=_QMARK,
-        ).ask()
-        if site_search is None:
-            console.print("[yellow]Cancelled.[/yellow]")
-            return 130
-
-        with console.status("[bold green]Discovering SharePoint sites..."):
-            discovered_sites = _search_sharepoint_sites(graph, site_search.strip())
-
-        if discovered_sites:
-            site_choice = questionary.select(
-                "Select SharePoint site:",
-                choices=[questionary.Choice(site["label"], value=site["id"]) for site in discovered_sites]
-                + [questionary.Choice("Enter site name manually", value="__manual__")],
-                style=_STYLE,
-                qmark=_QMARK,
-                pointer=_POINTER,
-            ).ask()
-            if site_choice is None:
-                console.print("[yellow]Cancelled.[/yellow]")
-                return 130
-
-            if site_choice == "__manual__":
-                site_name = questionary.text(
-                    "SharePoint site name:",
-                    default=template.site_name,
-                    validate=_validate_non_empty,
-                    style=_STYLE,
-                    qmark=_QMARK,
-                ).ask()
-                if site_name is None:
-                    console.print("[yellow]Cancelled.[/yellow]")
-                    return 130
-                site_name = site_name.strip()
-            else:
-                selected = next(site for site in discovered_sites if site["id"] == site_choice)
-                site_name = selected["name"]
-                selected_site_id = selected["id"]
-        else:
-            site_name = questionary.text(
-                "SharePoint site name:",
-                default=template.site_name,
-                validate=_validate_non_empty,
-                style=_STYLE,
-                qmark=_QMARK,
-            ).ask()
-            if site_name is None:
-                console.print("[yellow]Cancelled.[/yellow]")
-                return 130
-            site_name = site_name.strip()
-
-    if non_interactive:
-        if not args.folder_path:
-            raise DeploymentError("--folder-path is required for SharePoint in --non-interactive mode.")
-        normalized_folder_path = _normalize_sharepoint_folder_path(args.folder_path)
-        if not normalized_folder_path:
-            raise DeploymentError(f"--folder-path '{args.folder_path}' normalizes to an empty path.")
-        if not args.filename:
-            raise DeploymentError("--filename is required for SharePoint in --non-interactive mode.")
-        filename_input = args.filename.strip()
-    else:
-        folder_path = questionary.text(
-            "Destination folder path:",
-            default=_normalize_sharepoint_folder_path(template.folder_path),
-            validate=_validate_sharepoint_folder_path,
-            style=_STYLE,
-            qmark=_QMARK,
-        ).ask()
-        if folder_path is None:
-            console.print("[yellow]Cancelled.[/yellow]")
-            return 130
-        normalized_folder_path = _normalize_sharepoint_folder_path(folder_path)
-
-        filename_input = questionary.text(
-            "Canary filename:",
-            default=template.filenames[0],
-            validate=_validate_single_filename,
-            style=_STYLE,
-            qmark=_QMARK,
-        ).ask()
-        if filename_input is None:
-            console.print("[yellow]Cancelled.[/yellow]")
-            return 130
-
-    template = dataclasses.replace(
-        template,
-        site_name=site_name,
-        folder_path=normalized_folder_path,
-        filenames=[filename_input.strip()],
-    )
-
-    # Step 3: Review
-    _step_rule(console, 3, total_steps, "Review")
-
-    summary_rows: list[tuple[str, str]] = [
-        ("Type", "sharepoint"),
-        ("App credential mode", app_credential_mode or "env/default"),
-    ]
-    if args.dry_run:
-        summary_rows.append(("Mode", "DRY RUN \u2014 no writes"))
-    if selected_site_id:
-        summary_rows.append(("Site id", selected_site_id))
-    summary_rows.extend(
-        [
-            ("Template", template.name),
-            ("Site name", template.site_name),
-            ("Folder path", template.folder_path),
-            ("Filename", template.filenames[0]),
-        ]
-    )
-    _print_summary_table(console, summary_rows)
-
-    if args.dry_run:
-        console.print("[bold yellow]Dry run complete. No canary deployed.[/bold yellow]")
-        return 0
-
-    if not non_interactive:
-        should_deploy = questionary.confirm("Deploy this canary?", default=False, style=_STYLE, qmark=_QMARK).ask()
-        if not should_deploy:
-            console.print("[yellow]Cancelled.[/yellow]")
-            return 0
-
-    # Step 4: Deploy
-    _step_rule(console, 4, total_steps, "Deploy")
-
-    deployer = SharePointDeployer(graph, template)
-    with console.status("[bold green]Deploying canary..."):
-        result = deployer.deploy(
-            template.site_name,
-            folder_path=template.folder_path,
-            filenames=template.filenames,
-            site_id=selected_site_id,
-        )
-
-    _print_success(console, result)
-    if args.output_json:
-        write_deployment_record(
-            args.output_json,
-            {
-                "canary_type": "sharepoint",
-                "template_name": template.name,
-                "auth_mode": "application",
-                "status": "active",
-                **result,
-            },
-        )
-        console.print(f"[dim]Deployment record written to {args.output_json}[/dim]")
-    return 0
+    raise DeploymentError("SharePoint deployment is no longer supported.")
 
 
 def _run_outlook_deploy(
     args: argparse.Namespace,
     console: Console,
-    template: OutlookTemplate | SharePointTemplate | OneDriveTemplate,
+    template: OutlookTemplate,
     non_interactive: bool,
     total_steps: int,
     cli_var_values: dict[str, str],
 ) -> int:
-    if not isinstance(template, OutlookTemplate):
-        raise TemplateError("Selected template is not an Outlook template.")
-
     if non_interactive:
         delivery_mode = args.delivery_mode
         if delivery_mode not in ("draft", "send"):
@@ -565,6 +380,9 @@ def _run_outlook_deploy(
     # Step 4: Deploy
     _step_rule(console, 4, total_steps, "Deploy")
 
+    if OutlookDeployer is None:
+        raise DeploymentError("Outlook deployer is unavailable in this build.")
+
     deployer = OutlookDeployer(graph, template)
     with console.status("[bold green]Deploying canary..."):
         result = deployer.deploy(target_user, delivery_mode=delivery_mode)
@@ -588,7 +406,7 @@ def _run_outlook_deploy(
 def _run_demo_deploy(
     console: Console,
     canary_type: str,
-    template: OutlookTemplate | SharePointTemplate | OneDriveTemplate,
+    template: OutlookTemplate,
 ) -> int:
     """Print simulated deployment output for demo/offline mode."""
     console.print()
@@ -599,16 +417,8 @@ def _run_demo_deploy(
         ("Canary type", canary_type),
         ("Template", template.name),
     ]
-    if isinstance(template, OutlookTemplate):
-        rows.append(("Subject", template.subject))
-        rows.append(("Sender", f"{template.sender_name} <{template.sender_email}>"))
-    elif isinstance(template, SharePointTemplate):
-        rows.append(("Site", template.site_name))
-        rows.append(("Folder", template.folder_path))
-        rows.append(("Filename", template.filenames[0] if template.filenames else "\u2014"))
-    elif isinstance(template, OneDriveTemplate):
-        rows.append(("Folder", template.folder_path))
-        rows.append(("Filename", template.filenames[0] if template.filenames else "\u2014"))
+    rows.append(("Subject", template.subject))
+    rows.append(("Sender", f"{template.sender_name} <{template.sender_email}>"))
     _print_summary_table(console, rows)
     _print_success(console, {"status": "deployed (demo)", "canary_type": canary_type, "template": template.name})
     console.print("[bold yellow]Demo mode \u2014 no authentication or Graph API calls were made.[/bold yellow]")
@@ -618,138 +428,12 @@ def _run_demo_deploy(
 def _run_onedrive_deploy(
     args: argparse.Namespace,
     console: Console,
-    template: OutlookTemplate | SharePointTemplate | OneDriveTemplate,
+    template: OutlookTemplate,
     non_interactive: bool,
     total_steps: int,
     cli_var_values: dict[str, str],
 ) -> int:
-    if not isinstance(template, OneDriveTemplate):
-        raise TemplateError("Selected template is not a OneDrive template.")
-
-    # Step 2: Authentication
-    _step_rule(console, 2, total_steps, "Authentication")
-
-    app_credential_mode = _prompt_auth_setup(args, console, auth_mode="application", non_interactive=non_interactive)
-    if app_credential_mode is None:
-        console.print("[yellow]Cancelled.[/yellow]")
-        return 130
-
-    console.print("Authenticating with Microsoft Graph...")
-    token = authenticate(
-        auth_mode="application",
-        app_credential_mode=app_credential_mode,
-    )
-    graph = GraphClient(token)
-
-    _print_auth_success(console, auth_mode="application")
-
-    if non_interactive:
-        if not args.target:
-            raise DeploymentError(
-                "--target (UPN/email) is required for OneDrive in --non-interactive mode. "
-                "Example: --target user@contoso.com"
-            )
-        target_user = args.target.strip()
-    else:
-        target_user = questionary.text(
-            "Target user (UPN/email):",
-            validate=_validate_email,
-            style=_STYLE,
-            qmark=_QMARK,
-        ).ask()
-        if target_user is None:
-            console.print("[yellow]Cancelled.[/yellow]")
-            return 130
-        target_user = target_user.strip()
-
-    if non_interactive:
-        folder_path = args.folder_path.strip() if args.folder_path else template.folder_path
-        if not args.filename:
-            raise DeploymentError("--filename is required for OneDrive in --non-interactive mode.")
-        filename_input = args.filename.strip()
-    else:
-        folder_path = questionary.text(
-            "Destination folder path:",
-            default=template.folder_path,
-            style=_STYLE,
-            qmark=_QMARK,
-        ).ask()
-        if folder_path is None:
-            console.print("[yellow]Cancelled.[/yellow]")
-            return 130
-        folder_path = folder_path.strip()
-
-        filename_input = questionary.text(
-            "Canary filename:",
-            default=template.filenames[0],
-            validate=_validate_single_filename,
-            style=_STYLE,
-            qmark=_QMARK,
-        ).ask()
-        if filename_input is None:
-            console.print("[yellow]Cancelled.[/yellow]")
-            return 130
-
-    template = dataclasses.replace(
-        template,
-        folder_path=folder_path,
-        filenames=[filename_input.strip()],
-    )
-
-    # Step 3: Review
-    _step_rule(console, 3, total_steps, "Review")
-
-    summary_rows: list[tuple[str, str]] = [
-        ("Type", "onedrive"),
-        ("App credential mode", app_credential_mode or "env/default"),
-    ]
-    if args.dry_run:
-        summary_rows.append(("Mode", "DRY RUN \u2014 no writes"))
-    summary_rows.extend(
-        [
-            ("Template", template.name),
-            ("Target user", target_user),
-            ("Folder path", template.folder_path),
-            ("Filename", template.filenames[0]),
-        ]
-    )
-    _print_summary_table(console, summary_rows)
-
-    if args.dry_run:
-        console.print("[bold yellow]Dry run complete. No canary deployed.[/bold yellow]")
-        return 0
-
-    if not non_interactive:
-        should_deploy = questionary.confirm("Deploy this canary?", default=False, style=_STYLE, qmark=_QMARK).ask()
-        if not should_deploy:
-            console.print("[yellow]Cancelled.[/yellow]")
-            return 0
-
-    # Step 4: Deploy
-    _step_rule(console, 4, total_steps, "Deploy")
-
-    deployer = OneDriveDeployer(graph, template)
-    with console.status("[bold green]Deploying canary..."):
-        result = deployer.deploy(
-            target_user,
-            folder_path=template.folder_path,
-            filenames=template.filenames,
-        )
-
-    _print_success(console, result)
-    if args.output_json:
-        write_deployment_record(
-            args.output_json,
-            {
-                "canary_type": "onedrive",
-                "template_name": template.name,
-                "auth_mode": "application",
-                "status": "active",
-                **result,
-            },
-        )
-        console.print(f"[dim]Deployment record written to {args.output_json}[/dim]")
-    return 0
+    raise DeploymentError("OneDrive deployment is no longer supported.")
 
 
 def _run_verify(args: argparse.Namespace, console: Console) -> int:
