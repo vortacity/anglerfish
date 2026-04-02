@@ -125,6 +125,21 @@ def test_list_content_follows_pagination():
     assert len(result) == 2
 
 
+def test_list_content_rejects_non_manage_office_next_page_url():
+    page1 = [{"contentUri": "https://manage.office.com/api/v1.0/tenant-123/content/blob1"}]
+    sess = _session(
+        _response(json_data=page1, headers={"NextPageUri": "https://evil.example/page2"}),
+    )
+    client = _client(sess)
+
+    with pytest.raises(AuditApiError, match="manage.office.com"):
+        client.list_content(
+            "Audit.Exchange",
+            datetime(2026, 3, 1, tzinfo=timezone.utc),
+            datetime(2026, 3, 2, tzinfo=timezone.utc),
+        )
+
+
 def test_list_content_handles_dict_response_with_value_key():
     body = {"value": [{"contentUri": "https://manage.office.com/api/v1.0/tenant-123/content/blob1"}]}
     sess = _session(_response(json_data=body))

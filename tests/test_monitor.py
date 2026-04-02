@@ -201,6 +201,14 @@ def test_load_records_from_directory(tmp_path):
     cleaned = _outlook_record(status="cleaned")
     (tmp_path / "rec2.json").write_text(json.dumps(cleaned))
 
+    legacy = {
+        "timestamp": "2026-03-01T00:00:00Z",
+        "canary_type": "sharepoint",
+        "template_name": "Legacy File Canary",
+        "status": "active",
+    }
+    (tmp_path / "rec3.json").write_text(json.dumps(legacy))
+
     results = load_records(tmp_path)
 
     assert len(results) == 1

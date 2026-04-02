@@ -149,7 +149,8 @@ def load_records(records_dir: str | Path) -> list[tuple[str, dict]]:
     """Load all valid deployment records from a directory.
 
     Returns a list of ``(path_str, record_dict)`` for records with
-    ``status == 'active'`` (or no status field).
+    ``status == 'active'`` (or no status field) that still belong to the
+    supported Outlook monitoring surface.
     """
     records_path = Path(records_dir)
     if not records_path.is_dir():
@@ -163,6 +164,8 @@ def load_records(records_dir: str | Path) -> list[tuple[str, dict]]:
             continue
         status = rec.get("status", "active")
         if status != "active":
+            continue
+        if str(rec.get("canary_type") or rec.get("type") or "").strip().lower() != "outlook":
             continue
         results.append((str(json_file), rec))
     return results
