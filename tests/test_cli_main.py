@@ -104,22 +104,10 @@ class TestParseArgs:
         assert args.subcommand == "monitor"
         assert args.once is True
 
-    def test_batch_with_dry_run(self):
-        args = _parse_args(["batch", "manifest.yaml", "--dry-run"])
-        assert args.subcommand == "batch"
-        assert args.manifest == "manifest.yaml"
-        assert args.dry_run is True
-
     def test_cleanup(self):
         args = _parse_args(["cleanup", "record.json"])
         assert args.subcommand == "cleanup"
         assert args.record == "record.json"
-
-    def test_dashboard_with_demo_and_poll_interval(self):
-        args = _parse_args(["dashboard", "--demo", "--poll-interval", "60"])
-        assert args.subcommand == "dashboard"
-        assert args.demo is True
-        assert args.poll_interval == 60
 
     def test_verify_demo(self):
         args = _parse_args(["verify", "--demo"])
@@ -155,6 +143,18 @@ class TestParseArgs:
     def test_invalid_canary_type_rejected(self):
         with pytest.raises(SystemExit):
             _parse_args(["--canary-type", "invalid"])
+
+    def test_parse_args_rejects_removed_batch_subcommand(self):
+        with pytest.raises(SystemExit):
+            _parse_args(["batch", "manifest.yaml"])
+
+    def test_parse_args_rejects_removed_dashboard_subcommand(self):
+        with pytest.raises(SystemExit):
+            _parse_args(["dashboard"])
+
+    def test_parse_args_rejects_sharepoint_canary_type(self):
+        with pytest.raises(SystemExit):
+            _parse_args(["--canary-type", "sharepoint"])
 
     def test_monitor_interval(self):
         args = _parse_args(["monitor", "--interval", "120"])
