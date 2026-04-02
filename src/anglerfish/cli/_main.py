@@ -169,7 +169,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--target",
         default=None,
         metavar="VALUE",
-        help=("Deployment target: mailbox UPN (Outlook), site name (SharePoint), or UPN (OneDrive)."),
+        help="Deployment target: mailbox UPN/email for Outlook.",
     )
     parser.add_argument(
         "--delivery-mode",
@@ -177,19 +177,6 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         default=None,
         dest="delivery_mode",
         help="Delivery mode: 'draft' or 'send' for Outlook.",
-    )
-    parser.add_argument(
-        "--folder-path",
-        default=None,
-        metavar="PATH",
-        dest="folder_path",
-        help="SharePoint or OneDrive destination folder path (e.g. HR/Restricted).",
-    )
-    parser.add_argument(
-        "--filename",
-        default=None,
-        metavar="NAME",
-        help="SharePoint or OneDrive canary filename.",
     )
     parser.add_argument(
         "--var",

@@ -156,6 +156,23 @@ class TestParseArgs:
         with pytest.raises(SystemExit):
             _parse_args(["--canary-type", "sharepoint"])
 
+    def test_parse_args_rejects_removed_folder_path_flag(self):
+        with pytest.raises(SystemExit):
+            _parse_args(["--folder-path", "Finance/Restricted"])
+
+    def test_parse_args_rejects_removed_filename_flag(self):
+        with pytest.raises(SystemExit):
+            _parse_args(["--filename", "bonus_plan.txt"])
+
+    def test_parse_args_help_does_not_advertise_non_outlook_deploy_args(self, capsys):
+        with pytest.raises(SystemExit):
+            _parse_args(["--help"])
+        help_text = capsys.readouterr().out
+        assert "site name (SharePoint)" not in help_text
+        assert "OneDrive" not in help_text
+        assert "--folder-path" not in help_text
+        assert "--filename" not in help_text
+
     def test_monitor_interval(self):
         args = _parse_args(["monitor", "--interval", "120"])
         assert args.interval == 120
