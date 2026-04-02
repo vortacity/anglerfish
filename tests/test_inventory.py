@@ -1,4 +1,5 @@
 import json
+import stat
 from pathlib import Path
 
 import pytest
@@ -96,3 +97,9 @@ def test_write_deployment_record_fsyncs_before_replace(monkeypatch, tmp_path):
     write_deployment_record(record_file, {"canary_type": "outlook", "status": "active"})
 
     assert len(fsync_calls) == 1
+
+
+def test_write_deployment_record_uses_0600_permissions(tmp_path):
+    record_file = tmp_path / "record.json"
+    write_deployment_record(record_file, {"canary_type": "outlook", "status": "active"})
+    assert stat.S_IMODE(record_file.stat().st_mode) == 0o600

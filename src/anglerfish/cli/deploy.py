@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import datetime
+import os
 from pathlib import Path
 
 import questionary
@@ -35,6 +36,7 @@ from ._main import (
     _step_rule,
 )
 from .prompts import (
+    AuthPromptResult,
     _POINTER,
     _QMARK,
     _STYLE,
@@ -42,6 +44,20 @@ from .prompts import (
     _validate_email,
     _validate_non_empty,
 )
+
+
+def _normalize_auth_prompt_result(result: AuthPromptResult | str | None) -> AuthPromptResult | None:
+    if result is None:
+        return None
+    if isinstance(result, AuthPromptResult):
+        return result
+    return AuthPromptResult(credential_mode=str(result))
+
+
+def _clear_prompted_env_values(auth_result: AuthPromptResult) -> None:
+    for name in auth_result.clear_env_vars:
+        os.environ.pop(name, None)
+
 
 def _print_cleanup_summary(console: Console, record: dict) -> None:
     canary_type = str(record.get("type", record.get("canary_type", ""))).strip().lower()
@@ -160,12 +176,17 @@ def _run_cleanup(args: argparse.Namespace, console: Console) -> int:
 
         # Step 2: Authentication
         _step_rule(console, 2, total_steps, "Authentication")
-        selected = _prompt_auth_setup(args, console, auth_mode="application", non_interactive=non_interactive)
-        if selected is None:
+        auth_result = _normalize_auth_prompt_result(
+            _prompt_auth_setup(args, console, auth_mode="application", non_interactive=non_interactive)
+        )
+        if auth_result is None:
             return 130
         console.print("Authenticating with Microsoft Graph...")
-        token = authenticate(auth_mode="application", app_credential_mode=selected)
-        _print_auth_success(console, auth_mode="application")
+        try:
+            token = authenticate(auth_mode="application", app_credential_mode=auth_result.credential_mode)
+        finally:
+            _clear_prompted_env_values(auth_result)
+        _print_auth_success(console)
         graph = GraphClient(token)
 
         # Step 3: Remove
@@ -255,19 +276,24 @@ def _run_outlook_deploy(
     # Step 2: Authentication
     _step_rule(console, 2, total_steps, "Authentication")
 
-    app_credential_mode = _prompt_auth_setup(args, console, auth_mode="application", non_interactive=non_interactive)
-    if app_credential_mode is None:
+    auth_result = _normalize_auth_prompt_result(
+        _prompt_auth_setup(args, console, auth_mode="application", non_interactive=non_interactive)
+    )
+    if auth_result is None:
         console.print("[yellow]Cancelled.[/yellow]")
         return 130
 
     console.print("Authenticating with Microsoft Graph...")
-    token = authenticate(
-        auth_mode="application",
-        app_credential_mode=app_credential_mode,
-    )
+    try:
+        token = authenticate(
+            auth_mode="application",
+            app_credential_mode=auth_result.credential_mode,
+        )
+    finally:
+        _clear_prompted_env_values(auth_result)
     graph = GraphClient(token)
 
-    _print_auth_success(console, auth_mode="application")
+    _print_auth_success(console)
 
     # Step 3: Review
     _step_rule(console, 3, total_steps, "Review")
@@ -275,7 +301,7 @@ def _run_outlook_deploy(
     summary_rows = [
         ("Type", "outlook"),
         ("Delivery mode", delivery_mode),
-        ("App credential mode", app_credential_mode or "env/default"),
+        ("App credential mode", auth_result.credential_mode or "env/default"),
     ]
     if args.dry_run:
         summary_rows.append(("Mode", "DRY RUN \u2014 no writes"))
@@ -434,11 +460,18 @@ def _run_verify(args: argparse.Namespace, console: Console) -> int:
 
         if pending_graph_checks:
             # Authenticate only when at least one draft-mode Outlook record requires Graph verification.
-            app_credential_mode = _prompt_auth_setup(args, console, auth_mode="application", non_interactive=True)
+            auth_result = _normalize_auth_prompt_result(
+                _prompt_auth_setup(args, console, auth_mode="application", non_interactive=True)
+            )
+            if auth_result is None:
+                return 130
             console.print("Authenticating with Microsoft Graph...")
-            token = authenticate(auth_mode="application", app_credential_mode=app_credential_mode)
+            try:
+                token = authenticate(auth_mode="application", app_credential_mode=auth_result.credential_mode)
+            finally:
+                _clear_prompted_env_values(auth_result)
             graph = GraphClient(token)
-            _print_auth_success(console, auth_mode="application")
+            _print_auth_success(console)
 
             graph_results = run_verify([record_item for _index, record_item in pending_graph_checks], graph)
             for (index, _record_item), graph_result in zip(pending_graph_checks, graph_results):

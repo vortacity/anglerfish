@@ -182,15 +182,32 @@ class _TokenManager:
     _REFRESH_MARGIN = timedelta(minutes=5)
     _TOKEN_LIFETIME = timedelta(minutes=55)
 
-    def __init__(self, initial_token: str, credential_mode: str | None = None):
+    def __init__(
+        self,
+        initial_token: str,
+        credential_mode: str | None = None,
+        *,
+        prompted_env: dict[str, str] | None = None,
+    ):
         self._token = initial_token
         self._credential_mode = credential_mode
         self._expires_at = datetime.now(timezone.utc) + self._TOKEN_LIFETIME
+        self._prompted_env = dict(prompted_env or {})
 
     def get_token(self) -> str:
         if datetime.now(timezone.utc) >= self._expires_at - self._REFRESH_MARGIN:
-            self._token = authenticate_management_api(self._credential_mode)
-            self._expires_at = datetime.now(timezone.utc) + self._TOKEN_LIFETIME
+            previous_env = {name: os.environ.get(name) for name in self._prompted_env}
+            try:
+                for name, value in self._prompted_env.items():
+                    os.environ[name] = value
+                self._token = authenticate_management_api(self._credential_mode)
+                self._expires_at = datetime.now(timezone.utc) + self._TOKEN_LIFETIME
+            finally:
+                for name, previous_value in previous_env.items():
+                    if previous_value is None:
+                        os.environ.pop(name, None)
+                    else:
+                        os.environ[name] = previous_value
         return self._token
 
     @property
@@ -231,6 +248,7 @@ def _write_heartbeat(
             delete=False,
         ) as fh:
             temp_path = Path(fh.name)
+            os.fchmod(fh.fileno(), 0o600)
             json.dump(payload, fh)
             fh.flush()
             os.fsync(fh.fileno())

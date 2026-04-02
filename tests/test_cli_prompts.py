@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import argparse
+import os
+
 import pytest
+from rich.console import Console
 
 import anglerfish.templates as templates_mod
+from anglerfish.cli import deploy as deploy_mod
 from anglerfish.templates import find_template_by_name as _find_template_by_name
 from anglerfish.cli.prompts import (
+    AuthPromptResult,
     _normalize_sharepoint_folder_path,
     _parse_var_args,
     _prompt_auth_setup,
@@ -19,6 +25,7 @@ from anglerfish.cli.prompts import (
     _validate_variable_value,
 )
 from anglerfish.exceptions import AuthenticationError, TemplateError
+from anglerfish.verify import VerifyResult, VerifyStatus
 
 
 # ---------------------------------------------------------------------------
@@ -274,7 +281,7 @@ class TestPromptAuthSetup:
 
         result = _prompt_auth_setup(args, console=None, auth_mode="application", non_interactive=True)
 
-        assert result == "secret"
+        assert result == AuthPromptResult(credential_mode="secret")
 
     def test_prompt_auth_setup_non_interactive_application_certificate_only_returns_certificate(self, monkeypatch):
         args = type("Args", (), {"tenant_id": None, "client_id": None, "credential_mode": "auto"})()
@@ -284,7 +291,7 @@ class TestPromptAuthSetup:
 
         result = _prompt_auth_setup(args, console=None, auth_mode="application", non_interactive=True)
 
-        assert result == "certificate"
+        assert result == AuthPromptResult(credential_mode="certificate")
 
     def test_prompt_auth_setup_non_interactive_application_mixed_defaults_to_secret(self, monkeypatch):
         args = type("Args", (), {"tenant_id": None, "client_id": None, "credential_mode": "auto"})()
@@ -296,7 +303,7 @@ class TestPromptAuthSetup:
 
         result = _prompt_auth_setup(args, console=None, auth_mode="application", non_interactive=True)
 
-        assert result == "secret"
+        assert result == AuthPromptResult(credential_mode="secret")
 
     def test_prompt_auth_setup_rejects_delegated_auth_mode(self, monkeypatch):
         args = type("Args", (), {"tenant_id": None, "client_id": None, "credential_mode": None})()
@@ -305,3 +312,58 @@ class TestPromptAuthSetup:
         monkeypatch.setenv("ANGLERFISH_CLIENT_SECRET", "secret")
         with pytest.raises(AuthenticationError, match="application auth"):
             _prompt_auth_setup(args, console=None, auth_mode="delegated", non_interactive=True)
+
+
+def test_verify_prompted_secret_is_cleared_after_auth(monkeypatch):
+    args = argparse.Namespace(
+        demo=False,
+        record="record.json",
+        records_dir=None,
+        tenant_id=None,
+        client_id=None,
+        credential_mode="secret",
+    )
+    monkeypatch.setenv("ANGLERFISH_TENANT_ID", "tenant-id")
+    monkeypatch.setenv("ANGLERFISH_CLIENT_ID", "client-id")
+    monkeypatch.delenv("ANGLERFISH_CLIENT_SECRET", raising=False)
+    monkeypatch.setattr(
+        deploy_mod,
+        "read_deployment_record",
+        lambda _path: {
+            "canary_type": "outlook",
+            "delivery_mode": "draft",
+            "template_name": "Fake Password Reset",
+            "target_user": "alice@contoso.com",
+            "folder_id": "folder-123",
+        },
+    )
+    monkeypatch.setattr(deploy_mod, "GraphClient", lambda _token: object())
+
+    def _fake_prompt_auth_setup(*_args, **_kwargs):
+        os.environ["ANGLERFISH_CLIENT_SECRET"] = "prompted-secret"
+        return AuthPromptResult(
+            credential_mode="secret",
+            clear_env_vars=("ANGLERFISH_CLIENT_SECRET",),
+        )
+
+    def _fake_authenticate(*_args, **_kwargs):
+        assert os.environ.get("ANGLERFISH_CLIENT_SECRET") == "prompted-secret"
+        return "token-123"
+
+    monkeypatch.setattr(deploy_mod, "_prompt_auth_setup", _fake_prompt_auth_setup)
+    monkeypatch.setattr(deploy_mod, "authenticate", _fake_authenticate)
+    monkeypatch.setattr(
+        "anglerfish.verify.run_verify",
+        lambda _records, _graph: [
+            VerifyResult(
+                canary_type="outlook",
+                template_name="Fake Password Reset",
+                target="alice@contoso.com",
+                status=VerifyStatus.OK,
+            )
+        ],
+    )
+
+    rc = deploy_mod._run_verify(args, Console(file=None, force_terminal=False))
+    assert rc == 0
+    assert "ANGLERFISH_CLIENT_SECRET" not in os.environ

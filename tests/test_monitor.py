@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import stat
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
@@ -352,6 +354,26 @@ def test_token_manager_returns_cached_when_valid():
     assert mgr.get_token() == "cached-token"
 
 
+def test_token_manager_temporarily_restores_prompted_env(monkeypatch):
+    monkeypatch.delenv("ANGLERFISH_CLIENT_SECRET", raising=False)
+    mgr = _TokenManager(
+        "initial-token",
+        "secret",
+        prompted_env={"ANGLERFISH_CLIENT_SECRET": "prompted-secret"},
+    )
+    mgr._expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+
+    def _fake_authenticate(mode):
+        assert mode == "secret"
+        assert os.environ.get("ANGLERFISH_CLIENT_SECRET") == "prompted-secret"
+        return "new-token"
+
+    with patch("anglerfish.monitor.authenticate_management_api", side_effect=_fake_authenticate):
+        assert mgr.get_token() == "new-token"
+
+    assert "ANGLERFISH_CLIENT_SECRET" not in os.environ
+
+
 # ------------------------------------------------------------------
 # Heartbeat
 # ------------------------------------------------------------------
@@ -366,3 +388,4 @@ def test_write_heartbeat(tmp_path):
     assert data["canaries"] == 5
     assert data["alerts_this_session"] == 2
     assert data["status"] == "healthy"
+    assert stat.S_IMODE(hb_path.stat().st_mode) == 0o600
