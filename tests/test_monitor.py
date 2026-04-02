@@ -41,35 +41,8 @@ def _outlook_record(**overrides) -> dict:
     return base
 
 
-def _sharepoint_record(**overrides) -> dict:
-    base = {
-        "timestamp": "2026-03-01T00:00:00Z",
-        "canary_type": "sharepoint",
-        "template_name": "Employee Salary Bands",
-        "uploaded_files": ["Salary_Bands_2026.txt"],
-        "item_id": "item-sp-001",
-        "site_web_url": "https://contoso.sharepoint.com/sites/HR",
-        "site_name": "HR",
-    }
-    base.update(overrides)
-    return base
-
-
-def _onedrive_record(**overrides) -> dict:
-    base = {
-        "timestamp": "2026-03-01T00:00:00Z",
-        "canary_type": "onedrive",
-        "template_name": "VPN Credentials Backup",
-        "target_user": "j.smith@contoso.com",
-        "uploaded_files": ["VPN_Config_Backup.txt"],
-        "item_id": "item-od-001",
-    }
-    base.update(overrides)
-    return base
-
-
 # ------------------------------------------------------------------
-# CanaryIndex.match — Outlook
+# CanaryIndex.match — Outlook only
 # ------------------------------------------------------------------
 
 
@@ -125,85 +98,19 @@ def test_no_match_outlook_wrong_message_id():
     assert idx.match(event) is None
 
 
-# ------------------------------------------------------------------
-# CanaryIndex.match — SharePoint / OneDrive file events
-# ------------------------------------------------------------------
-
-
-def test_match_sharepoint_by_item_id():
-    rec = _sharepoint_record()
+def test_file_events_are_ignored_in_outlook_only_mode():
+    rec = {
+        "timestamp": "2026-03-01T00:00:00Z",
+        "canary_type": "sharepoint",
+        "template_name": "Employee Salary Bands",
+        "item_id": "item-sp-001",
+    }
     idx = CanaryIndex([("rec.json", rec)])
 
     event = {
         "Operation": "FileAccessed",
         "OfficeObjectId": "item-sp-001",
         "UserId": "attacker@evil.com",
-        "ClientIP": "198.51.100.1",
-        "CreationTime": "2026-03-05T14:00:00",
-    }
-    alert = idx.match(event)
-
-    assert alert is not None
-    assert alert.canary_type == "sharepoint"
-
-
-def test_match_sharepoint_by_filename_and_site():
-    rec = _sharepoint_record(item_id="")
-    idx = CanaryIndex([("rec.json", rec)])
-
-    event = {
-        "Operation": "FileDownloaded",
-        "SourceFileName": "Salary_Bands_2026.txt",
-        "ObjectId": "https://contoso.sharepoint.com/sites/HR/Shared Documents/Salary_Bands_2026.txt",
-        "UserId": "attacker@evil.com",
-        "ClientIP": "198.51.100.1",
-    }
-    alert = idx.match(event)
-
-    assert alert is not None
-    assert "file" in alert.artifact_label.lower()
-
-
-def test_match_onedrive_by_item_id():
-    rec = _onedrive_record()
-    idx = CanaryIndex([("rec.json", rec)])
-
-    event = {
-        "Operation": "FileAccessed",
-        "OfficeObjectId": "item-od-001",
-        "UserId": "attacker@evil.com",
-        "ClientIP": "198.51.100.1",
-    }
-    alert = idx.match(event)
-
-    assert alert is not None
-    assert alert.canary_type == "onedrive"
-
-
-def test_match_onedrive_by_filename_and_upn():
-    rec = _onedrive_record(item_id="")
-    idx = CanaryIndex([("rec.json", rec)])
-
-    event = {
-        "Operation": "FileAccessed",
-        "SourceFileName": "VPN_Config_Backup.txt",
-        "ObjectId": "https://contoso-my.sharepoint.com/personal/j_smith_contoso_com/Documents/VPN_Config_Backup.txt",
-        "UserId": "attacker@evil.com",
-        "ClientIP": "198.51.100.1",
-    }
-    alert = idx.match(event)
-
-    assert alert is not None
-
-
-def test_no_match_file_event_wrong_filename():
-    rec = _sharepoint_record()
-    idx = CanaryIndex([("rec.json", rec)])
-
-    event = {
-        "Operation": "FileAccessed",
-        "SourceFileName": "Totally_Different_File.txt",
-        "ObjectId": "https://other.sharepoint.com/sites/Other/file.txt",
     }
     assert idx.match(event) is None
 
@@ -250,7 +157,7 @@ def test_index_count():
     idx = CanaryIndex(
         [
             ("a.json", _outlook_record()),
-            ("b.json", _sharepoint_record()),
+            ("b.json", _outlook_record(internet_message_id="<canary-msg-002@contoso.com>")),
         ]
     )
     assert idx.count == 2
@@ -261,18 +168,25 @@ def test_index_count():
 # ------------------------------------------------------------------
 
 
-def test_build_entry_parses_uploaded_files_string():
-    rec = {"timestamp": "t", "canary_type": "sharepoint", "uploaded_files": "a.txt, b.txt"}
+def test_build_entry_sets_outlook_fields():
+    rec = {
+        "timestamp": "t",
+        "canary_type": "outlook",
+        "internet_message_id": "<m1@contoso.com>",
+        "folder_name": "Inbox/IT Notifications",
+    }
     entry = _build_entry("rec.json", rec)
 
-    assert entry.uploaded_files == ["a.txt", "b.txt"]
+    assert entry.internet_message_id == "<m1@contoso.com>"
+    assert entry.folder_name == "Inbox/IT Notifications"
 
 
-def test_build_entry_parses_uploaded_files_list():
-    rec = {"timestamp": "t", "canary_type": "onedrive", "uploaded_files": ["file.docx"]}
+def test_build_entry_defaults_missing_outlook_fields_to_empty_strings():
+    rec = {"timestamp": "t", "canary_type": "outlook"}
     entry = _build_entry("rec.json", rec)
 
-    assert entry.uploaded_files == ["file.docx"]
+    assert entry.internet_message_id == ""
+    assert entry.folder_name == ""
 
 
 # ------------------------------------------------------------------
@@ -382,13 +296,13 @@ def test_run_monitor_deduplicates_across_runs(tmp_path):
 
     event = {
         "Id": "evt-dedup",
-        "Operation": "FileAccessed",
-        "OfficeObjectId": "item-sp-001",
+        "Operation": "MailItemsAccessed",
+        "Folders": [{"FolderItems": [{"InternetMessageId": "<canary-msg-001@contoso.com>"}]}],
         "UserId": "attacker@evil.com",
         "ClientIP": "198.51.100.1",
     }
 
-    idx = CanaryIndex([("rec.json", _sharepoint_record())])
+    idx = CanaryIndex([("rec.json", _outlook_record())])
     console = Console(file=None, force_terminal=False)
 
     # First run.

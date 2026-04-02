@@ -26,13 +26,13 @@ def test_render_demo_alert_count_3():
             assert mock_time.sleep.call_count == 2
 
 
-def test_render_demo_alert_cycles_canary_types():
-    """Alerts cycle through outlook, sharepoint, onedrive."""
+def test_render_demo_alert_cycles_outlook_modes():
+    """Alerts cycle through outlook draft/send modes only."""
     console = MagicMock()
     dispatched = []
     with patch("anglerfish.monitor.AlertDispatcher") as MockDispatcher:
         with patch("anglerfish.monitor.time"):
             instance = MockDispatcher.return_value
             instance.dispatch.side_effect = lambda a: dispatched.append(a.canary_type)
-            render_demo_alert(console, count=3)
-    assert dispatched == ["outlook (draft)", "sharepoint", "onedrive"]
+            render_demo_alert(console, count=2)
+    assert dispatched == ["outlook (draft)", "outlook (send)"]

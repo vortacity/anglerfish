@@ -15,6 +15,7 @@ from .exceptions import AuditApiError
 _MAX_WINDOW_HOURS = 24
 # Time format the API expects.
 _TIME_FORMAT = "%Y-%m-%dT%H:%M:%S"
+_MANAGEMENT_API_URL_PREFIX = "https://manage.office.com/"
 
 # Content types relevant to canary monitoring.
 CONTENT_TYPES = ("Audit.Exchange", "Audit.SharePoint", "Audit.General")
@@ -109,6 +110,7 @@ class AuditClient:
         while True:
             if url:
                 # Pagination: follow NextPageUri (absolute URL).
+                _validate_management_api_url(url)
                 result, headers = self._get_with_headers(url, absolute=True)
             else:
                 result, headers = self._get_with_headers(path, params=params)
@@ -121,6 +123,7 @@ class AuditClient:
             next_page = headers.get("NextPageUri") or headers.get("nextpageuri")
             if not next_page:
                 break
+            _validate_management_api_url(next_page)
             url = next_page
 
         return blobs
@@ -135,6 +138,7 @@ class AuditClient:
         The ``content_uri`` is an absolute URL returned by ``list_content``.
         Returns a list of audit event dicts.
         """
+        _validate_management_api_url(content_uri)
         result = self._get(content_uri, absolute=True)
         if isinstance(result, list):
             return result
@@ -241,6 +245,11 @@ class AuditClient:
 
 def _compute_backoff(attempt: int, *, max_seconds: int = 8) -> int:
     return min(2**attempt, max_seconds)
+
+
+def _validate_management_api_url(url: str) -> None:
+    if not url.startswith(_MANAGEMENT_API_URL_PREFIX):
+        raise AuditApiError("Management Activity API URL must stay on manage.office.com")
 
 
 def _parse_retry_after(value: str | None) -> int:

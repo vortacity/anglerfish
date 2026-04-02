@@ -7,7 +7,7 @@ import os
 import signal
 import tempfile
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -54,11 +54,6 @@ class _CanaryEntry:
     folder_id: str = ""
     target_user: str = ""
     subject: str = ""
-    # SharePoint / OneDrive
-    uploaded_files: list[str] = field(default_factory=list)
-    item_id: str = ""
-    site_web_url: str = ""
-    site_name: str = ""
 
 
 # ------------------------------------------------------------------
@@ -77,8 +72,6 @@ class CanaryIndex:
         self._entries: list[_CanaryEntry] = []
         # Quick-lookup maps
         self._by_internet_message_id: dict[str, _CanaryEntry] = {}
-        self._by_filename: dict[str, list[_CanaryEntry]] = {}
-        self._by_item_id: dict[str, _CanaryEntry] = {}
 
         for path, rec in records:
             entry = _build_entry(path, rec)
@@ -86,12 +79,6 @@ class CanaryIndex:
 
             if entry.internet_message_id:
                 self._by_internet_message_id[entry.internet_message_id] = entry
-
-            for fname in entry.uploaded_files:
-                self._by_filename.setdefault(fname.lower(), []).append(entry)
-
-            if entry.item_id:
-                self._by_item_id[entry.item_id] = entry
 
     @property
     def count(self) -> int:
@@ -118,9 +105,6 @@ class CanaryIndex:
 
         if operation == "MailItemsAccessed":
             return self._match_mail_items_accessed(event)
-
-        if operation in ("FileAccessed", "FileDownloaded", "FileModified", "FilePreviewed"):
-            return self._match_file_event(event)
 
         return None
 
@@ -152,36 +136,6 @@ class CanaryIndex:
                 if entry.canary_type == "outlook" and entry.folder_name:
                     if entry.folder_name.lower() in folder_path.lower():
                         return _build_alert(entry, event, artifact_label=f"folder: {entry.folder_name}")
-
-        return None
-
-    def _match_file_event(self, event: dict) -> CanaryAlert | None:
-        source_filename = str(event.get("SourceFileName") or "").strip()
-        object_id = str(event.get("ObjectId") or "").strip()
-        item_id = str(event.get("OfficeObjectId") or event.get("ItemId") or "").strip()
-
-        # Direct item_id match.
-        if item_id and item_id in self._by_item_id:
-            entry = self._by_item_id[item_id]
-            return _build_alert(entry, event, artifact_label=f"item_id: {item_id}")
-
-        # Filename match with site/user context.
-        if source_filename:
-            candidates = self._by_filename.get(source_filename.lower(), [])
-            for entry in candidates:
-                # Verify context: site URL or target user should appear in ObjectId.
-                if entry.site_web_url and entry.site_web_url.lower() in object_id.lower():
-                    return _build_alert(entry, event, artifact_label=f"file: {source_filename}")
-                if entry.site_name and entry.site_name.lower() in object_id.lower():
-                    return _build_alert(entry, event, artifact_label=f"file: {source_filename}")
-                if entry.target_user:
-                    # OneDrive: ObjectId contains the user's UPN-based URL.
-                    upn_prefix = entry.target_user.split("@")[0].lower().replace(".", "_")
-                    if upn_prefix in object_id.lower():
-                        return _build_alert(entry, event, artifact_label=f"file: {source_filename}")
-                # If no context to cross-check but filename matches, still alert.
-                if not entry.site_web_url and not entry.site_name and not entry.target_user:
-                    return _build_alert(entry, event, artifact_label=f"file: {source_filename}")
 
         return None
 
@@ -466,24 +420,14 @@ _DEMO_ALERTS = [
         "record_path": "~/.anglerfish/records/outlook-demo.json",
     },
     {
-        "canary_type": "sharepoint",
-        "template_name": "Employee Salary Bands",
-        "artifact_label": "item_id: item-demo-1",
+        "canary_type": "outlook (send)",
+        "template_name": "Updated MFA Policy",
+        "artifact_label": "internet_message_id: <demo-msg-2@contoso.com>",
         "accessed_by": "recon@badactor.net",
         "source_ip": "192.0.2.99",
-        "operation": "FileAccessed",
-        "client_info": "Client=SharePointWebPart",
-        "record_path": "~/.anglerfish/records/sharepoint-demo.json",
-    },
-    {
-        "canary_type": "onedrive",
-        "template_name": "VPN Credentials Backup",
-        "artifact_label": "item_id: item-demo-3",
-        "accessed_by": "scout@evil.com",
-        "source_ip": "198.51.100.7",
-        "operation": "FileDownloaded",
-        "client_info": "Client=OneDriveSync",
-        "record_path": "~/.anglerfish/records/onedrive-demo.json",
+        "operation": "MailItemsAccessed",
+        "client_info": "Client=Outlook;Action=MessageBind",
+        "record_path": "~/.anglerfish/records/outlook-demo-send.json",
     },
 ]
 
@@ -510,13 +454,6 @@ def render_demo_alert(console: Console, count: int = 1) -> None:
 
 def _build_entry(record_path: str, rec: dict) -> _CanaryEntry:
     canary_type = rec.get("canary_type") or rec.get("type", "unknown")
-    uploaded_files_raw = rec.get("uploaded_files", "")
-    if isinstance(uploaded_files_raw, str):
-        uploaded_files = [f.strip() for f in uploaded_files_raw.split(",") if f.strip()]
-    elif isinstance(uploaded_files_raw, list):
-        uploaded_files = [str(f).strip() for f in uploaded_files_raw if str(f).strip()]
-    else:
-        uploaded_files = []
 
     return _CanaryEntry(
         canary_type=canary_type,
@@ -527,10 +464,6 @@ def _build_entry(record_path: str, rec: dict) -> _CanaryEntry:
         folder_id=rec.get("folder_id", ""),
         target_user=rec.get("target_user", ""),
         subject=rec.get("subject", ""),
-        uploaded_files=uploaded_files,
-        item_id=rec.get("item_id", ""),
-        site_web_url=rec.get("site_web_url", ""),
-        site_name=rec.get("site_name", ""),
     )
 
 
