@@ -389,14 +389,51 @@ def _run_verify(args: argparse.Namespace, console: Console) -> int:
             return 1
 
         console.print(f"Verifying [bold]{len(records)}[/bold] deployment record(s)...\n")
-        # Authenticate.
-        app_credential_mode = _prompt_auth_setup(args, console, auth_mode="application", non_interactive=True)
-        console.print("Authenticating with Microsoft Graph...")
-        token = authenticate(auth_mode="application", app_credential_mode=app_credential_mode)
-        graph = GraphClient(token)
-        _print_auth_success(console, auth_mode="application")
+        pending_graph_checks: list[tuple[int, tuple[str, dict]]] = []
+        ordered_results: list[VerifyResult | None] = [None] * len(records)
 
-        results = run_verify(records, graph)
+        for index, record_item in enumerate(records):
+            _record_path, record = record_item
+            canary_type = str(record.get("canary_type") or record.get("type", ""))
+            template_name = str(record.get("template_name", ""))
+
+            if canary_type != "outlook":
+                ordered_results[index] = VerifyResult(
+                    canary_type=canary_type,
+                    template_name=template_name,
+                    target="",
+                    status=VerifyStatus.ERROR,
+                    detail=f"Unsupported canary type: {canary_type}",
+                )
+                continue
+
+            delivery_mode = str(record.get("delivery_mode", "draft")).strip().lower()
+            target_user = str(record.get("target_user", ""))
+            if delivery_mode == "send":
+                ordered_results[index] = VerifyResult(
+                    canary_type="outlook",
+                    template_name=template_name,
+                    target=target_user,
+                    status=VerifyStatus.ERROR,
+                    detail="Verify only supports draft-mode outlook records",
+                )
+                continue
+
+            pending_graph_checks.append((index, record_item))
+
+        if pending_graph_checks:
+            # Authenticate only when at least one draft-mode Outlook record requires Graph verification.
+            app_credential_mode = _prompt_auth_setup(args, console, auth_mode="application", non_interactive=True)
+            console.print("Authenticating with Microsoft Graph...")
+            token = authenticate(auth_mode="application", app_credential_mode=app_credential_mode)
+            graph = GraphClient(token)
+            _print_auth_success(console, auth_mode="application")
+
+            graph_results = run_verify([record_item for _index, record_item in pending_graph_checks], graph)
+            for (index, _record_item), graph_result in zip(pending_graph_checks, graph_results):
+                ordered_results[index] = graph_result
+
+        results = [result for result in ordered_results if result is not None]
 
     # Render table.
     table = Table(box=box.ROUNDED, title="Canary Verification")
