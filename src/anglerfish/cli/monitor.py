@@ -22,10 +22,14 @@ def _normalize_auth_prompt_result(result: AuthPromptResult | str | None) -> Auth
 
 
 def _capture_prompted_env_values(auth_result: AuthPromptResult) -> dict[str, str]:
-    return {name: os.environ[name] for name in auth_result.clear_env_vars if name in os.environ}
+    prompted_names = {name for name, _value in auth_result.restore_env_vars}
+    prompted_names.update(auth_result.clear_env_vars)
+    return {name: os.environ[name] for name in prompted_names if name in os.environ}
 
 
 def _clear_prompted_env_values(auth_result: AuthPromptResult) -> None:
+    for name, value in auth_result.restore_env_vars:
+        os.environ[name] = value
     for name in auth_result.clear_env_vars:
         os.environ.pop(name, None)
 

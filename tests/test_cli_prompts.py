@@ -6,6 +6,7 @@ import argparse
 import os
 
 import pytest
+import questionary
 from rich.console import Console
 
 import anglerfish.templates as templates_mod
@@ -313,6 +314,36 @@ class TestPromptAuthSetup:
         with pytest.raises(AuthenticationError, match="application auth"):
             _prompt_auth_setup(args, console=None, auth_mode="delegated", non_interactive=True)
 
+    def test_prompt_auth_setup_records_restore_value_for_overwritten_passphrase(self, monkeypatch, tmp_path):
+        args = type("Args", (), {"tenant_id": None, "client_id": None, "credential_mode": "certificate"})()
+        monkeypatch.setenv("ANGLERFISH_TENANT_ID", "tenant-id")
+        monkeypatch.setenv("ANGLERFISH_CLIENT_ID", "client-id")
+        monkeypatch.setenv("ANGLERFISH_CLIENT_CERT_PASSPHRASE", "existing-passphrase")
+
+        pfx_path = tmp_path / "client.pfx"
+        pfx_path.write_text("fake-pfx", encoding="utf-8")
+
+        answers = iter(["pfx", str(pfx_path), "prompted-passphrase"])
+
+        class _FakePrompt:
+            def __init__(self, answer):
+                self._answer = answer
+
+            def ask(self):
+                return self._answer
+
+        monkeypatch.setattr(questionary, "select", lambda *args, **kwargs: _FakePrompt(next(answers)))
+        monkeypatch.setattr(questionary, "text", lambda *args, **kwargs: _FakePrompt(next(answers)))
+        monkeypatch.setattr(questionary, "password", lambda *args, **kwargs: _FakePrompt(next(answers)))
+
+        result = _prompt_auth_setup(args, console=Console(file=None, force_terminal=False))
+
+        assert result == AuthPromptResult(
+            credential_mode="certificate",
+            restore_env_vars=(("ANGLERFISH_CLIENT_CERT_PASSPHRASE", "existing-passphrase"),),
+        )
+        assert os.environ["ANGLERFISH_CLIENT_CERT_PASSPHRASE"] == "prompted-passphrase"
+
 
 def test_verify_prompted_secret_is_cleared_after_auth(monkeypatch):
     args = argparse.Namespace(
@@ -367,3 +398,58 @@ def test_verify_prompted_secret_is_cleared_after_auth(monkeypatch):
     rc = deploy_mod._run_verify(args, Console(file=None, force_terminal=False))
     assert rc == 0
     assert "ANGLERFISH_CLIENT_SECRET" not in os.environ
+
+
+def test_verify_prompted_passphrase_restores_previous_env_value(monkeypatch):
+    args = argparse.Namespace(
+        demo=False,
+        record="record.json",
+        records_dir=None,
+        tenant_id=None,
+        client_id=None,
+        credential_mode="certificate",
+    )
+    monkeypatch.setenv("ANGLERFISH_TENANT_ID", "tenant-id")
+    monkeypatch.setenv("ANGLERFISH_CLIENT_ID", "client-id")
+    monkeypatch.setenv("ANGLERFISH_CLIENT_CERT_PASSPHRASE", "existing-passphrase")
+    monkeypatch.setattr(
+        deploy_mod,
+        "read_deployment_record",
+        lambda _path: {
+            "canary_type": "outlook",
+            "delivery_mode": "draft",
+            "template_name": "Fake Password Reset",
+            "target_user": "alice@contoso.com",
+            "folder_id": "folder-123",
+        },
+    )
+    monkeypatch.setattr(deploy_mod, "GraphClient", lambda _token: object())
+
+    def _fake_prompt_auth_setup(*_args, **_kwargs):
+        os.environ["ANGLERFISH_CLIENT_CERT_PASSPHRASE"] = "prompted-passphrase"
+        return AuthPromptResult(
+            credential_mode="certificate",
+            restore_env_vars=(("ANGLERFISH_CLIENT_CERT_PASSPHRASE", "existing-passphrase"),),
+        )
+
+    def _fake_authenticate(*_args, **_kwargs):
+        assert os.environ.get("ANGLERFISH_CLIENT_CERT_PASSPHRASE") == "prompted-passphrase"
+        return "token-123"
+
+    monkeypatch.setattr(deploy_mod, "_prompt_auth_setup", _fake_prompt_auth_setup)
+    monkeypatch.setattr(deploy_mod, "authenticate", _fake_authenticate)
+    monkeypatch.setattr(
+        "anglerfish.verify.run_verify",
+        lambda _records, _graph: [
+            VerifyResult(
+                canary_type="outlook",
+                template_name="Fake Password Reset",
+                target="alice@contoso.com",
+                status=VerifyStatus.OK,
+            )
+        ],
+    )
+
+    rc = deploy_mod._run_verify(args, Console(file=None, force_terminal=False))
+    assert rc == 0
+    assert os.environ["ANGLERFISH_CLIENT_CERT_PASSPHRASE"] == "existing-passphrase"

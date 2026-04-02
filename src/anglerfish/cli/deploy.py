@@ -55,6 +55,8 @@ def _normalize_auth_prompt_result(result: AuthPromptResult | str | None) -> Auth
 
 
 def _clear_prompted_env_values(auth_result: AuthPromptResult) -> None:
+    for name, value in auth_result.restore_env_vars:
+        os.environ[name] = value
     for name in auth_result.clear_env_vars:
         os.environ.pop(name, None)
 

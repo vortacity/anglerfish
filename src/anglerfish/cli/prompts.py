@@ -47,6 +47,21 @@ _SHAREPOINT_LIBRARY_PREFIXES = {"shared documents", "documents"}
 class AuthPromptResult:
     credential_mode: str
     clear_env_vars: tuple[str, ...] = ()
+    restore_env_vars: tuple[tuple[str, str], ...] = ()
+
+
+def _set_prompted_sensitive_env_var(
+    name: str,
+    value: str,
+    *,
+    clear_env_vars: list[str],
+    restore_env_vars: dict[str, str],
+) -> None:
+    if name in os.environ and name not in restore_env_vars:
+        restore_env_vars[name] = os.environ[name]
+    elif name not in os.environ and name not in clear_env_vars:
+        clear_env_vars.append(name)
+    os.environ[name] = value
 
 
 def _validate_email(value: str) -> bool | str:
@@ -194,6 +209,7 @@ def _prompt_auth_setup(
         current_mode = "auto"
 
     clear_env_vars: list[str] = []
+    restore_env_vars: dict[str, str] = {}
 
     has_secret = bool(os.environ.get("ANGLERFISH_CLIENT_SECRET", "").strip())
     has_certificate = bool(
@@ -256,10 +272,18 @@ def _prompt_auth_setup(
             ).ask()
             if secret is None:
                 return None
-            os.environ["ANGLERFISH_CLIENT_SECRET"] = secret
-            clear_env_vars.append("ANGLERFISH_CLIENT_SECRET")
+            _set_prompted_sensitive_env_var(
+                "ANGLERFISH_CLIENT_SECRET",
+                secret,
+                clear_env_vars=clear_env_vars,
+                restore_env_vars=restore_env_vars,
+            )
         os.environ["ANGLERFISH_APP_CREDENTIAL_MODE"] = "secret"
-        return AuthPromptResult(credential_mode="secret", clear_env_vars=tuple(clear_env_vars))
+        return AuthPromptResult(
+            credential_mode="secret",
+            clear_env_vars=tuple(clear_env_vars),
+            restore_env_vars=tuple(restore_env_vars.items()),
+        )
 
     # current_mode == "certificate"
     pfx_path = os.environ.get("ANGLERFISH_CLIENT_CERT_PFX_PATH", "").strip()
@@ -297,8 +321,12 @@ def _prompt_auth_setup(
             ).ask()
             if pfx_passphrase is None:
                 return None
-            os.environ["ANGLERFISH_CLIENT_CERT_PASSPHRASE"] = pfx_passphrase
-            clear_env_vars.append("ANGLERFISH_CLIENT_CERT_PASSPHRASE")
+            _set_prompted_sensitive_env_var(
+                "ANGLERFISH_CLIENT_CERT_PASSPHRASE",
+                pfx_passphrase,
+                clear_env_vars=clear_env_vars,
+                restore_env_vars=restore_env_vars,
+            )
         else:
             key = questionary.text(
                 "Path to PEM private key file:", validate=_validate_file_path, style=_STYLE, qmark=_QMARK
@@ -327,8 +355,12 @@ def _prompt_auth_setup(
             ).ask()
             if key_passphrase is None:
                 return None
-            os.environ["ANGLERFISH_CLIENT_CERT_PASSPHRASE"] = key_passphrase
-            clear_env_vars.append("ANGLERFISH_CLIENT_CERT_PASSPHRASE")
+            _set_prompted_sensitive_env_var(
+                "ANGLERFISH_CLIENT_CERT_PASSPHRASE",
+                key_passphrase,
+                clear_env_vars=clear_env_vars,
+                restore_env_vars=restore_env_vars,
+            )
 
     if key_path and not thumbprint:
         if non_interactive:
@@ -344,7 +376,11 @@ def _prompt_auth_setup(
         os.environ["ANGLERFISH_CLIENT_CERT_THUMBPRINT"] = cert_thumbprint.strip()
 
     os.environ["ANGLERFISH_APP_CREDENTIAL_MODE"] = "certificate"
-    return AuthPromptResult(credential_mode="certificate", clear_env_vars=tuple(clear_env_vars))
+    return AuthPromptResult(
+        credential_mode="certificate",
+        clear_env_vars=tuple(clear_env_vars),
+        restore_env_vars=tuple(restore_env_vars.items()),
+    )
 
 
 def _render_deploy_template(
