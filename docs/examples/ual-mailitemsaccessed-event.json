@@ -1,11 +1,44 @@
 {
-  "CreationTime": "2026-03-01T14:37:42",
+  "CreationTime": "2026-05-06T14:10:00",
+  "Id": "00000000-0000-0000-0000-000000000001",
   "Operation": "MailItemsAccessed",
+  "OrganizationId": "00000000-0000-0000-0000-000000000001",
+  "RecordType": 50,
   "ResultStatus": "Succeeded",
-  "UserId": "attacker@contoso.com",
-  "ClientIPAddress": "203.0.113.42",
-  "InternetMessageId": "<canary-fake-password-reset-001@contoso.com>",
-  "ClientAppId": "00000000-1111-2222-3333-444444444444",
+  "UserKey": "attacker@contoso.onmicrosoft.com",
+  "UserType": 0,
+  "Version": 1,
   "Workload": "Exchange",
-  "RecordType": 50
+  "UserId": "attacker@contoso.onmicrosoft.com",
+  "ClientIPAddress": "203.0.113.42",
+  "ClientInfoString": "Client=OutlookService;Action=Open",
+  "ExternalAccess": true,
+  "MailboxGuid": "00000000-0000-0000-0000-000000000001",
+  "MailboxOwnerUPN": "adele.vance@contoso.onmicrosoft.com",
+  "LogonType": "Delegate",
+  "MailAccessType": "Bind",
+  "OperationProperties": [
+    {
+      "Name": "MailAccessType",
+      "Value": "Bind"
+    },
+    {
+      "Name": "IsThrottled",
+      "Value": "False"
+    }
+  ],
+  "Folders": [
+    {
+      "Id": "AAMkADAwMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMAA_demo_folder",
+      "Path": "\\\\Recoverable Items\\\\IT Security Notifications",
+      "FolderItems": [
+        {
+          "InternetMessageId": "<canary-fake-password-reset-001@contoso.onmicrosoft.com>"
+        }
+      ]
+    }
+  ],
+  "SessionId": "00000000-0000-0000-0000-000000000001",
+  "AppId": "00000000-0000-0000-0000-000000000001",
+  "ClientAppId": "00000000-0000-0000-0000-000000000001"
 }

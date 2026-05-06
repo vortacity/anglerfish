@@ -1,0 +1,12 @@
+{
+  "timestamp": "2026-05-06T14:05:00+00:00",
+  "canary_type": "outlook",
+  "template_name": "Fake Password Reset",
+  "auth_mode": "application",
+  "status": "active",
+  "delivery_mode": "send",
+  "target_user": "adele.vance@contoso.onmicrosoft.com",
+  "inbox_message_id": "AAMkADAwMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMABG_demo_msg_002",
+  "subject": "[ACTION REQUIRED] Password Expiry Notice",
+  "internet_message_id": "<canary-fake-password-reset-002@contoso.onmicrosoft.com>"
+}
