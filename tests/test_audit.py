@@ -132,7 +132,7 @@ def test_list_content_rejects_non_manage_office_next_page_url():
     )
     client = _client(sess)
 
-    with pytest.raises(AuditApiError, match="manage.office.com"):
+    with pytest.raises(AuditApiError, match="Management Activity API URL"):
         client.list_content(
             "Audit.Exchange",
             datetime(2026, 3, 1, tzinfo=timezone.utc),
@@ -183,8 +183,31 @@ def test_fetch_content_handles_dict_with_value():
 def test_fetch_content_rejects_non_manage_office_url():
     client = AuditClient("token", "tenant-id")
 
-    with pytest.raises(AuditApiError, match="manage.office.com"):
+    with pytest.raises(AuditApiError, match="Management Activity API URL"):
         client.fetch_content("https://evil.example/content")
+
+
+def test_fetch_content_rejects_prefix_trick_url():
+    client = AuditClient("token", "tenant-id")
+
+    with pytest.raises(AuditApiError, match="Management Activity API URL"):
+        client.fetch_content("https://manage.office.com.evil.example/content")
+
+
+def test_fetch_content_accepts_configured_government_host():
+    sess = _session(_response(json_data=[{"Id": "evt-1"}]))
+    client = _client(sess, base_url="https://manage.office365.us/api/v1.0")
+
+    result = client.fetch_content("https://manage.office365.us/api/v1.0/tenant-123/content/blob")
+
+    assert result == [{"Id": "evt-1"}]
+
+
+def test_fetch_content_rejects_schemeless_url():
+    client = AuditClient("token", "tenant-id")
+
+    with pytest.raises(AuditApiError, match="Management Activity API URL"):
+        client.fetch_content("//manage.office.com/api/v1.0/tenant-123/content/blob")
 
 
 # ------------------------------------------------------------------

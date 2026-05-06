@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlparse
 
 import requests
 
@@ -15,7 +16,6 @@ from .exceptions import AuditApiError
 _MAX_WINDOW_HOURS = 24
 # Time format the API expects.
 _TIME_FORMAT = "%Y-%m-%dT%H:%M:%S"
-_MANAGEMENT_API_URL_PREFIX = "https://manage.office.com/"
 
 # Outlook-only content feed for canary monitoring.
 CONTENT_TYPES = ("Audit.Exchange",)
@@ -110,7 +110,7 @@ class AuditClient:
         while True:
             if url:
                 # Pagination: follow NextPageUri (absolute URL).
-                _validate_management_api_url(url)
+                _validate_management_api_url(url, base_url=self.base_url)
                 result, headers = self._get_with_headers(url, absolute=True)
             else:
                 result, headers = self._get_with_headers(path, params=params)
@@ -123,7 +123,7 @@ class AuditClient:
             next_page = headers.get("NextPageUri") or headers.get("nextpageuri")
             if not next_page:
                 break
-            _validate_management_api_url(next_page)
+            _validate_management_api_url(next_page, base_url=self.base_url)
             url = next_page
 
         return blobs
@@ -138,7 +138,7 @@ class AuditClient:
         The ``content_uri`` is an absolute URL returned by ``list_content``.
         Returns a list of audit event dicts.
         """
-        _validate_management_api_url(content_uri)
+        _validate_management_api_url(content_uri, base_url=self.base_url)
         result = self._get(content_uri, absolute=True)
         if isinstance(result, list):
             return result
@@ -247,9 +247,15 @@ def _compute_backoff(attempt: int, *, max_seconds: int = 8) -> int:
     return min(2**attempt, max_seconds)
 
 
-def _validate_management_api_url(url: str) -> None:
-    if not url.startswith(_MANAGEMENT_API_URL_PREFIX):
-        raise AuditApiError("Management Activity API URL must stay on manage.office.com")
+def _validate_management_api_url(url: str, *, base_url: str = MANAGEMENT_API_BASE_URL) -> None:
+    parsed = urlparse(url)
+    allowed = urlparse(base_url)
+    if parsed.scheme != "https" or allowed.scheme != "https":
+        raise AuditApiError("Management Activity API URL must use https")
+    if not parsed.hostname or parsed.hostname.lower() != (allowed.hostname or "").lower():
+        raise AuditApiError(
+            "Management Activity API URL must stay on the configured Management API host"
+        )
 
 
 def _parse_retry_after(value: str | None) -> int:
