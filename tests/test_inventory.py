@@ -33,6 +33,24 @@ def test_update_deployment_status_sets_status_updated_at(tmp_path):
     assert "status_updated_at" in data
 
 
+def test_update_deployment_status_preserves_status_updated_at_for_same_status(tmp_path):
+    record_file = tmp_path / "record.json"
+    write_deployment_record(
+        record_file,
+        {
+            "canary_type": "outlook",
+            "status": "cleaned_up",
+            "status_updated_at": "2026-05-06T10:00:00+00:00",
+        },
+    )
+
+    update_deployment_status(record_file, "cleaned_up")
+
+    data = json.loads(record_file.read_text())
+    assert data["status"] == "cleaned_up"
+    assert data["status_updated_at"] == "2026-05-06T10:00:00+00:00"
+
+
 def test_update_deployment_status_preserves_timestamp(tmp_path):
     record_file = tmp_path / "record.json"
     write_deployment_record(str(record_file), {"canary_type": "outlook", "status": "active"})

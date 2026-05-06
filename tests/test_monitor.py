@@ -243,6 +243,107 @@ def test_load_records_skips_old_cleaned_outlook_records(tmp_path):
     assert results == []
 
 
+def test_load_records_skips_future_cleaned_outlook_records(tmp_path):
+    now = datetime(2026, 5, 6, 12, 0, tzinfo=timezone.utc)
+    rec = _outlook_record(
+        status="cleaned_up",
+        status_updated_at=(now + timedelta(minutes=1)).isoformat(),
+    )
+    (tmp_path / "rec.json").write_text(json.dumps(rec), encoding="utf-8")
+
+    results = load_records(tmp_path, cleaned_up_lookback=timedelta(hours=24), now=now)
+
+    assert results == []
+
+
+def test_load_records_zero_cleaned_lookback_includes_exact_timestamp(tmp_path):
+    now = datetime(2026, 5, 6, 12, 0, tzinfo=timezone.utc)
+    rec = _outlook_record(
+        status="cleaned_up",
+        status_updated_at=now.isoformat(),
+    )
+    (tmp_path / "rec.json").write_text(json.dumps(rec), encoding="utf-8")
+
+    results = load_records(tmp_path, cleaned_up_lookback=timedelta(0), now=now)
+
+    assert len(results) == 1
+
+
+def test_load_records_zero_cleaned_lookback_skips_future_timestamp(tmp_path):
+    now = datetime(2026, 5, 6, 12, 0, tzinfo=timezone.utc)
+    rec = _outlook_record(
+        status="cleaned_up",
+        status_updated_at=(now + timedelta(microseconds=1)).isoformat(),
+    )
+    (tmp_path / "rec.json").write_text(json.dumps(rec), encoding="utf-8")
+
+    results = load_records(tmp_path, cleaned_up_lookback=timedelta(0), now=now)
+
+    assert results == []
+
+
+def test_load_records_negative_cleaned_lookback_skips_cleaned_records(tmp_path):
+    now = datetime(2026, 5, 6, 12, 0, tzinfo=timezone.utc)
+    rec = _outlook_record(
+        status="cleaned_up",
+        status_updated_at=(now + timedelta(hours=2)).isoformat(),
+    )
+    (tmp_path / "rec.json").write_text(json.dumps(rec), encoding="utf-8")
+
+    results = load_records(tmp_path, cleaned_up_lookback=timedelta(hours=-1), now=now)
+
+    assert results == []
+
+
+def test_load_records_accepts_cleaned_timestamp_with_trailing_z(tmp_path):
+    now = datetime(2026, 5, 6, 12, 0, tzinfo=timezone.utc)
+    rec = _outlook_record(
+        status="cleaned_up",
+        status_updated_at="2026-05-06T10:00:00Z",
+    )
+    (tmp_path / "rec.json").write_text(json.dumps(rec), encoding="utf-8")
+
+    results = load_records(tmp_path, cleaned_up_lookback=timedelta(hours=24), now=now)
+
+    assert len(results) == 1
+
+
+def test_load_records_treats_naive_cleaned_timestamp_as_utc(tmp_path):
+    now = datetime(2026, 5, 6, 12, 0, tzinfo=timezone.utc)
+    rec = _outlook_record(
+        status="cleaned_up",
+        status_updated_at="2026-05-06T10:00:00",
+    )
+    (tmp_path / "rec.json").write_text(json.dumps(rec), encoding="utf-8")
+
+    results = load_records(tmp_path, cleaned_up_lookback=timedelta(hours=24), now=now)
+
+    assert len(results) == 1
+
+
+def test_load_records_skips_cleaned_record_with_invalid_status_updated_at(tmp_path):
+    now = datetime(2026, 5, 6, 12, 0, tzinfo=timezone.utc)
+    rec = _outlook_record(
+        status="cleaned_up",
+        status_updated_at="not-a-timestamp",
+    )
+    (tmp_path / "rec.json").write_text(json.dumps(rec), encoding="utf-8")
+
+    results = load_records(tmp_path, cleaned_up_lookback=timedelta(hours=24), now=now)
+
+    assert results == []
+
+
+def test_load_records_skips_cleaned_record_missing_status_updated_at(tmp_path):
+    now = datetime(2026, 5, 6, 12, 0, tzinfo=timezone.utc)
+    rec = _outlook_record(status="cleaned_up")
+    (tmp_path / "rec.json").write_text(json.dumps(rec), encoding="utf-8")
+
+    results = load_records(tmp_path, cleaned_up_lookback=timedelta(hours=24), now=now)
+
+    assert results == []
+
+
 def test_load_records_nonexistent_directory():
     results = load_records("/tmp/nonexistent_dir_xyz_abc")
 

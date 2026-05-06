@@ -58,10 +58,12 @@ def update_deployment_status(
     fields (including the original timestamp) are preserved.
     """
     record = read_deployment_record(path)
+    previous_status = record.get("status")
     record["status"] = status
-    record["status_updated_at"] = (
-        updated_at or datetime.datetime.now(datetime.timezone.utc)
-    ).isoformat()
+    if previous_status != status or not record.get("status_updated_at"):
+        record["status_updated_at"] = (
+            updated_at or datetime.datetime.now(datetime.timezone.utc)
+        ).isoformat()
     output_path = Path(path)
     _write_record_atomically(output_path, record)
 

@@ -185,6 +185,8 @@ def load_records(
 
 
 def _within_cleaned_up_lookback(rec: dict, now: datetime, lookback: timedelta) -> bool:
+    if lookback < timedelta(0):
+        return False
     raw = str(rec.get("status_updated_at") or "").strip()
     if not raw:
         return False
@@ -196,7 +198,10 @@ def _within_cleaned_up_lookback(rec: dict, now: datetime, lookback: timedelta) -
         return False
     if updated.tzinfo is None:
         updated = updated.replace(tzinfo=timezone.utc)
-    return now - updated.astimezone(timezone.utc) <= lookback
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    age = now.astimezone(timezone.utc) - updated.astimezone(timezone.utc)
+    return timedelta(0) <= age <= lookback
 
 
 # ------------------------------------------------------------------
