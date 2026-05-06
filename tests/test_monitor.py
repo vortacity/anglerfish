@@ -217,6 +217,32 @@ def test_load_records_from_directory(tmp_path):
     assert results[0][1]["canary_type"] == "outlook"
 
 
+def test_load_records_includes_recently_cleaned_outlook_records(tmp_path):
+    now = datetime(2026, 5, 6, 12, 0, tzinfo=timezone.utc)
+    rec = _outlook_record(
+        status="cleaned_up",
+        status_updated_at=(now - timedelta(hours=2)).isoformat(),
+    )
+    (tmp_path / "rec.json").write_text(json.dumps(rec), encoding="utf-8")
+
+    results = load_records(tmp_path, cleaned_up_lookback=timedelta(hours=24), now=now)
+
+    assert len(results) == 1
+
+
+def test_load_records_skips_old_cleaned_outlook_records(tmp_path):
+    now = datetime(2026, 5, 6, 12, 0, tzinfo=timezone.utc)
+    rec = _outlook_record(
+        status="cleaned_up",
+        status_updated_at=(now - timedelta(hours=25)).isoformat(),
+    )
+    (tmp_path / "rec.json").write_text(json.dumps(rec), encoding="utf-8")
+
+    results = load_records(tmp_path, cleaned_up_lookback=timedelta(hours=24), now=now)
+
+    assert results == []
+
+
 def test_load_records_nonexistent_directory():
     results = load_records("/tmp/nonexistent_dir_xyz_abc")
 

@@ -145,17 +145,24 @@ class CanaryIndex:
 # ------------------------------------------------------------------
 
 
-def load_records(records_dir: str | Path) -> list[tuple[str, dict]]:
+def load_records(
+    records_dir: str | Path,
+    *,
+    cleaned_up_lookback: timedelta | None = None,
+    now: datetime | None = None,
+) -> list[tuple[str, dict]]:
     """Load all valid deployment records from a directory.
 
     Returns a list of ``(path_str, record_dict)`` for records with
-    ``status == 'active'`` (or no status field) that still belong to the
-    supported Outlook monitoring surface.
+    ``status == 'active'`` (or no status field), plus recently cleaned records
+    when requested, that still belong to the supported Outlook monitoring
+    surface.
     """
     records_path = Path(records_dir)
     if not records_path.is_dir():
         return []
 
+    current_time = now or datetime.now(timezone.utc)
     results: list[tuple[str, dict]] = []
     for json_file in sorted(records_path.glob("*.json")):
         try:
@@ -163,12 +170,33 @@ def load_records(records_dir: str | Path) -> list[tuple[str, dict]]:
         except Exception:  # nosec B112 — skip malformed records, log elsewhere
             continue
         status = rec.get("status", "active")
-        if status != "active":
+        if status == "active":
+            include = True
+        elif status == "cleaned_up" and cleaned_up_lookback is not None:
+            include = _within_cleaned_up_lookback(rec, current_time, cleaned_up_lookback)
+        else:
+            include = False
+        if not include:
             continue
         if str(rec.get("canary_type") or rec.get("type") or "").strip().lower() != "outlook":
             continue
         results.append((str(json_file), rec))
     return results
+
+
+def _within_cleaned_up_lookback(rec: dict, now: datetime, lookback: timedelta) -> bool:
+    raw = str(rec.get("status_updated_at") or "").strip()
+    if not raw:
+        return False
+    if raw.endswith("Z"):
+        raw = f"{raw[:-1]}+00:00"
+    try:
+        updated = datetime.fromisoformat(raw)
+    except ValueError:
+        return False
+    if updated.tzinfo is None:
+        updated = updated.replace(tzinfo=timezone.utc)
+    return now - updated.astimezone(timezone.utc) <= lookback
 
 
 # ------------------------------------------------------------------

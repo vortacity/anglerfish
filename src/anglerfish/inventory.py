@@ -46,7 +46,12 @@ def write_deployment_record(path: str | Path, record: dict) -> None:
     _write_record_atomically(output_path, record_with_meta)
 
 
-def update_deployment_status(path: str | Path, status: str) -> None:
+def update_deployment_status(
+    path: str | Path,
+    status: str,
+    *,
+    updated_at: datetime.datetime | None = None,
+) -> None:
     """Update the 'status' field of an existing deployment record in place.
 
     Reads the file, overwrites the 'status' key, and re-serialises. All other
@@ -54,6 +59,9 @@ def update_deployment_status(path: str | Path, status: str) -> None:
     """
     record = read_deployment_record(path)
     record["status"] = status
+    record["status_updated_at"] = (
+        updated_at or datetime.datetime.now(datetime.timezone.utc)
+    ).isoformat()
     output_path = Path(path)
     _write_record_atomically(output_path, record)
 

@@ -188,6 +188,14 @@ class TestParseArgs:
         args = _parse_args(["monitor", "--interval", "120"])
         assert args.interval == 120
 
+    def test_monitor_cleaned_up_lookback_hours_default(self):
+        args = _parse_args(["monitor"])
+        assert args.cleaned_up_lookback_hours == 24.0
+
+    def test_monitor_cleaned_up_lookback_hours(self):
+        args = _parse_args(["monitor", "--cleaned-up-lookback-hours", "6.5"])
+        assert args.cleaned_up_lookback_hours == 6.5
+
     def test_output_json(self):
         args = _parse_args(["--output-json", "/tmp/out.json"])
         assert args.output_json == "/tmp/out.json"

@@ -291,6 +291,16 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Poll interval in seconds (default: 300).",
     )
     monitor_parser.add_argument(
+        "--cleaned-up-lookback-hours",
+        type=float,
+        default=24.0,
+        metavar="HOURS",
+        help=(
+            "Include cleaned-up records this many hours after cleanup for late audit-log "
+            "correlation (default: 24)."
+        ),
+    )
+    monitor_parser.add_argument(
         "--once",
         action="store_true",
         help="Poll once and exit instead of running a continuous loop.",

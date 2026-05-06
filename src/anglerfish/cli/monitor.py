@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+from datetime import timedelta
 
 from rich.console import Console
 
@@ -54,7 +55,8 @@ def _run_monitor(args: argparse.Namespace, console: Console) -> int:
         render_demo_alert(console, count=getattr(args, "demo_count", 1))
         return 0
 
-    records = load_records(args.records_dir)
+    lookback_hours = max(float(getattr(args, "cleaned_up_lookback_hours", 24.0)), 0.0)
+    records = load_records(args.records_dir, cleaned_up_lookback=timedelta(hours=lookback_hours))
     if not records:
         console.print(f"[yellow]No active deployment records found in {args.records_dir}[/yellow]")
         console.print(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+from datetime import timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -26,6 +27,7 @@ def _make_args(**overrides):
         "interval": 300,
         "once": False,
         "exclude_app_ids": [],
+        "cleaned_up_lookback_hours": 24.0,
         "state_file": None,
         "no_console": False,
         "alert_log": None,
@@ -61,6 +63,17 @@ def test_no_records_returns_one(tmp_path):
     with patch("anglerfish.monitor.load_records", return_value=[]):
         result = _run_monitor(args, console)
     assert result == 1
+
+
+def test_monitor_passes_cleaned_up_lookback_to_load_records(tmp_path):
+    console = MagicMock()
+    empty_dir = tmp_path / "empty"
+    empty_dir.mkdir()
+    args = _make_args(records_dir=str(empty_dir), cleaned_up_lookback_hours=6.5)
+    with patch("anglerfish.monitor.load_records", return_value=[]) as mock_load_records:
+        result = _run_monitor(args, console)
+    assert result == 1
+    mock_load_records.assert_called_once_with(str(empty_dir), cleaned_up_lookback=timedelta(hours=6.5))
 
 
 def test_missing_tenant_id_raises(tmp_path, monkeypatch):
