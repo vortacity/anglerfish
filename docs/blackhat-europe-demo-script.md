@@ -82,7 +82,7 @@ Only use `--exclude-app-id` for unrelated known-good actors, such as backup, DLP
 The monitor alert should show:
 
 - `Operation`: `MailItemsAccessed`
-- `Accessed by`: the accessed user or principal value rendered by Anglerfish
+- `Accessed by`: the event `UserId` or `UserKey` rendered by Anglerfish; this is not necessarily the mailbox owner
 - `Source IP`: where present in the audit event
 - `Client`: client info where present in the audit event
 - `Artifact`: matched Outlook artifact, preferably `internet_message_id`
@@ -123,7 +123,8 @@ anglerfish --non-interactive \
 - README claim is visible.
 - Deployment command is visible.
 - Local deployment JSON record is visible.
-- `internet_message_id`, `folder_id`, or `message_id` match key is visible.
+- Deployment record identifiers are visible: `folder_id`, `message_id` or `inbox_message_id`, and `internet_message_id` where present.
+- Monitor correlation key is visible: `internet_message_id` for bind events, with folder-name/path fallback for sync events.
 - Trigger timestamp and authorized actor are documented.
 - `MailItemsAccessed` event timestamp is visible in the monitor output or sanitized example.
 - `anglerfish monitor` alert references the deployment record.
@@ -151,5 +152,7 @@ If both draft and send records were used, clean up each record path:
 anglerfish cleanup --non-interactive "$HOME/.anglerfish/records/blackhat-europe-draft.json"
 anglerfish cleanup --non-interactive "$HOME/.anglerfish/records/blackhat-europe-send.json"
 ```
+
+Send-mode cleanup moves the inbox message to Deleted Items. For booth demos, use a disposable test mailbox or empty Deleted Items after cleanup if the visible artifact must be removed from the mailbox.
 
 Review the app registration after the demo and remove temporary credentials or test-only permissions that are no longer needed.

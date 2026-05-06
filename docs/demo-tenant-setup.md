@@ -173,13 +173,15 @@ anglerfish cleanup --non-interactive ~/.anglerfish/records/adele-draft.json
 anglerfish cleanup --non-interactive ~/.anglerfish/records/adele-send.json
 ```
 
+Send-mode cleanup moves the inbox message to Deleted Items. For booth demos, use a disposable test mailbox or empty Deleted Items after cleanup if the visible artifact must be removed from the mailbox.
+
 ## Troubleshooting
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
 | `AuthenticationError: AADSTS7000215` | Invalid client secret | Regenerate the secret and update `ANGLERFISH_CLIENT_SECRET` |
 | `AuthenticationError: No application credential configured` | Secret or certificate env vars missing | Export one supported credential set and set `ANGLERFISH_APP_CREDENTIAL_MODE` correctly |
-| `GraphApiError: 403 Forbidden` | Missing Graph admin consent | Re-check `Mail.ReadWrite` and `Mail.Send`, then grant consent again |
+| `GraphApiError: 403 Forbidden` | Missing Graph admin consent | Re-check permissions required for the selected workflow, then grant consent again |
 | `GraphApiError: 404 Not Found` on mailbox | Wrong UPN or mailbox not licensed | Verify the user and Exchange Online license |
 | `monitor` fails to authenticate | `ActivityFeed.Read` not granted | Add the Office 365 Management API permission and grant consent |
 | `verify` returns an error for a send record | Expected behavior | `verify` only supports draft-mode Outlook records |

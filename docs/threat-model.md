@@ -11,7 +11,7 @@ Threat scenarios detected:
 | Scenario | Canary type | Audit event |
 |----------|-------------|-------------|
 | Attacker reads a compromised user's email | Outlook (draft) | `MailItemsAccessed` |
-| Attacker sends canary email to victim, victim opens it | Outlook (send) | `MailItemsAccessed` |
+| Anglerfish sends a visible canary into the mailbox; later access to that canary is interpreted using UAL actor context to distinguish demo, authorized, or attacker activity | Outlook (send) | `MailItemsAccessed` |
 
 ### UAL Event Details
 
