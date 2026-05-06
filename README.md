@@ -5,7 +5,7 @@
 
 [![CI](https://github.com/vortacity/anglerfish/actions/workflows/ci.yml/badge.svg)](https://github.com/vortacity/anglerfish/actions/workflows/ci.yml)
 
-Deploy Outlook canaries inside Microsoft 365 and detect mailbox access through Unified Audit Log correlation: self-hosted, open source, no third-party data plane, no DNS callbacks, no HTTP beacons, no external listener.
+Deploy Outlook canaries inside Microsoft 365 and detect mailbox access through Unified Audit Log correlation: self-hosted, open source, no third-party data plane for detection, no DNS callbacks, no HTTP beacons, no external listener.
 
 Anglerfish is a Python CLI for planting deceptive Outlook messages with Microsoft Graph and matching `MailItemsAccessed` events from the Microsoft 365 Unified Audit Log back to local deployment records. It supports hidden-folder draft canaries, inbox send canaries, local health checks for draft deployments, and access monitoring without callback infrastructure.
 
@@ -239,13 +239,17 @@ anglerfish monitor --records-dir ~/.anglerfish/records \
   --slack-webhook-url https://hooks.slack.com/services/...
 ```
 
+Unified Audit Log polling is delayed, not an immediate stream. Microsoft does not guarantee a return time for audit records; core service records are typically available after 60 to 90 minutes. See [Microsoft audit search guidance](https://learn.microsoft.com/en-us/purview/audit-search).
+
+The no third-party data plane claim applies to detection. Optional Slack alerting sends post-detection notifications to the configured webhook.
+
 Suppress known-good actors:
 
 ```bash
 anglerfish monitor --exclude-app-id "<known-good-app-id>"
 ```
 
-`--exclude-app-id` is a static allowlist for known-good actors such as backup, DLP, or eDiscovery tools. The option is repeatable when more than one known-good app principal should be excluded from matching.
+`--exclude-app-id` is a static allowlist for known-good actors such as backup, DLP, or eDiscovery tools. The option is repeatable when more than one known-good app principal should be excluded from matching. Do not exclude the actor or app used to generate demo evidence.
 
 Demo mode:
 
@@ -253,9 +257,10 @@ Demo mode:
 anglerfish list --records-dir examples/demo-records
 anglerfish cleanup --demo --non-interactive examples/demo-records/outlook-draft-record.json
 anglerfish cleanup --demo --non-interactive examples/demo-records/outlook-send-record.json
-anglerfish verify --demo
 anglerfish monitor --demo --count 2
 ```
+
+`anglerfish verify --demo` intentionally includes gone/error rows and exits nonzero, so it is omitted from the copy-paste demo block.
 
 ## CLI Help
 

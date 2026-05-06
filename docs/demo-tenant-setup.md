@@ -62,6 +62,9 @@ Scope warning:
 2. Go to **Users** -> **Active users**.
 3. Choose a mailbox-enabled user and note the UPN.
 4. Confirm the user has an Exchange Online license.
+5. Verify the target mailbox license and mailbox auditing posture support `MailItemsAccessed`.
+
+Microsoft documents `MailItemsAccessed` as part of Audit (Standard) and Exchange mailbox auditing, enabled by default for users assigned Office 365 E3/E5 or Microsoft 365 E3/E5. Do not assume the same posture for every license; verify the target mailbox before using it for a demo. See [Microsoft's MailItemsAccessed guidance](https://learn.microsoft.com/en-us/purview/audit-log-investigate-accounts).
 
 Draft mode creates a hidden folder in that mailbox. Send mode delivers directly to the Inbox.
 
@@ -107,7 +110,7 @@ anglerfish --dry-run --non-interactive \
   --delivery-mode draft
 ```
 
-If that succeeds, Graph authentication and Outlook mailbox access are configured correctly.
+If that succeeds, the CLI configuration and authentication flow are valid. A real deploy verifies mailbox write access.
 
 ## 8. Deploy Your First Canary
 
@@ -159,7 +162,7 @@ If the tenant has known-good mailbox access from backup, DLP, or eDiscovery tool
 anglerfish monitor --exclude-app-id "<known-good-app-id>"
 ```
 
-`--exclude-app-id` is a static allowlist. Use it only for actors whose mailbox access is expected and approved for the demo tenant.
+`--exclude-app-id` is a static allowlist. Use it only for unrelated actors whose mailbox access is expected and approved for the demo tenant. Never exclude the actor or app used to generate demo evidence.
 
 Clean up when done:
 
