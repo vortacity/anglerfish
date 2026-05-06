@@ -21,7 +21,6 @@ from ..exceptions import (
     DeploymentError,
     GraphApiError,
     MonitorError,
-    TemplateError,
 )
 from ..templates import find_template_by_name as _find_template_by_name, list_templates, load_template
 from .prompts import _parse_var_args, _render_deploy_template
@@ -122,10 +121,7 @@ def _format_exception_message(exc: BaseException) -> str:
     return "\n".join(lines)
 
 
-def _print_auth_success(console: Console, *, auth_mode: str = "application") -> None:
-    if auth_mode == "delegated":
-        console.print("[bold green]\u2713[/bold green] Authenticated using [green]delegated permissions[/green]")
-        return
+def _print_auth_success(console: Console, **_unused: object) -> None:
     console.print("[bold green]\u2713[/bold green] Authenticated using [green]application permissions[/green]")
 
 
@@ -150,7 +146,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--canary-type",
-        choices=("outlook", "sharepoint", "onedrive"),
+        choices=("outlook",),
         default=None,
         help="Canary type. Skips canary type prompt when provided.",
     )
@@ -170,7 +166,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--target",
         default=None,
         metavar="VALUE",
-        help=("Deployment target: mailbox UPN (Outlook), site name (SharePoint), or UPN (OneDrive)."),
+        help="Deployment target: mailbox UPN/email for Outlook.",
     )
     parser.add_argument(
         "--delivery-mode",
@@ -178,19 +174,6 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         default=None,
         dest="delivery_mode",
         help="Delivery mode: 'draft' or 'send' for Outlook.",
-    )
-    parser.add_argument(
-        "--folder-path",
-        default=None,
-        metavar="PATH",
-        dest="folder_path",
-        help="SharePoint or OneDrive destination folder path (e.g. HR/Restricted).",
-    )
-    parser.add_argument(
-        "--filename",
-        default=None,
-        metavar="NAME",
-        help="SharePoint or OneDrive canary filename.",
     )
     parser.add_argument(
         "--var",
@@ -348,43 +331,6 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Number of simulated alerts to print in --demo mode (default: 1).",
     )
 
-    batch_parser = subparsers.add_parser("batch", help="Deploy multiple canaries from a YAML manifest.")
-    batch_parser.add_argument("manifest", metavar="MANIFEST", help="Path to batch manifest YAML file.")
-    batch_parser.add_argument(
-        "--output-dir",
-        default=str(Path.home() / ".anglerfish" / "records"),
-        metavar="DIR",
-        dest="output_dir",
-        help="Directory for deployment record JSON files. Default: ~/.anglerfish/records/",
-    )
-    batch_parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        dest="dry_run",
-        help="Validate manifest and authenticate without deploying.",
-    )
-    batch_parser.add_argument(
-        "--demo",
-        action="store_true",
-        help="Run in offline demo mode (no auth, no API calls).",
-    )
-    batch_parser.add_argument(
-        "--tenant-id",
-        default=None,
-        help="Microsoft Entra tenant ID. Overrides ANGLERFISH_TENANT_ID.",
-    )
-    batch_parser.add_argument(
-        "--client-id",
-        default=None,
-        help="Microsoft Entra application (client) ID. Overrides ANGLERFISH_CLIENT_ID.",
-    )
-    batch_parser.add_argument(
-        "--credential-mode",
-        choices=("auto", "secret", "certificate"),
-        default=None,
-        help="Credential type for application auth.",
-    )
-
     verify_parser = subparsers.add_parser("verify", help="Check that deployed canaries still exist.")
     verify_parser.add_argument(
         "record",
@@ -423,68 +369,6 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Credential type for application auth.",
     )
 
-    dashboard_parser = subparsers.add_parser("dashboard", help="Live TUI dashboard for canary monitoring.")
-    dashboard_parser.add_argument(
-        "--records-dir",
-        default=str(Path.home() / ".anglerfish" / "records"),
-        metavar="DIR",
-        dest="records_dir",
-        help="Directory containing deployment record JSON files.",
-    )
-    dashboard_parser.add_argument(
-        "--poll-interval",
-        type=int,
-        default=300,
-        metavar="SECONDS",
-        dest="poll_interval",
-        help="Audit log poll interval in seconds (default: 300).",
-    )
-    dashboard_parser.add_argument(
-        "--verify-interval",
-        type=int,
-        default=300,
-        metavar="SECONDS",
-        dest="verify_interval",
-        help="Health check refresh interval in seconds (default: 300).",
-    )
-    dashboard_parser.add_argument(
-        "--alert-log",
-        default=None,
-        metavar="PATH",
-        dest="alert_log",
-        help="JSONL alert log file (loads history on startup).",
-    )
-    dashboard_parser.add_argument(
-        "--exclude-app-id",
-        action="append",
-        default=[],
-        metavar="APP_ID",
-        dest="exclude_app_ids",
-        help="App/client IDs to exclude from matching (repeatable).",
-    )
-    dashboard_parser.add_argument(
-        "--credential-mode",
-        choices=("auto", "secret", "certificate"),
-        default=None,
-        help="Credential type for application auth.",
-    )
-    dashboard_parser.add_argument(
-        "--tenant-id",
-        default=None,
-        help="Microsoft Entra tenant ID. Overrides ANGLERFISH_TENANT_ID.",
-    )
-    dashboard_parser.add_argument(
-        "--client-id",
-        default=None,
-        help="Microsoft Entra application (client) ID. Overrides ANGLERFISH_CLIENT_ID.",
-    )
-    dashboard_parser.add_argument(
-        "--demo",
-        action="store_true",
-        default=False,
-        help="Run with simulated data (no auth required).",
-    )
-
     return parser.parse_args(list(argv) if argv is not None else sys.argv[1:])
 
 
@@ -519,18 +403,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             console.print("\n[yellow]Cancelled.[/yellow]")
             return 130
 
-    if args.subcommand == "batch":
-        from .batch import _run_batch
-
-        try:
-            return _run_batch(args, console)
-        except (AuthenticationError, DeploymentError, TemplateError, GraphApiError) as exc:
-            _print_error(console, _format_exception_message(exc))
-            return 1
-        except KeyboardInterrupt:
-            console.print("\n[yellow]Cancelled.[/yellow]")
-            return 130
-
     if args.subcommand == "verify":
         from .deploy import _run_verify
 
@@ -539,17 +411,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         except (AuthenticationError, DeploymentError, GraphApiError) as exc:
             _print_error(console, _format_exception_message(exc))
             return 1
-
-    if args.subcommand == "dashboard":
-        from .dashboard import _run_dashboard
-
-        try:
-            return _run_dashboard(args)
-        except (AuthenticationError, AuditApiError, MonitorError) as exc:
-            _print_error(console, _format_exception_message(exc))
-            return 1
-        except KeyboardInterrupt:
-            return 0
 
     _print_banner(console)
 
@@ -563,7 +424,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         import questionary
 
-        from .deploy import _run_demo_deploy, _run_onedrive_deploy, _run_outlook_deploy, _run_sharepoint_deploy
+        from .deploy import _run_demo_deploy, _run_outlook_deploy
         from .prompts import _POINTER, _QMARK, _STYLE
 
         # Parse --var KEY=VALUE arguments up front so errors surface early.
@@ -571,9 +432,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         # Non-interactive mode: require --canary-type.
         if non_interactive and not args.canary_type:
-            raise DeploymentError(
-                "--canary-type is required in --non-interactive mode. Options: outlook, sharepoint, onedrive."
-            )
+            raise DeploymentError("--canary-type is required in --non-interactive mode. Options: outlook.")
 
         # Step 1: Canary configuration
         _step_rule(console, 1, total_steps, "Canary Configuration")
@@ -585,8 +444,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "Select canary type:",
                 choices=[
                     questionary.Choice("Outlook (hidden email)", value="outlook"),
-                    questionary.Choice("SharePoint (canary document)", value="sharepoint"),
-                    questionary.Choice("OneDrive (canary file in personal storage)", value="onedrive"),
                 ],
                 style=_STYLE,
                 qmark=_QMARK,
@@ -638,26 +495,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         if getattr(args, "demo", False):
             return _run_demo_deploy(console, canary_type, rendered_template)
 
-        if canary_type == "sharepoint":
-            return _run_sharepoint_deploy(
-                args,
-                console,
-                rendered_template,
-                non_interactive,
-                total_steps,
-                cli_var_values,
-            )
-
-        if canary_type == "onedrive":
-            return _run_onedrive_deploy(
-                args,
-                console,
-                rendered_template,
-                non_interactive,
-                total_steps,
-                cli_var_values,
-            )
-
         return _run_outlook_deploy(
             args,
             console,
@@ -667,7 +504,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             cli_var_values,
         )
 
-    except (AuthenticationError, TemplateError, DeploymentError, GraphApiError) as exc:
+    except (AuthenticationError, DeploymentError, GraphApiError) as exc:
         _print_error(console, _format_exception_message(exc))
         return 1
     except AnglerfishError as exc:

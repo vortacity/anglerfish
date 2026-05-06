@@ -1,227 +1,172 @@
 # Demo Tenant Setup Guide
 
-This guide walks through setting up a safe Microsoft 365 test environment for Anglerfish demos and development. The primary demo path is Outlook draft deployment plus `MailItemsAccessed` correlation from the Unified Audit Log.
+This guide sets up a safe Microsoft 365 tenant for Anglerfish's Outlook-only MVP.
 
----
+## 1. Provision a Test Tenant
 
-## 1. Get a Microsoft 365 Developer Tenant
+1. Join the [Microsoft 365 Developer Program](https://developer.microsoft.com/en-us/microsoft-365/dev-program) or use an existing non-production tenant.
+2. Confirm you have Exchange Online and audit logging available.
+3. Record the tenant domain, such as `contoso.onmicrosoft.com`.
 
-If you don't already have a test tenant:
+Do not use a production tenant unless your organization has explicitly approved the mailbox access scope.
 
-1. Go to the [Microsoft 365 Developer Program](https://developer.microsoft.com/en-us/microsoft-365/dev-program)
-2. Sign up (free) and provision a developer sandbox tenant
-3. The sandbox includes 25 E5 licenses, sufficient for all Anglerfish features
-4. Note your tenant domain (e.g., `yourtenant.onmicrosoft.com`)
+## 2. Create an Entra App Registration
 
-If you have an existing test/dev tenant with E3 or E5 licenses, that works too. **Never use a production tenant for demos.**
+1. Open the [Azure Portal](https://portal.azure.com).
+2. Go to **Microsoft Entra ID** -> **App registrations** -> **New registration**.
+3. Use a single-tenant app and leave redirect URIs blank.
+4. Record the **Application (client) ID** and **Directory (tenant) ID**.
 
----
+Anglerfish only supports application auth in this release. Delegated or device-code flows are out of scope.
 
-## 2. Create an Azure AD (Entra ID) App Registration
+## 3. Add a Credential
 
-1. Sign in to the [Azure Portal](https://portal.azure.com) with your test tenant admin account
-2. Navigate to **Microsoft Entra ID** > **App registrations** > **New registration**
-3. Settings:
-   - **Name:** `Anglerfish Demo`
-   - **Supported account types:** Accounts in this organizational directory only (single tenant)
-   - **Redirect URI:** leave blank (not needed for application auth)
-4. Click **Register**
-5. Note the **Application (client) ID** and **Directory (tenant) ID** from the Overview page
+Choose one credential type.
 
----
+Client secret:
+1. Go to **Certificates & secrets** -> **Client secrets**.
+2. Create a new secret.
+3. Copy the secret value immediately.
 
-## 3. Create a Client Secret
+Certificate:
+1. Upload a certificate under **Certificates & secrets** -> **Certificates**.
+2. Keep the PFX or PEM material available on the machine where Anglerfish will run.
+3. Record the thumbprint if you are using PEM files.
 
-1. In your app registration, go to **Certificates & secrets** > **Client secrets** > **New client secret**
-2. Description: `anglerfish-demo`
-3. Expiry: 6 months (or shorter for conference-only use)
-4. Click **Add** and **copy the secret value immediately** (it won't be shown again)
+## 4. Grant Permissions
 
----
+Add the following application permissions.
 
-## 4. Grant API Permissions
-
-1. In your app registration, go to **API permissions** > **Add a permission**.
-2. Add the following permissions based on the demo path you need:
-
-### Primary Outlook Draft Demo
-
-Under **Microsoft Graph** > **Application permissions**:
+Microsoft Graph:
 
 | Permission | Required for |
-|-----------|-------------|
-| `Mail.ReadWrite` | Create and verify hidden-folder draft canaries |
+| --- | --- |
+| `Mail.ReadWrite` | Draft deploy, cleanup, verify, and send deploy |
+| `Mail.Send` | Send deploy only |
 
-Under **Office 365 Management APIs** > **Application permissions**:
-
-| Permission | Required for |
-|-----------|-------------|
-| `ActivityFeed.Read` | Poll Unified Audit Log events with `anglerfish monitor` |
-
-### Optional Outlook Send Mode
+Office 365 Management APIs:
 
 | Permission | Required for |
-|-----------|-------------|
-| `Mail.Send` | Send mode only |
+| --- | --- |
+| `ActivityFeed.Read` | `anglerfish monitor` |
 
-### Optional File Canaries
+After adding permissions, grant admin consent.
 
-| Permission | Required for |
-|-----------|-------------|
-| `Sites.ReadWrite.All` | SharePoint site discovery and file upload |
-| `Files.ReadWrite.All` | SharePoint or OneDrive file upload |
+Scope warning:
 
-3. Click **Add permissions**
+> `Mail.ReadWrite` grants application access across tenant mailboxes. Use a dedicated demo tenant whenever possible.
 
-### Scope Warning
+## 5. Pick a Test Mailbox
 
-> **`Mail.ReadWrite` is an application-level permission that grants read/write access to ALL mailboxes in the tenant.** This is acceptable in a dedicated demo tenant but requires careful review in any shared environment. Never grant this in a production tenant without explicit security team approval.
+1. Open the [Microsoft 365 Admin Center](https://admin.microsoft.com).
+2. Go to **Users** -> **Active users**.
+3. Choose a mailbox-enabled user and note the UPN.
+4. Confirm the user has an Exchange Online license.
 
----
+Draft mode creates a hidden folder in that mailbox. Send mode delivers directly to the Inbox.
 
-## 5. Grant Admin Consent
+## 6. Export Environment Variables
 
-1. Still on the **API permissions** page, click **Grant admin consent for [your tenant]**
-2. Confirm by clicking **Yes**
-3. Verify all permissions show a green checkmark under "Status"
-
-Admin consent requires the Global Administrator role. In a developer sandbox, your account already has this role.
-
----
-
-## 6. Set Up Test Mailbox
-
-### Test Mailbox
-
-Your developer tenant includes pre-provisioned user accounts. Pick one as your canary target:
-
-1. Go to [Microsoft 365 Admin Center](https://admin.microsoft.com) > **Users** > **Active users**
-2. Note a user's UPN (e.g., `adele.vance@yourtenant.onmicrosoft.com`)
-3. Ensure the user has an Exchange Online license assigned (included in E5)
-
-### Optional SharePoint Site
-
-This is not needed for the primary Outlook demo. If you also want to exercise the secondary file-canary path:
-
-1. Go to [SharePoint Admin Center](https://yourtenant-admin.sharepoint.com)
-2. Create a new team site (or use an existing one):
-   - **Site name:** `DemoCanaryFiles`
-   - **Privacy:** Private
-3. Create a document library folder for canary files (e.g., `HR/Restricted`)
-
----
-
-## 7. Configure Environment Variables
+Secret mode:
 
 ```bash
-export ANGLERFISH_CLIENT_ID="<application-client-id-from-step-2>"
-export ANGLERFISH_TENANT_ID="<directory-tenant-id-from-step-2>"
+export ANGLERFISH_TENANT_ID="<tenant-guid>"
+export ANGLERFISH_CLIENT_ID="<app-client-id>"
 export ANGLERFISH_APP_CREDENTIAL_MODE="secret"
-export ANGLERFISH_CLIENT_SECRET="<client-secret-from-step-3>"
+export ANGLERFISH_CLIENT_SECRET="<client-secret>"
 ```
 
-Or copy `.env.example` to `.env` and fill in the values:
+Certificate mode with a PFX:
 
 ```bash
-cp .env.example .env
-# Edit .env with your values
-# Then source it:
-set -a; source .env; set +a
+export ANGLERFISH_TENANT_ID="<tenant-guid>"
+export ANGLERFISH_CLIENT_ID="<app-client-id>"
+export ANGLERFISH_APP_CREDENTIAL_MODE="certificate"
+export ANGLERFISH_CLIENT_CERT_PFX_PATH="/path/to/app-cert.pfx"
+export ANGLERFISH_CLIENT_CERT_PASSPHRASE="<optional-passphrase>"
 ```
 
----
+Anglerfish does not auto-load `.env`. Export variables directly or source a file yourself.
 
-## 8. Verify the Setup
+## 7. Verify the Setup
+
+Check the CLI first:
 
 ```bash
-# Check version
 anglerfish --version
+anglerfish --help
+```
 
-# Dry run: authenticates and validates without writing
+Then run a dry-run draft deployment:
+
+```bash
 anglerfish --dry-run --non-interactive \
   --canary-type outlook \
   --template "Fake Password Reset" \
-  --target adele.vance@yourtenant.onmicrosoft.com \
+  --target adele.vance@contoso.com \
   --delivery-mode draft
 ```
 
-If the dry run succeeds, your app registration, permissions, and credentials are all configured correctly.
+If that succeeds, Graph authentication and Outlook mailbox access are configured correctly.
 
----
+## 8. Deploy Your First Canary
 
-## 9. First Outlook Draft Canary Deployment
+Draft mode:
 
 ```bash
 anglerfish --non-interactive \
   --canary-type outlook \
   --template "Fake Password Reset" \
-  --target adele.vance@yourtenant.onmicrosoft.com \
+  --target adele.vance@contoso.com \
   --delivery-mode draft \
-  --output-json ~/.anglerfish/records/first-test.json
+  --output-json ~/.anglerfish/records/adele-draft.json
 ```
 
-Verify the deployment:
+Send mode:
 
 ```bash
-anglerfish list
+anglerfish --non-interactive \
+  --canary-type outlook \
+  --template "Fake Wire Transfer" \
+  --target adele.vance@contoso.com \
+  --delivery-mode send \
+  --output-json ~/.anglerfish/records/adele-send.json
 ```
 
-For draft-mode canaries, you can also verify that the hidden folder and draft still exist:
+Review the local record inventory:
 
 ```bash
-anglerfish verify ~/.anglerfish/records/first-test.json
+anglerfish list --records-dir ~/.anglerfish/records
 ```
 
----
+## 9. Validate the Operator Loop
 
-## 10. Live Audit-Log Correlation Demo
-
-This is the reviewer-facing evidence path:
-
-1. Record the deployment timestamp and `internet_message_id` from `~/.anglerfish/records/first-test.json`.
-2. Trigger an authorized read of the deployed Outlook message from the target mailbox. For draft mode, use an approved Graph or Exchange read path that touches the hidden folder/message; the folder is intentionally hidden from normal Outlook navigation.
-3. Wait for Unified Audit Log ingestion. This commonly takes 15-60 minutes.
-4. Poll for correlation:
+Verify draft-mode deployments:
 
 ```bash
-anglerfish monitor \
-  --records-dir ~/.anglerfish/records \
-  --once \
-  --exclude-app-id "$ANGLERFISH_CLIENT_ID"
+anglerfish verify ~/.anglerfish/records/adele-draft.json
 ```
 
-The evidence to capture in a 2-3 minute demo video:
+Run the monitor:
 
-- Deployment command and saved record path
-- Deployment timestamp and Outlook `internet_message_id`
-- Trigger/access timestamp
-- `MailItemsAccessed` event timestamp from UAL
-- Anglerfish alert showing the record match
+```bash
+anglerfish monitor --records-dir ~/.anglerfish/records
+```
 
 Clean up when done:
 
 ```bash
-anglerfish cleanup ~/.anglerfish/records/first-test.json
+anglerfish cleanup --non-interactive ~/.anglerfish/records/adele-draft.json
+anglerfish cleanup --non-interactive ~/.anglerfish/records/adele-send.json
 ```
-
----
 
 ## Troubleshooting
 
 | Symptom | Likely cause | Fix |
-|---------|-------------|-----|
-| `AuthenticationError: AADSTS7000215` | Invalid client secret | Regenerate secret in Azure Portal |
-| `AuthenticationError: AADSTS700016` | Wrong client ID | Verify app registration client ID |
-| `GraphApiError: 403 Forbidden` | Missing admin consent | Grant admin consent in API permissions |
-| `GraphApiError: 404 Not Found` on mailbox | User doesn't exist or no Exchange license | Verify UPN and license assignment |
-| `monitor` cannot list audit content | Missing `ActivityFeed.Read` or inactive audit subscription | Add Office 365 Management APIs permission, grant admin consent, then rerun monitor |
-| `GraphApiError: 403` on SharePoint | Missing `Sites.ReadWrite.All` | Add permission and re-grant admin consent |
-
----
-
-## Cleanup After Demo
-
-1. Remove deployed canaries: `anglerfish cleanup <record.json>` for each record
-2. Optionally delete the app registration in Azure Portal
-3. Rotate or delete the client secret
-4. Developer sandbox tenants auto-renew; no action needed unless you want to deprovision
+| --- | --- | --- |
+| `AuthenticationError: AADSTS7000215` | Invalid client secret | Regenerate the secret and update `ANGLERFISH_CLIENT_SECRET` |
+| `AuthenticationError: No application credential configured` | Secret or certificate env vars missing | Export one supported credential set and set `ANGLERFISH_APP_CREDENTIAL_MODE` correctly |
+| `GraphApiError: 403 Forbidden` | Missing Graph admin consent | Re-check `Mail.ReadWrite` and `Mail.Send`, then grant consent again |
+| `GraphApiError: 404 Not Found` on mailbox | Wrong UPN or mailbox not licensed | Verify the user and Exchange Online license |
+| `monitor` fails to authenticate | `ActivityFeed.Read` not granted | Add the Office 365 Management API permission and grant consent |
+| `verify` returns an error for a send record | Expected behavior | `verify` only supports draft-mode Outlook records |

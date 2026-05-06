@@ -2,22 +2,29 @@
 
 from __future__ import annotations
 
+import argparse
+import os
+
 import pytest
+import questionary
+from rich.console import Console
 
 import anglerfish.templates as templates_mod
+from anglerfish.cli import deploy as deploy_mod
 from anglerfish.templates import find_template_by_name as _find_template_by_name
 from anglerfish.cli.prompts import (
-    _normalize_sharepoint_folder_path,
+    AuthPromptResult,
     _parse_var_args,
+    _prompt_auth_setup,
     _validate_email,
     _validate_file_path,
     _validate_non_empty,
-    _validate_sharepoint_folder_path,
     _validate_single_filename,
     _validate_subject,
     _validate_variable_value,
 )
-from anglerfish.exceptions import TemplateError
+from anglerfish.exceptions import AuthenticationError, TemplateError
+from anglerfish.verify import VerifyResult, VerifyStatus
 
 
 # ---------------------------------------------------------------------------
@@ -154,54 +161,6 @@ class TestValidateVariableValue:
 
 
 # ---------------------------------------------------------------------------
-# _validate_sharepoint_folder_path
-# ---------------------------------------------------------------------------
-
-
-class TestValidateSharepointFolderPath:
-    def test_valid(self):
-        assert _validate_sharepoint_folder_path("HR/Restricted") is True
-
-    def test_empty(self):
-        result = _validate_sharepoint_folder_path("")
-        assert isinstance(result, str)
-        assert "folder path" in result.lower()
-
-    def test_too_long(self):
-        result = _validate_sharepoint_folder_path("a" * 401)
-        assert isinstance(result, str)
-        assert "400" in result
-
-
-# ---------------------------------------------------------------------------
-# _normalize_sharepoint_folder_path
-# ---------------------------------------------------------------------------
-
-
-class TestNormalizeSharepointFolderPath:
-    def test_strips_shared_documents_prefix(self):
-        assert _normalize_sharepoint_folder_path("Shared Documents/HR/Restricted") == "HR/Restricted"
-
-    def test_strips_documents_prefix(self):
-        assert _normalize_sharepoint_folder_path("Documents/Finance") == "Finance"
-
-    def test_no_prefix(self):
-        assert _normalize_sharepoint_folder_path("HR/Restricted") == "HR/Restricted"
-
-    def test_empty(self):
-        assert _normalize_sharepoint_folder_path("") == ""
-
-    def test_whitespace(self):
-        assert _normalize_sharepoint_folder_path("   ") == ""
-
-    def test_case_insensitive_prefix(self):
-        assert _normalize_sharepoint_folder_path("shared documents/IT") == "IT"
-
-    def test_strips_leading_trailing_slashes(self):
-        assert _normalize_sharepoint_folder_path("/HR/Restricted/") == "HR/Restricted"
-
-
-# ---------------------------------------------------------------------------
 # _parse_var_args
 # ---------------------------------------------------------------------------
 
@@ -262,3 +221,185 @@ class TestFindTemplateByName:
         monkeypatch.setattr(templates_mod, "list_templates", lambda ct: [])
         with pytest.raises(TemplateError, match="No outlook templates"):
             _find_template_by_name("outlook", "Any")
+
+
+class TestPromptAuthSetup:
+    def test_prompt_auth_setup_non_interactive_application_secret_only_returns_secret(self, monkeypatch):
+        args = type("Args", (), {"tenant_id": None, "client_id": None, "credential_mode": "auto"})()
+        monkeypatch.setenv("ANGLERFISH_TENANT_ID", "tenant-id")
+        monkeypatch.setenv("ANGLERFISH_CLIENT_ID", "client-id")
+        monkeypatch.setenv("ANGLERFISH_CLIENT_SECRET", "secret")
+
+        result = _prompt_auth_setup(args, console=None, auth_mode="application", non_interactive=True)
+
+        assert result == AuthPromptResult(credential_mode="secret")
+
+    def test_prompt_auth_setup_non_interactive_application_certificate_only_returns_certificate(self, monkeypatch):
+        args = type("Args", (), {"tenant_id": None, "client_id": None, "credential_mode": "auto"})()
+        monkeypatch.setenv("ANGLERFISH_TENANT_ID", "tenant-id")
+        monkeypatch.setenv("ANGLERFISH_CLIENT_ID", "client-id")
+        monkeypatch.setenv("ANGLERFISH_CLIENT_CERT_PFX_PATH", "/tmp/client.pfx")
+
+        result = _prompt_auth_setup(args, console=None, auth_mode="application", non_interactive=True)
+
+        assert result == AuthPromptResult(credential_mode="certificate")
+
+    def test_prompt_auth_setup_non_interactive_application_mixed_defaults_to_secret(self, monkeypatch):
+        args = type("Args", (), {"tenant_id": None, "client_id": None, "credential_mode": "auto"})()
+        monkeypatch.setenv("ANGLERFISH_TENANT_ID", "tenant-id")
+        monkeypatch.setenv("ANGLERFISH_CLIENT_ID", "client-id")
+        monkeypatch.setenv("ANGLERFISH_CLIENT_SECRET", "secret")
+        monkeypatch.setenv("ANGLERFISH_CLIENT_CERT_PRIVATE_KEY_PATH", "/tmp/client.key")
+        monkeypatch.setenv("ANGLERFISH_CLIENT_CERT_THUMBPRINT", "ABCDEF")
+
+        result = _prompt_auth_setup(args, console=None, auth_mode="application", non_interactive=True)
+
+        assert result == AuthPromptResult(credential_mode="secret")
+
+    def test_prompt_auth_setup_rejects_delegated_auth_mode(self, monkeypatch):
+        args = type("Args", (), {"tenant_id": None, "client_id": None, "credential_mode": None})()
+        monkeypatch.setenv("ANGLERFISH_TENANT_ID", "tenant-id")
+        monkeypatch.setenv("ANGLERFISH_CLIENT_ID", "client-id")
+        monkeypatch.setenv("ANGLERFISH_CLIENT_SECRET", "secret")
+        with pytest.raises(AuthenticationError, match="application auth"):
+            _prompt_auth_setup(args, console=None, auth_mode="delegated", non_interactive=True)
+
+    def test_prompt_auth_setup_records_restore_value_for_overwritten_passphrase(self, monkeypatch, tmp_path):
+        args = type("Args", (), {"tenant_id": None, "client_id": None, "credential_mode": "certificate"})()
+        monkeypatch.setenv("ANGLERFISH_TENANT_ID", "tenant-id")
+        monkeypatch.setenv("ANGLERFISH_CLIENT_ID", "client-id")
+        monkeypatch.setenv("ANGLERFISH_CLIENT_CERT_PASSPHRASE", "existing-passphrase")
+
+        pfx_path = tmp_path / "client.pfx"
+        pfx_path.write_text("fake-pfx", encoding="utf-8")
+
+        answers = iter(["pfx", str(pfx_path), "prompted-passphrase"])
+
+        class _FakePrompt:
+            def __init__(self, answer):
+                self._answer = answer
+
+            def ask(self):
+                return self._answer
+
+        monkeypatch.setattr(questionary, "select", lambda *args, **kwargs: _FakePrompt(next(answers)))
+        monkeypatch.setattr(questionary, "text", lambda *args, **kwargs: _FakePrompt(next(answers)))
+        monkeypatch.setattr(questionary, "password", lambda *args, **kwargs: _FakePrompt(next(answers)))
+
+        result = _prompt_auth_setup(args, console=Console(file=None, force_terminal=False))
+
+        assert result == AuthPromptResult(
+            credential_mode="certificate",
+            restore_env_vars=(("ANGLERFISH_CLIENT_CERT_PASSPHRASE", "existing-passphrase"),),
+        )
+        assert os.environ["ANGLERFISH_CLIENT_CERT_PASSPHRASE"] == "prompted-passphrase"
+
+
+def test_verify_prompted_secret_is_cleared_after_auth(monkeypatch):
+    args = argparse.Namespace(
+        demo=False,
+        record="record.json",
+        records_dir=None,
+        tenant_id=None,
+        client_id=None,
+        credential_mode="secret",
+    )
+    monkeypatch.setenv("ANGLERFISH_TENANT_ID", "tenant-id")
+    monkeypatch.setenv("ANGLERFISH_CLIENT_ID", "client-id")
+    monkeypatch.delenv("ANGLERFISH_CLIENT_SECRET", raising=False)
+    monkeypatch.setattr(
+        deploy_mod,
+        "read_deployment_record",
+        lambda _path: {
+            "canary_type": "outlook",
+            "delivery_mode": "draft",
+            "template_name": "Fake Password Reset",
+            "target_user": "alice@contoso.com",
+            "folder_id": "folder-123",
+        },
+    )
+    monkeypatch.setattr(deploy_mod, "GraphClient", lambda _token: object())
+
+    def _fake_prompt_auth_setup(*_args, **_kwargs):
+        os.environ["ANGLERFISH_CLIENT_SECRET"] = "prompted-secret"
+        return AuthPromptResult(
+            credential_mode="secret",
+            clear_env_vars=("ANGLERFISH_CLIENT_SECRET",),
+        )
+
+    def _fake_authenticate(*_args, **_kwargs):
+        assert os.environ.get("ANGLERFISH_CLIENT_SECRET") == "prompted-secret"
+        return "token-123"
+
+    monkeypatch.setattr(deploy_mod, "_prompt_auth_setup", _fake_prompt_auth_setup)
+    monkeypatch.setattr(deploy_mod, "authenticate", _fake_authenticate)
+    monkeypatch.setattr(
+        "anglerfish.verify.run_verify",
+        lambda _records, _graph: [
+            VerifyResult(
+                canary_type="outlook",
+                template_name="Fake Password Reset",
+                target="alice@contoso.com",
+                status=VerifyStatus.OK,
+            )
+        ],
+    )
+
+    rc = deploy_mod._run_verify(args, Console(file=None, force_terminal=False))
+    assert rc == 0
+    assert "ANGLERFISH_CLIENT_SECRET" not in os.environ
+
+
+def test_verify_prompted_passphrase_restores_previous_env_value(monkeypatch):
+    args = argparse.Namespace(
+        demo=False,
+        record="record.json",
+        records_dir=None,
+        tenant_id=None,
+        client_id=None,
+        credential_mode="certificate",
+    )
+    monkeypatch.setenv("ANGLERFISH_TENANT_ID", "tenant-id")
+    monkeypatch.setenv("ANGLERFISH_CLIENT_ID", "client-id")
+    monkeypatch.setenv("ANGLERFISH_CLIENT_CERT_PASSPHRASE", "existing-passphrase")
+    monkeypatch.setattr(
+        deploy_mod,
+        "read_deployment_record",
+        lambda _path: {
+            "canary_type": "outlook",
+            "delivery_mode": "draft",
+            "template_name": "Fake Password Reset",
+            "target_user": "alice@contoso.com",
+            "folder_id": "folder-123",
+        },
+    )
+    monkeypatch.setattr(deploy_mod, "GraphClient", lambda _token: object())
+
+    def _fake_prompt_auth_setup(*_args, **_kwargs):
+        os.environ["ANGLERFISH_CLIENT_CERT_PASSPHRASE"] = "prompted-passphrase"
+        return AuthPromptResult(
+            credential_mode="certificate",
+            restore_env_vars=(("ANGLERFISH_CLIENT_CERT_PASSPHRASE", "existing-passphrase"),),
+        )
+
+    def _fake_authenticate(*_args, **_kwargs):
+        assert os.environ.get("ANGLERFISH_CLIENT_CERT_PASSPHRASE") == "prompted-passphrase"
+        return "token-123"
+
+    monkeypatch.setattr(deploy_mod, "_prompt_auth_setup", _fake_prompt_auth_setup)
+    monkeypatch.setattr(deploy_mod, "authenticate", _fake_authenticate)
+    monkeypatch.setattr(
+        "anglerfish.verify.run_verify",
+        lambda _records, _graph: [
+            VerifyResult(
+                canary_type="outlook",
+                template_name="Fake Password Reset",
+                target="alice@contoso.com",
+                status=VerifyStatus.OK,
+            )
+        ],
+    )
+
+    rc = deploy_mod._run_verify(args, Console(file=None, force_terminal=False))
+    assert rc == 0
+    assert os.environ["ANGLERFISH_CLIENT_CERT_PASSPHRASE"] == "existing-passphrase"

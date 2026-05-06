@@ -124,6 +124,7 @@ def _write_atomically(path: Path, payload: dict) -> None:
             delete=False,
         ) as fh:
             temp_path = Path(fh.name)
+            os.fchmod(fh.fileno(), 0o600)
             json.dump(payload, fh, indent=2)
             fh.flush()
             os.fsync(fh.fileno())

@@ -9,24 +9,27 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Breaking
+
+- Reset the public MVP around Outlook canaries only. SharePoint deployment,
+  OneDrive deployment, batch manifests, and the dashboard are no longer part of
+  the supported surface area.
+
 ### Changed
 
-- Refocused public documentation on the Outlook draft canary workflow:
-  deploy a hidden Outlook draft, capture the deployment record, and correlate
-  `MailItemsAccessed` events without callback infrastructure.
+- Rewrote the README, architecture notes, and demo tenant guide around the
+  supported Outlook deploy, list, verify, cleanup, and monitor workflow.
 - Added a reviewer-facing Arsenal demo script with live evidence requirements,
   UAL latency notes, and permission limitations.
-- Updated demo recording scripts so the primary offline demo shows Outlook draft
-  deployment and a single Outlook audit-log alert.
+- Demo fixtures now cover the two supported Outlook delivery modes: `draft` and
+  `send`.
+- Updated demo recording scripts around Outlook deploy and audit-log alerts.
 
 ---
 
 ## [1.0.0] — 2026-03-11
 
-First public release, prepared for Arsenal evaluation. The recommended reviewer
-path is Outlook draft canary deployment and `MailItemsAccessed` correlation
-without callback infrastructure; SharePoint, OneDrive, batch, and dashboard are
-secondary capabilities in this release.
+First public release, prepared for Black Hat Arsenal submission.
 
 ### Added
 

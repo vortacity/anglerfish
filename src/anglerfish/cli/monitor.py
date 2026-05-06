@@ -10,6 +10,28 @@ from rich.console import Console
 from ..auth import authenticate_management_api
 from ..exceptions import AuthenticationError
 from ._main import _print_banner
+from .prompts import AuthPromptResult, _prompt_auth_setup
+
+
+def _normalize_auth_prompt_result(result: AuthPromptResult | str | None) -> AuthPromptResult | None:
+    if result is None:
+        return None
+    if isinstance(result, AuthPromptResult):
+        return result
+    return AuthPromptResult(credential_mode=str(result))
+
+
+def _capture_prompted_env_values(auth_result: AuthPromptResult) -> dict[str, str]:
+    prompted_names = {name for name, _value in auth_result.restore_env_vars}
+    prompted_names.update(auth_result.clear_env_vars)
+    return {name: os.environ[name] for name in prompted_names if name in os.environ}
+
+
+def _clear_prompted_env_values(auth_result: AuthPromptResult) -> None:
+    for name, value in auth_result.restore_env_vars:
+        os.environ[name] = value
+    for name in auth_result.clear_env_vars:
+        os.environ.pop(name, None)
 
 
 def _run_monitor(args: argparse.Namespace, console: Console) -> int:
@@ -58,7 +80,14 @@ def _run_monitor(args: argparse.Namespace, console: Console) -> int:
             "ANGLERFISH_TENANT_ID is required for monitoring. Set it via environment variable or --tenant-id."
         )
 
-    token = authenticate_management_api(args.credential_mode)
+    auth_result = _normalize_auth_prompt_result(_prompt_auth_setup(args, console, auth_mode="application"))
+    if auth_result is None:
+        return 130
+    prompted_env = _capture_prompted_env_values(auth_result)
+    try:
+        token = authenticate_management_api(auth_result.credential_mode)
+    finally:
+        _clear_prompted_env_values(auth_result)
     audit_client = AuditClient(token, tenant_id)
 
     exclude_ids = {aid.strip().lower() for aid in args.exclude_app_ids if aid.strip()}
@@ -78,7 +107,7 @@ def _run_monitor(args: argparse.Namespace, console: Console) -> int:
     )
 
     # Token manager for automatic refresh.
-    token_mgr = _TokenManager(token, args.credential_mode)
+    token_mgr = _TokenManager(token, auth_result.credential_mode, prompted_env=prompted_env)
 
     return run_monitor(
         audit_client,

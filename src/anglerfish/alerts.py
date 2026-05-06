@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from dataclasses import asdict
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -95,8 +96,17 @@ def _append_jsonl(path: Path, alert: CanaryAlert) -> None:
     """Append one JSON object per line to the alert log."""
     path.parent.mkdir(parents=True, exist_ok=True)
     record = asdict(alert)
-    with path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(record, default=str) + "\n")
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "a", encoding="utf-8") as fh:
+            fd = -1
+            fh.write(json.dumps(record, default=str) + "\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+    finally:
+        if fd >= 0:
+            os.close(fd)
 
 
 # ------------------------------------------------------------------

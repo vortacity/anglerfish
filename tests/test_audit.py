@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 import requests
 
-from anglerfish.audit import AuditClient, _compute_backoff, _parse_retry_after
+from anglerfish.audit import CONTENT_TYPES, AuditClient, _compute_backoff, _parse_retry_after
 from anglerfish.exceptions import AuditApiError
 
 
@@ -49,6 +49,10 @@ def _client(session: MagicMock, **kwargs) -> AuditClient:
 # ------------------------------------------------------------------
 
 
+def test_content_types_outlook_only():
+    assert CONTENT_TYPES == ("Audit.Exchange",)
+
+
 def test_ensure_subscriptions_starts_missing_types():
     current = [
         {"contentType": "Audit.Exchange", "status": "enabled"},
@@ -86,7 +90,10 @@ def test_ensure_subscriptions_all_already_active():
 
 
 def test_list_content_returns_blobs():
-    blobs = [{"contentUri": "https://example.com/blob1"}, {"contentUri": "https://example.com/blob2"}]
+    blobs = [
+        {"contentUri": "https://manage.office.com/api/v1.0/tenant-123/content/blob1"},
+        {"contentUri": "https://manage.office.com/api/v1.0/tenant-123/content/blob2"},
+    ]
     sess = _session(_response(json_data=blobs))
     client = _client(sess)
 
@@ -97,14 +104,14 @@ def test_list_content_returns_blobs():
     )
 
     assert len(result) == 2
-    assert result[0]["contentUri"] == "https://example.com/blob1"
+    assert result[0]["contentUri"] == "https://manage.office.com/api/v1.0/tenant-123/content/blob1"
 
 
 def test_list_content_follows_pagination():
-    page1 = [{"contentUri": "https://example.com/blob1"}]
-    page2 = [{"contentUri": "https://example.com/blob2"}]
+    page1 = [{"contentUri": "https://manage.office.com/api/v1.0/tenant-123/content/blob1"}]
+    page2 = [{"contentUri": "https://manage.office.com/api/v1.0/tenant-123/content/blob2"}]
     sess = _session(
-        _response(json_data=page1, headers={"NextPageUri": "https://example.com/page2"}),
+        _response(json_data=page1, headers={"NextPageUri": "https://manage.office.com/api/v1.0/page2"}),
         _response(json_data=page2),
     )
     client = _client(sess)
@@ -118,8 +125,23 @@ def test_list_content_follows_pagination():
     assert len(result) == 2
 
 
+def test_list_content_rejects_non_manage_office_next_page_url():
+    page1 = [{"contentUri": "https://manage.office.com/api/v1.0/tenant-123/content/blob1"}]
+    sess = _session(
+        _response(json_data=page1, headers={"NextPageUri": "https://evil.example/page2"}),
+    )
+    client = _client(sess)
+
+    with pytest.raises(AuditApiError, match="manage.office.com"):
+        client.list_content(
+            "Audit.Exchange",
+            datetime(2026, 3, 1, tzinfo=timezone.utc),
+            datetime(2026, 3, 2, tzinfo=timezone.utc),
+        )
+
+
 def test_list_content_handles_dict_response_with_value_key():
-    body = {"value": [{"contentUri": "https://example.com/blob1"}]}
+    body = {"value": [{"contentUri": "https://manage.office.com/api/v1.0/tenant-123/content/blob1"}]}
     sess = _session(_response(json_data=body))
     client = _client(sess)
 
@@ -142,7 +164,7 @@ def test_fetch_content_returns_events():
     sess = _session(_response(json_data=events))
     client = _client(sess)
 
-    result = client.fetch_content("https://example.com/blob1")
+    result = client.fetch_content("https://manage.office.com/api/v1.0/tenant-123/content/blob1")
 
     assert len(result) == 1
     assert result[0]["Operation"] == "MailItemsAccessed"
@@ -153,9 +175,16 @@ def test_fetch_content_handles_dict_with_value():
     sess = _session(_response(json_data=body))
     client = _client(sess)
 
-    result = client.fetch_content("https://example.com/blob1")
+    result = client.fetch_content("https://manage.office.com/api/v1.0/tenant-123/content/blob1")
 
     assert len(result) == 1
+
+
+def test_fetch_content_rejects_non_manage_office_url():
+    client = AuditClient("token", "tenant-id")
+
+    with pytest.raises(AuditApiError, match="manage.office.com"):
+        client.fetch_content("https://evil.example/content")
 
 
 # ------------------------------------------------------------------
@@ -170,7 +199,7 @@ def test_retry_on_429():
     )
     client = _client(sess, retries=2)
 
-    result = client.fetch_content("https://example.com/blob")
+    result = client.fetch_content("https://manage.office.com/api/v1.0/tenant-123/content/blob")
 
     assert result == []  # {"ok": True} is a dict without "value"
     assert sess.request.call_count == 2
@@ -183,7 +212,7 @@ def test_retry_on_500():
     )
     client = _client(sess, retries=2)
 
-    result = client.fetch_content("https://example.com/blob")
+    result = client.fetch_content("https://manage.office.com/api/v1.0/tenant-123/content/blob")
 
     assert len(result) == 1
 
@@ -193,7 +222,7 @@ def test_raises_audit_api_error_on_non_retryable_failure():
     client = _client(sess)
 
     with pytest.raises(AuditApiError) as exc_info:
-        client.fetch_content("https://example.com/blob")
+        client.fetch_content("https://manage.office.com/api/v1.0/tenant-123/content/blob")
 
     assert exc_info.value.status_code == 403
 
@@ -205,7 +234,7 @@ def test_raises_audit_api_error_on_network_failure():
     client = _client(sess, retries=1)
 
     with pytest.raises(AuditApiError, match="Network error"):
-        client.fetch_content("https://example.com/blob")
+        client.fetch_content("https://manage.office.com/api/v1.0/tenant-123/content/blob")
 
 
 def test_error_message_extracts_json_error():
@@ -214,7 +243,7 @@ def test_error_message_extracts_json_error():
     client = _client(sess)
 
     with pytest.raises(AuditApiError, match="AF20024"):
-        client.fetch_content("https://example.com/blob")
+        client.fetch_content("https://manage.office.com/api/v1.0/tenant-123/content/blob")
 
 
 # ------------------------------------------------------------------

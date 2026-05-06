@@ -1,79 +1,79 @@
-# Anglerfish: Architecture
+# Anglerfish Architecture
 
 ## Overview
 
-Anglerfish is a Python CLI that provisions Microsoft 365 canary artifacts via Microsoft Graph.
+Anglerfish is an Outlook-only Microsoft 365 canary CLI. It deploys Outlook canaries with Microsoft Graph, stores local deployment records, verifies draft-mode canaries, and monitors the Microsoft 365 Unified Audit Log for `MailItemsAccessed` events.
 
 Current release scope:
-- Outlook canaries
-- SharePoint canaries
-- OneDrive canaries
+- Outlook draft canaries
+- Outlook send canaries
+- Local record inventory
+- Draft-mode verify
+- Audit-log monitoring
 
 ## Layers
 
 ```text
-CLI package (cli/_main.py, cli/deploy.py, cli/monitor.py, cli/batch.py, cli/dashboard.py)
+CLI package (cli/_main.py, cli/deploy.py, cli/monitor.py)
   -> Auth (auth.py)
   -> Graph client (graph.py)
-  -> Deployer (deployers/outlook.py, deployers/sharepoint.py, deployers/onedrive.py)
-  -> Batch orchestrator (batch.py)
-  -> Monitor (monitor.py, audit.py, alerts.py, state.py)
+  -> Outlook deployer (deployers/outlook.py)
+  -> Inventory (inventory.py)
   -> Verify (verify.py)
-  -> Dashboard (dashboard.py)
+  -> Monitor (monitor.py, audit.py, alerts.py, state.py)
+  -> Templates (templates.py, models.py)
 ```
 
 ## Auth Model
 
-All supported canary types use **application authentication** via MSAL `ConfidentialClientApplication`.
+Only application authentication is supported.
 
 Credential types:
 - Client secret
 - Certificate (PFX or PEM + thumbprint)
 
+Graph operations and Management Activity API polling both use the same client-credentials pattern.
+
 ## Graph Client
 
 `GraphClient` wraps `requests.Session` and provides:
-- Bearer auth headers
-- side-effect-safe retries by default:
-  - `GET`/`DELETE`: retries on network errors, `429`, and `5xx`
-  - `POST`/`PUT`: no automatic retries unless explicitly marked safe
-- Graph error extraction (including request IDs)
+- bearer auth headers
+- safe retries for `GET` and `DELETE`
+- explicit no-default retry for side-effecting writes
+- Graph error extraction with request IDs
 
 ## Template System
 
-Templates are YAML files loaded from:
-1. `ANGLERFISH_TEMPLATES_DIR` (if set)
-2. packaged templates (`src/anglerfish/templates/...`)
+Templates are Outlook-only YAML files loaded from:
+1. `ANGLERFISH_TEMPLATES_DIR` if set
+2. packaged Outlook templates under `src/anglerfish/templates/outlook`
 
-Template models:
+Model:
 - `OutlookTemplate`
-- `SharePointTemplate`
-- `OneDriveTemplate`
 
-Variable substitution uses `string.Template` (`${var}`).
+Variable substitution uses `string.Template` with `${var}` placeholders.
 
 ## Deployment Records
 
-`inventory.py` handles record files:
+`inventory.py` owns deployment record persistence:
 - `write_deployment_record(path, record)`
 - `read_deployment_record(path)`
 - `update_deployment_status(path, status)`
 
 Record guarantees:
-- writes are atomic (temp file + `os.replace`)
-- reads enforce required schema keys (`timestamp` and `canary_type` or `type`)
+- atomic writes with a temp file and `os.replace`
+- required `timestamp`
+- required `canary_type` or `type`
 
-Records are used by:
-- `cleanup` (deterministic removal)
-- `list` (inventory view)
-- `verify` (health check against Graph API)
+Outlook draft records store folder metadata for verify and cleanup. Outlook send records store the inbox message ID used for cleanup and the internet message ID used for monitoring correlation.
 
-## CLI Subcommands
+## Command Surface
 
-- default command: deploy
+- default command: deploy Outlook canary
 - `cleanup <record>`
 - `list [--records-dir DIR]`
-- `monitor [--once] [--interval N] [--exclude-app-id ID] [--slack-webhook-url URL]` (poll audit logs for canary access events)
-- `batch <manifest> [--output-dir DIR] [--dry-run]` (deploy multiple canaries from a YAML manifest)
-- `verify [RECORD] [--records-dir DIR]` (health check deployed canaries via Graph API)
-- `dashboard [--demo] [--poll-interval N] [--verify-interval N]` (live TUI, Textual app)
+- `monitor [--once] [--interval N] [--exclude-app-id ID] [--alert-log PATH] [--slack-webhook-url URL]`
+- `verify [RECORD] [--records-dir DIR]`
+
+Operational note:
+- `verify` is draft-only because send-mode deployments do not leave a hidden folder to query after delivery.

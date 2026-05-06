@@ -8,7 +8,7 @@ from anglerfish.cli import main
 from anglerfish.cli import deploy as deploy_mod
 import anglerfish.cli._main as main_mod
 import anglerfish.templates as templates_mod
-from anglerfish.models import OneDriveTemplate, OutlookTemplate, SharePointTemplate
+from anglerfish.models import OutlookTemplate
 
 
 class _Prompt:
@@ -31,13 +31,10 @@ def test_demo_list_shows_fixture_records():
     assert result == 0
 
 
-def test_demo_list_shows_outlook_sharepoint_and_onedrive_fixtures():
-    """Verify the fixture directory contains the expected files."""
+def test_demo_list_only_shows_outlook_fixture_records():
+    """Verify the fixture directory contains only the supported Outlook fixtures."""
     files = sorted(EXAMPLES_DIR.glob("*.json"))
-    names = [f.name for f in files]
-    assert "outlook-draft-record.json" in names
-    assert "sharepoint-upload-record.json" in names
-    assert "onedrive-upload-record.json" in names
+    assert [f.name for f in files] == ["outlook-draft-record.json", "outlook-send-record.json"]
 
 
 def test_demo_list_fixture_records_are_valid():
@@ -46,7 +43,7 @@ def test_demo_list_fixture_records_are_valid():
         data = json.loads(path.read_text(encoding="utf-8"))
         assert "timestamp" in data, f"{path.name} missing 'timestamp'"
         assert "canary_type" in data, f"{path.name} missing 'canary_type'"
-        assert data["canary_type"] in ("outlook", "sharepoint", "onedrive")
+        assert data["canary_type"] == "outlook"
         assert data["status"] == "active"
 
 
@@ -60,16 +57,9 @@ def test_demo_cleanup_skips_auth_and_api_calls():
     assert result == 0
 
 
-def test_demo_cleanup_works_for_sharepoint():
-    """--demo cleanup with a SharePoint record."""
-    record_path = EXAMPLES_DIR / "sharepoint-upload-record.json"
-    result = main(["--demo", "cleanup", "--non-interactive", str(record_path)])
-    assert result == 0
-
-
-def test_demo_cleanup_works_for_onedrive():
-    """--demo cleanup with a OneDrive record."""
-    record_path = EXAMPLES_DIR / "onedrive-upload-record.json"
+def test_demo_cleanup_send_record_skips_auth_and_api_calls():
+    """--demo cleanup supports send-mode Outlook records without auth or Graph calls."""
+    record_path = EXAMPLES_DIR / "outlook-send-record.json"
     result = main(["--demo", "cleanup", "--non-interactive", str(record_path)])
     assert result == 0
 
@@ -118,81 +108,6 @@ def test_demo_deploy_outlook_skips_auth(monkeypatch):
             "test@example.com",
             "--delivery-mode",
             "draft",
-        ]
-    )
-    assert result == 0
-
-
-def test_demo_deploy_sharepoint_skips_auth(monkeypatch):
-    """--demo deploy with sharepoint template prints simulated output without auth."""
-    template = SharePointTemplate(
-        name="Employee Salary Bands",
-        description="desc",
-        site_name="HRSite",
-        folder_path="Compensation/Restricted",
-        filenames=["salary.txt"],
-        content_text="Confidential data",
-        variables=[],
-    )
-
-    def _fake_list(canary_type):
-        return [{"name": "Employee Salary Bands", "description": "desc", "path": "pkg://sharepoint/test.yaml"}]
-
-    monkeypatch.setattr(main_mod, "list_templates", _fake_list)
-    monkeypatch.setattr(templates_mod, "list_templates", _fake_list)
-    monkeypatch.setattr(main_mod, "load_template", lambda path: template)
-
-    result = main(
-        [
-            "--demo",
-            "--non-interactive",
-            "--canary-type",
-            "sharepoint",
-            "--template",
-            "Employee Salary Bands",
-            "--target",
-            "HRSite",
-            "--folder-path",
-            "Compensation/Restricted",
-            "--filename",
-            "salary.txt",
-        ]
-    )
-    assert result == 0
-
-
-def test_demo_deploy_onedrive_skips_auth(monkeypatch):
-    """--demo deploy with onedrive template prints simulated output without auth."""
-    template = OneDriveTemplate(
-        name="VPN Credentials Backup",
-        description="desc",
-        folder_path="IT/Backups",
-        filenames=["vpn_config.txt"],
-        content_text="Canary data",
-        variables=[],
-    )
-
-    def _fake_list(canary_type):
-        return [{"name": "VPN Credentials Backup", "description": "desc", "path": "pkg://onedrive/test.yaml"}]
-
-    monkeypatch.setattr(main_mod, "list_templates", _fake_list)
-    monkeypatch.setattr(templates_mod, "list_templates", _fake_list)
-    monkeypatch.setattr(main_mod, "load_template", lambda path: template)
-
-    result = main(
-        [
-            "--demo",
-            "--non-interactive",
-            "--canary-type",
-            "onedrive",
-            "--template",
-            "VPN Credentials Backup",
-            "--target",
-            "j.smith@contoso.com",
-            "--folder-path",
-            "IT/Backups",
-            "--filename",
-            "vpn_config.txt",
         ]
     )
     assert result == 0

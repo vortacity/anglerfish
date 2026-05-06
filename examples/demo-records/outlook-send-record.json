@@ -1,0 +1,13 @@
+{
+  "timestamp": "2026-03-01T14:45:00+00:00",
+  "canary_type": "outlook",
+  "template_name": "Fake Wire Transfer",
+  "auth_mode": "application",
+  "status": "active",
+  "delivery_mode": "send",
+  "target_user": "adele.vance@contoso.com",
+  "inbox_message_id": "AAMkAGI2T_demo_inbox_msg_002",
+  "subject": "Urgent Wire Transfer Approval Needed",
+  "internet_message_id": "<canary-fake-wire-transfer-002@contoso.com>",
+  "verified": "true"
+}

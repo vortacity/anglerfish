@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import stat
 
 from anglerfish.state import StateManager, _MAX_SEEN_IDS
 
@@ -110,6 +111,14 @@ def test_save_creates_parent_directories(tmp_path):
     assert path.is_file()
     data = json.loads(path.read_text())
     assert data["total_polls"] == 1
+
+
+def test_save_uses_0600_permissions(tmp_path):
+    path = tmp_path / "state.json"
+    sm = StateManager(path)
+    sm.record_poll("2026-03-05T14:00:00Z", alerts=0)
+    sm.save()
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
 
 # ------------------------------------------------------------------

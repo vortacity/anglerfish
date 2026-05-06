@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import stat
 from unittest.mock import patch
 
 from rich.console import Console
@@ -74,6 +75,13 @@ def test_dispatch_jsonl_creates_parent_dirs(tmp_path):
     dispatcher.dispatch(_sample_alert())
 
     assert log_path.is_file()
+
+
+def test_dispatch_jsonl_uses_0600_permissions(tmp_path):
+    log_path = tmp_path / "alerts.jsonl"
+    dispatcher = AlertDispatcher(alert_log=log_path)
+    dispatcher.dispatch(_sample_alert())
+    assert stat.S_IMODE(log_path.stat().st_mode) == 0o600
 
 
 # ------------------------------------------------------------------

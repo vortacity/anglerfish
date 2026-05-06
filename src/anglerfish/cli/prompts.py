@@ -5,8 +5,8 @@ from __future__ import annotations
 import argparse
 import os
 import re
+from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import unquote
 
 import questionary
 from questionary import Style
@@ -17,7 +17,7 @@ from ..exceptions import (
     DeploymentError,
     TemplateError,
 )
-from ..models import OneDriveTemplate, OutlookTemplate, SharePointTemplate
+from ..models import OutlookTemplate
 from ..templates import render_template
 
 _EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -39,7 +39,27 @@ _STYLE = Style(
 
 _QMARK = "\u2022"
 _POINTER = ">"
-_SHAREPOINT_LIBRARY_PREFIXES = {"shared documents", "documents"}
+
+
+@dataclass(frozen=True)
+class AuthPromptResult:
+    credential_mode: str
+    clear_env_vars: tuple[str, ...] = ()
+    restore_env_vars: tuple[tuple[str, str], ...] = ()
+
+
+def _set_prompted_sensitive_env_var(
+    name: str,
+    value: str,
+    *,
+    clear_env_vars: list[str],
+    restore_env_vars: dict[str, str],
+) -> None:
+    if name in os.environ and name not in restore_env_vars:
+        restore_env_vars[name] = os.environ[name]
+    elif name not in os.environ and name not in clear_env_vars:
+        clear_env_vars.append(name)
+    os.environ[name] = value
 
 
 def _validate_email(value: str) -> bool | str:
@@ -69,32 +89,6 @@ def _validate_single_filename(value: str) -> bool | str:
         return "Enter exactly one filename."
     if "/" in filename or "\\" in filename:
         return "Filename must not contain path separators."
-    return True
-
-
-def _normalize_sharepoint_folder_path(value: str) -> str:
-    segments: list[str] = []
-    for raw_segment in value.strip().strip("/").split("/"):
-        segment = raw_segment.strip()
-        if segment:
-            segments.append(segment)
-
-    if not segments:
-        return ""
-
-    first_segment = unquote(segments[0]).strip().casefold()
-    if first_segment in _SHAREPOINT_LIBRARY_PREFIXES:
-        segments = segments[1:]
-
-    return "/".join(segments)
-
-
-def _validate_sharepoint_folder_path(value: str) -> bool | str:
-    normalized = _normalize_sharepoint_folder_path(value)
-    if not normalized:
-        return "Enter a folder path under the site (example: HR/Restricted)."
-    if len(normalized) > 400:
-        return "Folder path must not exceed 400 characters."
     return True
 
 
@@ -134,10 +128,12 @@ def _prompt_auth_setup(
     *,
     auth_mode: str = "application",
     non_interactive: bool = False,
-) -> str | None:
+) -> AuthPromptResult | None:
     selected_auth_mode = auth_mode.strip().lower()
-    if selected_auth_mode not in ("application", "delegated"):
-        raise AuthenticationError(f"Unsupported auth mode: {auth_mode}")
+    if selected_auth_mode in ("", "application"):
+        selected_auth_mode = "application"
+    else:
+        raise AuthenticationError("Only application auth is supported in this release.")
 
     cli_tenant_id = str(args.tenant_id or "").strip()
     if cli_tenant_id:
@@ -179,12 +175,13 @@ def _prompt_auth_setup(
         os.environ["ANGLERFISH_CLIENT_ID"] = client_id.strip()
 
     os.environ["ANGLERFISH_AUTH_MODE"] = selected_auth_mode
-    if selected_auth_mode == "delegated":
-        return "delegated"
 
     current_mode = args.credential_mode or os.environ.get("ANGLERFISH_APP_CREDENTIAL_MODE", "auto").strip().lower()
     if current_mode not in ("auto", "secret", "certificate"):
         current_mode = "auto"
+
+    clear_env_vars: list[str] = []
+    restore_env_vars: dict[str, str] = {}
 
     has_secret = bool(os.environ.get("ANGLERFISH_CLIENT_SECRET", "").strip())
     has_certificate = bool(
@@ -247,9 +244,18 @@ def _prompt_auth_setup(
             ).ask()
             if secret is None:
                 return None
-            os.environ["ANGLERFISH_CLIENT_SECRET"] = secret
+            _set_prompted_sensitive_env_var(
+                "ANGLERFISH_CLIENT_SECRET",
+                secret,
+                clear_env_vars=clear_env_vars,
+                restore_env_vars=restore_env_vars,
+            )
         os.environ["ANGLERFISH_APP_CREDENTIAL_MODE"] = "secret"
-        return "secret"
+        return AuthPromptResult(
+            credential_mode="secret",
+            clear_env_vars=tuple(clear_env_vars),
+            restore_env_vars=tuple(restore_env_vars.items()),
+        )
 
     # current_mode == "certificate"
     pfx_path = os.environ.get("ANGLERFISH_CLIENT_CERT_PFX_PATH", "").strip()
@@ -287,7 +293,12 @@ def _prompt_auth_setup(
             ).ask()
             if pfx_passphrase is None:
                 return None
-            os.environ["ANGLERFISH_CLIENT_CERT_PASSPHRASE"] = pfx_passphrase
+            _set_prompted_sensitive_env_var(
+                "ANGLERFISH_CLIENT_CERT_PASSPHRASE",
+                pfx_passphrase,
+                clear_env_vars=clear_env_vars,
+                restore_env_vars=restore_env_vars,
+            )
         else:
             key = questionary.text(
                 "Path to PEM private key file:", validate=_validate_file_path, style=_STYLE, qmark=_QMARK
@@ -316,7 +327,12 @@ def _prompt_auth_setup(
             ).ask()
             if key_passphrase is None:
                 return None
-            os.environ["ANGLERFISH_CLIENT_CERT_PASSPHRASE"] = key_passphrase
+            _set_prompted_sensitive_env_var(
+                "ANGLERFISH_CLIENT_CERT_PASSPHRASE",
+                key_passphrase,
+                clear_env_vars=clear_env_vars,
+                restore_env_vars=restore_env_vars,
+            )
 
     if key_path and not thumbprint:
         if non_interactive:
@@ -332,41 +348,28 @@ def _prompt_auth_setup(
         os.environ["ANGLERFISH_CLIENT_CERT_THUMBPRINT"] = cert_thumbprint.strip()
 
     os.environ["ANGLERFISH_APP_CREDENTIAL_MODE"] = "certificate"
-    return "certificate"
+    return AuthPromptResult(
+        credential_mode="certificate",
+        clear_env_vars=tuple(clear_env_vars),
+        restore_env_vars=tuple(restore_env_vars.items()),
+    )
 
 
 def _render_deploy_template(
-    template: OutlookTemplate | SharePointTemplate | OneDriveTemplate,
+    template: OutlookTemplate,
     *,
     canary_type: str,
     console: Console,
     non_interactive: bool,
     cli_var_values: dict[str, str],
-) -> OutlookTemplate | SharePointTemplate | OneDriveTemplate | None:
+) -> OutlookTemplate | None:
     if not template.variables:
         return template
 
     var_values: dict[str, str] = {}
-    skipped_sharepoint_vars = {"site_name", "folder_path", "canary_url"}
-    skipped_onedrive_vars = {"folder_path", "canary_url"}
-    if canary_type == "sharepoint":
-        if isinstance(template, SharePointTemplate):
-            # SharePoint site and folder are collected with dedicated prompts.
-            var_values["site_name"] = template.site_name
-            var_values["folder_path"] = template.folder_path
-        # Canary callback is intentionally no longer prompted.
-        var_values["canary_url"] = ""
-    elif canary_type == "onedrive":
-        if isinstance(template, OneDriveTemplate):
-            var_values["folder_path"] = template.folder_path
-        var_values["canary_url"] = ""
 
     for var in template.variables:
         name = str(var.get("name", "")).strip()
-        if canary_type == "sharepoint" and name in skipped_sharepoint_vars:
-            continue
-        if canary_type == "onedrive" and name in skipped_onedrive_vars:
-            continue
 
         if non_interactive:
             # Use --var overrides first, then fall back to template default.

@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from anglerfish.cli.monitor import _run_monitor
+from anglerfish.cli.monitor import _capture_prompted_env_values, _clear_prompted_env_values, _run_monitor
+from anglerfish.cli.prompts import AuthPromptResult
 from anglerfish.exceptions import AuthenticationError
 
 
@@ -74,3 +76,27 @@ def test_missing_tenant_id_raises(tmp_path, monkeypatch):
     ):
         mock_index.return_value.count = 1
         _run_monitor(args, console)
+
+
+def test_capture_prompted_env_values_includes_restore_vars(monkeypatch):
+    monkeypatch.setenv("ANGLERFISH_CLIENT_CERT_PASSPHRASE", "prompted-passphrase")
+    auth_result = AuthPromptResult(
+        credential_mode="certificate",
+        restore_env_vars=(("ANGLERFISH_CLIENT_CERT_PASSPHRASE", "existing-passphrase"),),
+    )
+
+    captured = _capture_prompted_env_values(auth_result)
+
+    assert captured == {"ANGLERFISH_CLIENT_CERT_PASSPHRASE": "prompted-passphrase"}
+
+
+def test_clear_prompted_env_values_restores_previous_values(monkeypatch):
+    monkeypatch.setenv("ANGLERFISH_CLIENT_CERT_PASSPHRASE", "prompted-passphrase")
+    auth_result = AuthPromptResult(
+        credential_mode="certificate",
+        restore_env_vars=(("ANGLERFISH_CLIENT_CERT_PASSPHRASE", "existing-passphrase"),),
+    )
+
+    _clear_prompted_env_values(auth_result)
+
+    assert os.environ["ANGLERFISH_CLIENT_CERT_PASSPHRASE"] == "existing-passphrase"

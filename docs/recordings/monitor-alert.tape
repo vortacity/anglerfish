@@ -19,9 +19,9 @@ Enter
 Sleep 1s
 Ctrl+L
 
-# Show one Outlook MailItemsAccessed alert for the primary demo path.
-Type "anglerfish monitor --demo --count 1"
+# Stream three simulated Outlook demo alerts
+Type "anglerfish monitor --demo --count 3"
 Enter
-Sleep 5s
+Sleep 10s
 
 # End of recording

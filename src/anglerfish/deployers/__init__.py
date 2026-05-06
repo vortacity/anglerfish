@@ -1,7 +1,14 @@
 """Deployer exports."""
 
-from .onedrive import OneDriveDeployer
-from .outlook import OutlookDeployer
-from .sharepoint import SharePointDeployer
+from __future__ import annotations
 
-__all__ = ["OneDriveDeployer", "OutlookDeployer", "SharePointDeployer"]
+from importlib import import_module
+from typing import Any
+
+__all__ = ["OutlookDeployer"]
+
+
+def __getattr__(name: str) -> Any:
+    if name == "OutlookDeployer":
+        return import_module(".outlook", __name__).OutlookDeployer
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
