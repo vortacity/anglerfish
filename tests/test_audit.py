@@ -210,6 +210,54 @@ def test_fetch_content_rejects_schemeless_url():
         client.fetch_content("//manage.office.com/api/v1.0/tenant-123/content/blob")
 
 
+def test_fetch_content_rejects_malformed_bracketed_host():
+    client = AuditClient("token", "tenant-id")
+
+    with pytest.raises(AuditApiError, match="Management Activity API URL"):
+        client.fetch_content("https://[notipv6]/x")
+
+
+def test_fetch_content_rejects_invalid_port():
+    sess = _session(_response(json_data=[{"Id": "evt-1"}]))
+    client = _client(sess)
+
+    with pytest.raises(AuditApiError, match="Management Activity API URL"):
+        client.fetch_content("https://manage.office.com:bad/content")
+
+
+def test_fetch_content_rejects_non_configured_non_default_port():
+    sess = _session(_response(json_data=[{"Id": "evt-1"}]))
+    client = _client(sess)
+
+    with pytest.raises(AuditApiError, match="Management Activity API URL"):
+        client.fetch_content("https://manage.office.com:444/content")
+
+
+def test_fetch_content_rejects_explicit_zero_port():
+    sess = _session(_response(json_data=[{"Id": "evt-1"}]))
+    client = _client(sess)
+
+    with pytest.raises(AuditApiError, match="Management Activity API URL"):
+        client.fetch_content("https://manage.office.com:0/content")
+
+
+def test_fetch_content_accepts_configured_non_default_port():
+    sess = _session(_response(json_data=[{"Id": "evt-1"}]))
+    client = _client(sess, base_url="https://manage.office.com:444/api/v1.0")
+
+    result = client.fetch_content("https://manage.office.com:444/tenant-123/content/blob")
+
+    assert result == [{"Id": "evt-1"}]
+
+
+def test_fetch_content_rejects_userinfo_url():
+    sess = _session(_response(json_data=[{"Id": "evt-1"}]))
+    client = _client(sess)
+
+    with pytest.raises(AuditApiError, match="Management Activity API URL"):
+        client.fetch_content("https://user:pass@manage.office.com/content")
+
+
 # ------------------------------------------------------------------
 # Retry and error handling
 # ------------------------------------------------------------------

@@ -248,14 +248,28 @@ def _compute_backoff(attempt: int, *, max_seconds: int = 8) -> int:
 
 
 def _validate_management_api_url(url: str, *, base_url: str = MANAGEMENT_API_BASE_URL) -> None:
-    parsed = urlparse(url)
-    allowed = urlparse(base_url)
-    if parsed.scheme != "https" or allowed.scheme != "https":
-        raise AuditApiError("Management Activity API URL must use https")
-    if not parsed.hostname or parsed.hostname.lower() != (allowed.hostname or "").lower():
+    if _management_api_origin(url) != _management_api_origin(base_url):
         raise AuditApiError(
             "Management Activity API URL must stay on the configured Management API host"
         )
+
+
+def _management_api_origin(url: str) -> tuple[str, str, int]:
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        port = parsed.port if parsed.port is not None else 443
+    except ValueError as exc:
+        raise AuditApiError("Management Activity API URL is malformed") from exc
+
+    if parsed.scheme != "https":
+        raise AuditApiError("Management Activity API URL must use https")
+    if not hostname:
+        raise AuditApiError("Management Activity API URL must include a host")
+    if parsed.username is not None or parsed.password is not None:
+        raise AuditApiError("Management Activity API URL must not include credentials")
+
+    return (parsed.scheme, hostname.lower(), port)
 
 
 def _parse_retry_after(value: str | None) -> int:
