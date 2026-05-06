@@ -43,6 +43,24 @@ def _outlook_record(**overrides) -> dict:
     return base
 
 
+def _mail_items_accessed_event(**overrides) -> dict:
+    base = {
+        "Id": "evt-100",
+        "Operation": "MailItemsAccessed",
+        "UserId": "attacker@evil.com",
+        "ClientIP": "203.0.113.42",
+        "CreationTime": "2026-03-05T14:00:00",
+        "Folders": [
+            {
+                "Path": "\\IT Notifications",
+                "FolderItems": [{"InternetMessageId": "<canary-msg-001@contoso.com>"}],
+            }
+        ],
+    }
+    base.update(overrides)
+    return base
+
+
 # ------------------------------------------------------------------
 # CanaryIndex.match — Outlook only
 # ------------------------------------------------------------------
@@ -136,6 +154,24 @@ def test_exclude_app_id_skips_matching_event():
     assert alert is None
 
 
+def test_cleaned_index_entry_matches_until_expiry(tmp_path):
+    now = datetime(2026, 5, 6, 12, 0, tzinfo=timezone.utc)
+    rec = _outlook_record(
+        status="cleaned_up",
+        status_updated_at=(now - timedelta(hours=2)).isoformat(),
+    )
+    (tmp_path / "rec.json").write_text(json.dumps(rec), encoding="utf-8")
+
+    records = load_records(tmp_path, cleaned_up_lookback=timedelta(hours=24), now=now)
+    idx = CanaryIndex(records)
+    event = _mail_items_accessed_event()
+    expires_at = now + timedelta(hours=22)
+
+    assert idx.match(event, now=expires_at - timedelta(microseconds=1)) is not None
+    assert idx.match(event, now=expires_at) is not None
+    assert idx.match(event, now=expires_at + timedelta(microseconds=1)) is None
+
+
 # ------------------------------------------------------------------
 # CanaryIndex.match — unrelated operations
 # ------------------------------------------------------------------
@@ -189,6 +225,7 @@ def test_build_entry_defaults_missing_outlook_fields_to_empty_strings():
 
     assert entry.internet_message_id == ""
     assert entry.folder_name == ""
+    assert entry.expires_at is None
 
 
 # ------------------------------------------------------------------
@@ -222,6 +259,19 @@ def test_load_records_includes_recently_cleaned_outlook_records(tmp_path):
     rec = _outlook_record(
         status="cleaned_up",
         status_updated_at=(now - timedelta(hours=2)).isoformat(),
+    )
+    (tmp_path / "rec.json").write_text(json.dumps(rec), encoding="utf-8")
+
+    results = load_records(tmp_path, cleaned_up_lookback=timedelta(hours=24), now=now)
+
+    assert len(results) == 1
+
+
+def test_load_records_includes_cleaned_record_at_exact_lookback(tmp_path):
+    now = datetime(2026, 5, 6, 12, 0, tzinfo=timezone.utc)
+    rec = _outlook_record(
+        status="cleaned_up",
+        status_updated_at=(now - timedelta(hours=24)).isoformat(),
     )
     (tmp_path / "rec.json").write_text(json.dumps(rec), encoding="utf-8")
 
@@ -286,7 +336,7 @@ def test_load_records_negative_cleaned_lookback_skips_cleaned_records(tmp_path):
     now = datetime(2026, 5, 6, 12, 0, tzinfo=timezone.utc)
     rec = _outlook_record(
         status="cleaned_up",
-        status_updated_at=(now + timedelta(hours=2)).isoformat(),
+        status_updated_at=now.isoformat(),
     )
     (tmp_path / "rec.json").write_text(json.dumps(rec), encoding="utf-8")
 
@@ -306,6 +356,20 @@ def test_load_records_accepts_cleaned_timestamp_with_trailing_z(tmp_path):
     results = load_records(tmp_path, cleaned_up_lookback=timedelta(hours=24), now=now)
 
     assert len(results) == 1
+
+
+def test_load_records_adds_internal_expiry_to_cleaned_record(tmp_path):
+    now = datetime(2026, 5, 6, 12, 0, tzinfo=timezone.utc)
+    rec = _outlook_record(
+        status="cleaned_up",
+        status_updated_at=(now - timedelta(hours=2)).isoformat(),
+    )
+    (tmp_path / "rec.json").write_text(json.dumps(rec), encoding="utf-8")
+
+    results = load_records(tmp_path, cleaned_up_lookback=timedelta(hours=24), now=now)
+
+    assert results[0][1]["_monitor_expires_at"] == (now + timedelta(hours=22)).isoformat()
+    assert "_monitor_expires_at" not in json.loads((tmp_path / "rec.json").read_text(encoding="utf-8"))
 
 
 def test_load_records_treats_naive_cleaned_timestamp_as_utc(tmp_path):
@@ -457,6 +521,25 @@ def test_run_monitor_deduplicates_across_runs(tmp_path):
 
     lines = log_path.read_text().strip().split("\n")
     assert len(lines) == 1, f"Expected 1 alert but got {len(lines)}"
+
+
+def test_run_monitor_passes_poll_now_to_canary_index_match(tmp_path):
+    heartbeat_path = tmp_path / "heartbeat.json"
+    event = _mail_items_accessed_event(Id="evt-now")
+    client = _mock_audit_client([event])
+    canary_index = MagicMock()
+    canary_index.count = 1
+    canary_index.match.return_value = None
+    console = Console(file=None, force_terminal=False)
+
+    rc = run_monitor(client, canary_index, once=True, console=console, heartbeat_path=heartbeat_path)
+
+    assert rc == 0
+    assert canary_index.match.call_count == 1
+    matched_event = canary_index.match.call_args.args[0]
+    match_kwargs = canary_index.match.call_args.kwargs
+    assert matched_event == event
+    assert match_kwargs["now"].tzinfo is not None
 
 
 # ------------------------------------------------------------------

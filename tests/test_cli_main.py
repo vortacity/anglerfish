@@ -196,6 +196,14 @@ class TestParseArgs:
         args = _parse_args(["monitor", "--cleaned-up-lookback-hours", "6.5"])
         assert args.cleaned_up_lookback_hours == 6.5
 
+    def test_monitor_cleaned_up_lookback_hours_rejects_nan(self):
+        with pytest.raises(SystemExit):
+            _parse_args(["monitor", "--cleaned-up-lookback-hours", "nan"])
+
+    def test_monitor_cleaned_up_lookback_hours_rejects_inf(self):
+        with pytest.raises(SystemExit):
+            _parse_args(["monitor", "--cleaned-up-lookback-hours", "inf"])
+
     def test_output_json(self):
         args = _parse_args(["--output-json", "/tmp/out.json"])
         assert args.output_json == "/tmp/out.json"

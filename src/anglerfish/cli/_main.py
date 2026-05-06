@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import math
 import sys
 from pathlib import Path
 from typing import Sequence
@@ -90,6 +91,16 @@ def _print_error(console: Console, message: str) -> None:
             padding=(1, 2),
         )
     )
+
+
+def _finite_float(value: str) -> float:
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"invalid float value: {value!r}") from exc
+    if not math.isfinite(parsed):
+        raise argparse.ArgumentTypeError("value must be a finite number")
+    return parsed
 
 
 def _find_graph_api_error(exc: BaseException) -> GraphApiError | None:
@@ -292,7 +303,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     monitor_parser.add_argument(
         "--cleaned-up-lookback-hours",
-        type=float,
+        type=_finite_float,
         default=24.0,
         metavar="HOURS",
         help=(

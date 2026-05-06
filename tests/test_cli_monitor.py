@@ -76,6 +76,17 @@ def test_monitor_passes_cleaned_up_lookback_to_load_records(tmp_path):
     mock_load_records.assert_called_once_with(str(empty_dir), cleaned_up_lookback=timedelta(hours=6.5))
 
 
+def test_monitor_clamps_negative_cleaned_up_lookback_to_zero(tmp_path):
+    console = MagicMock()
+    empty_dir = tmp_path / "empty"
+    empty_dir.mkdir()
+    args = _make_args(records_dir=str(empty_dir), cleaned_up_lookback_hours=-1.5)
+    with patch("anglerfish.monitor.load_records", return_value=[]) as mock_load_records:
+        result = _run_monitor(args, console)
+    assert result == 1
+    mock_load_records.assert_called_once_with(str(empty_dir), cleaned_up_lookback=timedelta(0))
+
+
 def test_missing_tenant_id_raises(tmp_path, monkeypatch):
     monkeypatch.delenv("ANGLERFISH_TENANT_ID", raising=False)
     console = MagicMock()

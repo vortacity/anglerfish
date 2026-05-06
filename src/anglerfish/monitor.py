@@ -54,6 +54,7 @@ class _CanaryEntry:
     folder_id: str = ""
     target_user: str = ""
     subject: str = ""
+    expires_at: datetime | None = None
 
 
 # ------------------------------------------------------------------
@@ -84,7 +85,13 @@ class CanaryIndex:
     def count(self) -> int:
         return len(self._entries)
 
-    def match(self, event: dict, *, exclude_app_ids: set[str] | None = None) -> CanaryAlert | None:
+    def match(
+        self,
+        event: dict,
+        *,
+        exclude_app_ids: set[str] | None = None,
+        now: datetime | None = None,
+    ) -> CanaryAlert | None:
         """Given an audit event, check if it matches any deployed canary.
 
         Returns an alert or ``None``.
@@ -104,7 +111,7 @@ class CanaryIndex:
         operation = str(event.get("Operation", ""))
 
         if operation == "MailItemsAccessed":
-            return self._match_mail_items_accessed(event)
+            return self._match_mail_items_accessed(event, now=now)
 
         return None
 
@@ -112,7 +119,7 @@ class CanaryIndex:
     # Per-operation matchers
     # ------------------------------------------------------------------
 
-    def _match_mail_items_accessed(self, event: dict) -> CanaryAlert | None:
+    def _match_mail_items_accessed(self, event: dict, *, now: datetime | None = None) -> CanaryAlert | None:
         # Check MailAccessType — "Bind" events carry FolderItems.
         folders = event.get("Folders") or []
         for folder in folders:
@@ -125,6 +132,8 @@ class CanaryIndex:
                 imid = str(item.get("InternetMessageId") or "").strip()
                 if imid and imid in self._by_internet_message_id:
                     entry = self._by_internet_message_id[imid]
+                    if _entry_is_expired(entry, now):
+                        continue
                     return _build_alert(entry, event, artifact_label=f"internet_message_id: {imid}")
 
         # Secondary: match by folder name (Sync events lack FolderItems).
@@ -133,6 +142,8 @@ class CanaryIndex:
                 continue
             folder_path = str(folder.get("Path") or "")
             for entry in self._entries:
+                if _entry_is_expired(entry, now):
+                    continue
                 if entry.canary_type == "outlook" and entry.folder_name:
                     if entry.folder_name.lower() in folder_path.lower():
                         return _build_alert(entry, event, artifact_label=f"folder: {entry.folder_name}")
@@ -170,16 +181,23 @@ def load_records(
         except Exception:  # nosec B112 — skip malformed records, log elsewhere
             continue
         status = rec.get("status", "active")
+        expires_at: datetime | None = None
         if status == "active":
             include = True
         elif status == "cleaned_up" and cleaned_up_lookback is not None:
             include = _within_cleaned_up_lookback(rec, current_time, cleaned_up_lookback)
+            if include:
+                updated = _parse_record_datetime(rec.get("status_updated_at"))
+                if updated is not None:
+                    expires_at = updated + cleaned_up_lookback
         else:
             include = False
         if not include:
             continue
         if str(rec.get("canary_type") or rec.get("type") or "").strip().lower() != "outlook":
             continue
+        if expires_at is not None:
+            rec = {**rec, "_monitor_expires_at": expires_at.isoformat()}
         results.append((str(json_file), rec))
     return results
 
@@ -187,21 +205,37 @@ def load_records(
 def _within_cleaned_up_lookback(rec: dict, now: datetime, lookback: timedelta) -> bool:
     if lookback < timedelta(0):
         return False
-    raw = str(rec.get("status_updated_at") or "").strip()
-    if not raw:
+    updated = _parse_record_datetime(rec.get("status_updated_at"))
+    if updated is None:
         return False
+    age = _as_utc(now) - updated
+    return timedelta(0) <= age <= lookback
+
+
+def _parse_record_datetime(value: object) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
     if raw.endswith("Z"):
         raw = f"{raw[:-1]}+00:00"
     try:
-        updated = datetime.fromisoformat(raw)
+        parsed = datetime.fromisoformat(raw)
     except ValueError:
+        return None
+    return _as_utc(parsed)
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _entry_is_expired(entry: _CanaryEntry, now: datetime | None) -> bool:
+    if entry.expires_at is None:
         return False
-    if updated.tzinfo is None:
-        updated = updated.replace(tzinfo=timezone.utc)
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=timezone.utc)
-    age = now.astimezone(timezone.utc) - updated.astimezone(timezone.utc)
-    return timedelta(0) <= age <= lookback
+    current_time = _as_utc(now or datetime.now(timezone.utc))
+    return current_time > entry.expires_at
 
 
 # ------------------------------------------------------------------
@@ -405,7 +439,7 @@ def run_monitor(
                                 # No state manager — skip dedup (single-run mode).
                                 pass
 
-                        alert = canary_index.match(event, exclude_app_ids=exclude_app_ids)
+                        alert = canary_index.match(event, exclude_app_ids=exclude_app_ids, now=now)
                         if alert:
                             disp.dispatch(alert)
                             poll_alerts += 1
@@ -518,6 +552,7 @@ def _build_entry(record_path: str, rec: dict) -> _CanaryEntry:
         folder_id=rec.get("folder_id", ""),
         target_user=rec.get("target_user", ""),
         subject=rec.get("subject", ""),
+        expires_at=_parse_record_datetime(rec.get("_monitor_expires_at")),
     )
 
 
