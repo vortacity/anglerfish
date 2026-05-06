@@ -58,8 +58,8 @@ All tests must pass and `ruff check` must be clean before a PR can be merged.
 
 ## Template Authoring Guide
 
-Canary templates live under `src/anglerfish/templates/<type>/`.
-Each template is a YAML file. Templates follow a strict schema depending on canary type.
+Canary templates live under `src/anglerfish/templates/outlook/`.
+Each template is a YAML file. This release supports Outlook templates only.
 
 ### Outlook Template Schema
 
@@ -91,57 +91,6 @@ body_html: |                             # Required - HTML string
 Detection is access-based (UAL `MailItemsAccessed`); no URL callbacks are used.
 Body content should be plausible as a standalone internal communication.
 
-### SharePoint Template Schema
-
-```yaml
-name: Human-readable template name
-description: One-line description
-type: sharepoint
-
-site_name: SiteName                      # Default site shown in the CLI picker
-folder_path: Parent/Subfolder            # Default folder path (no leading slash)
-filenames:
-  - Filename_${variable}.txt             # Exactly one filename, variables supported
-
-content_text: |                          # Plain text file content
-  CONFIDENTIAL - Internal Use Only
-  File: ${filename}
-  Variable: ${variable}
-
-variables:
-  - name: variable
-    description: Prompt shown to the user
-    default: "default"
-```
-
-`${filename}` in `content_text` is automatically substituted with the final filename.
-All other `${var}` slots must have corresponding `variables:` entries.
-
-### OneDrive Template Schema
-
-```yaml
-name: Human-readable template name
-description: One-line description
-type: onedrive
-
-folder_path: Parent/Subfolder            # Default folder path (no leading slash; empty = drive root)
-filenames:
-  - Filename_${variable}.txt             # Exactly one filename, variables supported
-
-content_text: |                          # Plain text file content
-  CONFIDENTIAL - Internal Use Only
-  File: ${filename}
-  Variable: ${variable}
-
-variables:
-  - name: variable
-    description: Prompt shown to the user
-    default: "default"
-```
-
-`${filename}` in `content_text` is automatically substituted with the final filename.
-File format (.txt, .docx, .xlsx) is determined by the filename extension.
-
 ### Variable Substitution
 
 All templates use Python `string.Template` syntax: `${variable_name}`.
@@ -166,6 +115,10 @@ anglerfish --canary-type outlook --template "Your Template Name" \
 ---
 
 ## Adding a New Deployer Type
+
+New deployer types are future extension work, not part of the current
+Outlook-only product surface. If you add one, update the public docs and
+permissions guidance in the same change.
 
 1. Create `src/anglerfish/deployers/<type>.py` implementing `BaseDeployer`.
 2. Add a corresponding `dataclass` model to `src/anglerfish/models.py`.

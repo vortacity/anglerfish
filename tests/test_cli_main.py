@@ -113,6 +113,13 @@ class TestParseArgs:
         assert args.subcommand == "cleanup"
         assert args.record == "record.json"
 
+    def test_cleanup_demo(self):
+        args = _parse_args(["cleanup", "--demo", "--non-interactive", "record.json"])
+        assert args.subcommand == "cleanup"
+        assert args.demo is True
+        assert args.non_interactive is True
+        assert args.record == "record.json"
+
     def test_verify_demo(self):
         args = _parse_args(["verify", "--demo"])
         assert args.subcommand == "verify"

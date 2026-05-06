@@ -220,6 +220,12 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Skip confirmation prompt.",
     )
     cleanup_parser.add_argument(
+        "--demo",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Simulate cleanup without authentication or Graph API calls.",
+    )
+    cleanup_parser.add_argument(
         "--tenant-id",
         default=None,
         help="Microsoft Entra tenant ID. Overrides ANGLERFISH_TENANT_ID for this run.",

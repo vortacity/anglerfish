@@ -22,7 +22,7 @@ Show the README headline and say the narrow claim:
 
 > Outlook canaries, native M365 audit telemetry, no callback infrastructure.
 
-Do not lead with SharePoint, OneDrive, batch, or dashboard. Those are secondary v1.0.0 capabilities.
+Keep the recording focused on the current Outlook-only release surface: deploy, list, verify, cleanup, and monitor.
 
 ### 0:20 - Deploy Outlook Draft Canary
 
@@ -93,5 +93,5 @@ State these plainly:
 ## Cleanup
 
 ```bash
-anglerfish cleanup "$RECORD"
+anglerfish cleanup --non-interactive "$RECORD"
 ```

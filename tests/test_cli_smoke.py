@@ -1,4 +1,6 @@
 import json
+import os
+from pathlib import Path
 import sys
 
 import pytest
@@ -179,6 +181,35 @@ def test_main_cleanup_outlook_happy_path(monkeypatch, tmp_path):
 
     assert result == 0
     assert status_updates == [(str(record_path), "cleaned_up")]
+
+
+def test_main_cleanup_demo_skips_auth_and_api(monkeypatch, tmp_path):
+    record_path = tmp_path / "record.json"
+    record_path.write_text(
+        json.dumps(
+            {
+                "timestamp": "2026-05-06T18:00:00+00:00",
+                "canary_type": "outlook",
+                "target_user": "user@contoso.com",
+                "message_id": "msg-1",
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        deploy_mod,
+        "authenticate",
+        lambda *args, **kwargs: pytest.fail("cleanup --demo must not authenticate"),
+    )
+    monkeypatch.setattr(
+        deploy_mod,
+        "outlook_remove_canary",
+        lambda *args, **kwargs: pytest.fail("cleanup --demo must not call Graph cleanup"),
+    )
+
+    result = main(["cleanup", "--demo", "--non-interactive", str(record_path)])
+
+    assert result == 0
 
 
 def test_main_outlook_writes_output_json(monkeypatch, tmp_path):
@@ -430,18 +461,18 @@ def test_deploy_module_keeps_outlook_deployer_available():
 
 
 def test_verify_demo_runs_with_src_pythonpath():
-    import os
     import subprocess
 
+    root = Path(__file__).resolve().parents[1]
     env = os.environ.copy()
-    env["PYTHONPATH"] = "src"
+    env["PYTHONPATH"] = str(root / "src")
     result = subprocess.run(
-        ["/home/odie/code/deploy/.venv/bin/python", "-m", "anglerfish", "verify", "--demo"],
+        [sys.executable, "-m", "anglerfish", "verify", "--demo"],
         capture_output=True,
         text=True,
         timeout=30,
         env=env,
-        cwd="/home/odie/code/deploy/.worktrees/anglerfish-outlook-mvp-reset",
+        cwd=root,
     )
     assert result.returncode == 1
     assert "Canary Verification" in result.stdout or "GONE" in result.stdout
