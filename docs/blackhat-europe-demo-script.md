@@ -67,6 +67,8 @@ If the same app registration triggers the access event, explain that actor attri
 
 Microsoft does not guarantee a specific return time for audit records. For core services, records are typically available after 60 to 90 minutes, but tenant conditions can take longer. See [Microsoft audit search guidance](https://learn.microsoft.com/en-us/purview/audit-search).
 
+If this is a new Office 365 Management Activity API subscription, run and confirm monitor setup well before the demo, preferably the day before. Microsoft notes that first content blobs for a new subscription can take up to 12 hours to become available. See [Microsoft's Management Activity API guidance](https://learn.microsoft.com/en-us/office/office-365-management-api/office-365-management-activity-api-reference).
+
 For a short recording, pre-stage and confirm the authorized access event well before recording, preferably 60 to 90+ minutes ahead, and keep sanitized fallback evidence from `docs/examples/` ready. Show both the deployment timestamp and access timestamp.
 
 ```bash
@@ -80,10 +82,11 @@ Only use `--exclude-app-id` for unrelated known-good actors, such as backup, DLP
 The monitor alert should show:
 
 - `Operation`: `MailItemsAccessed`
-- Actor app or user where present in the audit event
-- Source IP where present in the audit event
-- Matched Outlook artifact, preferably `internet_message_id`
-- Deployment record path
+- `Accessed by`: the accessed user or principal value rendered by Anglerfish
+- `Source IP`: where present in the audit event
+- `Client`: client info where present in the audit event
+- `Artifact`: matched Outlook artifact, preferably `internet_message_id`
+- `Record`: deployment record path
 
 ### 2:20 - Close With Boundaries
 
@@ -94,7 +97,7 @@ Say the limitations plainly:
 ## Booth Demo Procedure
 
 1. Start with the README claim and the supported command table.
-2. Run `anglerfish --demo` if the booth network or tenant access is unavailable.
+2. Run `anglerfish monitor --demo --count 2` if the booth network or tenant access is unavailable.
 3. For a live tenant, deploy a draft canary and show the local JSON record.
 4. Trigger access through an approved Graph or Exchange read path for draft mode.
 5. For a human interaction demo in Outlook-on-the-Web, deploy send mode instead:

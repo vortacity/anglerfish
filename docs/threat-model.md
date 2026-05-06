@@ -30,8 +30,9 @@ detect:
 - **Data exfiltration** — canaries fire on access, not on download or copy
 - **Access to resources where no canary was planted** — coverage is limited to
   deployed artifacts
-- **Access by the deploying service account itself** — the operator's own Graph
-  API calls may appear in the same audit log
+- **Benign operator or service access without context** — expected mailbox
+  access from approved tools can look like any other access unless the actor
+  is understood and documented
 - **Accesses below UAL ingest latency** — see Known Limitations below
 
 ## Authorization Requirements
@@ -67,12 +68,18 @@ Grant only the permissions required for the Outlook workflows you intend to run.
 
 ## Known Limitations
 
-### UAL Ingest Latency (~15 minutes)
+### UAL Ingest Latency
 
-Microsoft 365 Unified Audit Log events are typically available within 15–60
-minutes of the triggering action, but Microsoft does not guarantee a specific
-SLA. Do not expect real-time detection. Configure your SIEM to query the UAL
-on a schedule (e.g., every 15–30 minutes) and alert on canary artifact IDs.
+Microsoft does not guarantee a specific return time for Unified Audit Log
+records. For core services, audit records are typically available after 60 to
+90 minutes, but tenant conditions can take longer. Treat Anglerfish monitoring
+as delayed audit-log correlation, not an immediate stream. See
+[Microsoft audit search guidance](https://learn.microsoft.com/en-us/purview/audit-search).
+
+For a new Office 365 Management Activity API subscription, first content blobs
+can take up to 12 hours to become available. Confirm monitor setup before a
+time-sensitive demo or exercise. See
+[Microsoft's Management Activity API guidance](https://learn.microsoft.com/en-us/office/office-365-management-api/office-365-management-activity-api-reference).
 
 ### Shared Mailboxes May Require Additional Permissions
 
@@ -81,12 +88,12 @@ require the `FullAccess` Exchange permission in addition to the Graph
 `Mail.ReadWrite` application permission, depending on tenant configuration.
 Test with a dedicated canary mailbox first.
 
-### No Detection of Access by the Deploying Principal
+### Known-Good Actor Filtering Can Hide Evidence
 
-The application principal used to deploy canaries may generate its own
-`MailItemsAccessed` events during deployment. Filter these out in your
-detection logic by excluding the deploying app registration object ID from
-canary alert rules.
+`--exclude-app-id` is a static allowlist for unrelated known-good actors such
+as backup, DLP, or eDiscovery tooling. Never exclude the app or user used to
+generate demo evidence, because excluded app and user IDs are suppressed before
+alert matching.
 
 ### Coverage is Point-in-Time
 

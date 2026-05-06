@@ -156,6 +156,8 @@ Run the monitor:
 anglerfish monitor --records-dir ~/.anglerfish/records
 ```
 
+For a new Office 365 Management Activity API subscription, run and confirm monitor setup well before the demo, preferably the day before. Microsoft notes that first content blobs for a new subscription can take up to 12 hours to become available. See [Microsoft's Management Activity API guidance](https://learn.microsoft.com/en-us/office/office-365-management-api/office-365-management-activity-api-reference).
+
 If the tenant has known-good mailbox access from backup, DLP, or eDiscovery tooling, exclude those app principals from matches:
 
 ```bash

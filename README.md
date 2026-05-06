@@ -46,7 +46,7 @@ Anglerfish is intentionally narrow in this release: Outlook only, application au
 | Managed Canarytokens / Canarytools | no | no (SaaS) | yes (Thinkst) | n/a (callback pattern) |
 | Self-hosted Canarytokens | yes | yes | operator-controlled | n/a (callback pattern) |
 | Defender for Office 365 anomalous mailbox detection | no | n/a (Microsoft-hosted) | n/a | yes (UAL) |
-| DIY Sentinel KQL on `MailItemsAccessed` | yes (operator-built) | yes | no | yes (UAL) |
+| DIY Sentinel KQL on `MailItemsAccessed` | yes (operator-built content) | no (Microsoft-hosted SIEM) | no | yes (UAL) |
 
 ## Supported Surface
 
