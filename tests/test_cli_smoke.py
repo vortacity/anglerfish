@@ -331,11 +331,16 @@ def test_parse_args_verify_subcommand():
 def test_verify_demo_exits_one():
     import subprocess
 
+    root = Path(__file__).resolve().parents[1]
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(root / "src")
     result = subprocess.run(
         [sys.executable, "-m", "anglerfish", "verify", "--demo"],
         capture_output=True,
         text=True,
         timeout=30,
+        env=env,
+        cwd=root,
     )
     assert result.returncode == 1
     assert "Canary Verification" in result.stdout or "GONE" in result.stdout
