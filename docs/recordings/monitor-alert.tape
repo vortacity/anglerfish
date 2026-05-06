@@ -19,9 +19,9 @@ Enter
 Sleep 1s
 Ctrl+L
 
-# Stream three simulated canary alerts (Outlook → SharePoint → OneDrive)
-Type "anglerfish monitor --demo --count 3"
+# Show one Outlook MailItemsAccessed alert for the primary demo path.
+Type "anglerfish monitor --demo --count 1"
 Enter
-Sleep 10s
+Sleep 5s
 
 # End of recording

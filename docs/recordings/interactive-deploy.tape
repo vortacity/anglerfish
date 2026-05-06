@@ -19,8 +19,8 @@ Enter
 Sleep 1s
 Ctrl+L
 
-# Deploy canary non-interactively — command is the story, success panel is the payoff
-Type "anglerfish --demo --non-interactive --canary-type outlook --template 'Fake Password Reset' --target adele.vance@contoso.com"
+# Deploy the primary Outlook draft canary non-interactively.
+Type "anglerfish --demo --non-interactive --canary-type outlook --template 'Fake Password Reset' --target adele.vance@contoso.com --delivery-mode draft --output-json ~/.anglerfish/records/outlook-draft-demo.json"
 Enter
 Sleep 5s
 

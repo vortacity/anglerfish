@@ -1,6 +1,6 @@
 # Demo Tenant Setup Guide
 
-This guide walks through setting up a safe Microsoft 365 test environment for Anglerfish demos and development.
+This guide walks through setting up a safe Microsoft 365 test environment for Anglerfish demos and development. The primary demo path is Outlook draft deployment plus `MailItemsAccessed` correlation from the Unified Audit Log.
 
 ---
 
@@ -39,30 +39,37 @@ If you have an existing test/dev tenant with E3 or E5 licenses, that works too. 
 
 ---
 
-## 4. Grant Graph API Permissions
+## 4. Grant API Permissions
 
-1. In your app registration, go to **API permissions** > **Add a permission** > **Microsoft Graph** > **Application permissions**
-2. Add the following permissions based on which canary types you need:
+1. In your app registration, go to **API permissions** > **Add a permission**.
+2. Add the following permissions based on the demo path you need:
 
-### Outlook Canaries
+### Primary Outlook Draft Demo
+
+Under **Microsoft Graph** > **Application permissions**:
 
 | Permission | Required for |
 |-----------|-------------|
-| `Mail.ReadWrite` | Draft and send mode |
+| `Mail.ReadWrite` | Create and verify hidden-folder draft canaries |
+
+Under **Office 365 Management APIs** > **Application permissions**:
+
+| Permission | Required for |
+|-----------|-------------|
+| `ActivityFeed.Read` | Poll Unified Audit Log events with `anglerfish monitor` |
+
+### Optional Outlook Send Mode
+
+| Permission | Required for |
+|-----------|-------------|
 | `Mail.Send` | Send mode only |
 
-### SharePoint Canaries
+### Optional File Canaries
 
 | Permission | Required for |
 |-----------|-------------|
-| `Sites.ReadWrite.All` | Site discovery and file upload |
-| `Files.ReadWrite.All` | File upload |
-
-### OneDrive Canaries
-
-| Permission | Required for |
-|-----------|-------------|
-| `Files.ReadWrite.All` | File upload (already granted for SharePoint) |
+| `Sites.ReadWrite.All` | SharePoint site discovery and file upload |
+| `Files.ReadWrite.All` | SharePoint or OneDrive file upload |
 
 3. Click **Add permissions**
 
@@ -82,7 +89,7 @@ Admin consent requires the Global Administrator role. In a developer sandbox, yo
 
 ---
 
-## 6. Set Up Test Mailbox and SharePoint Site
+## 6. Set Up Test Mailbox
 
 ### Test Mailbox
 
@@ -92,7 +99,9 @@ Your developer tenant includes pre-provisioned user accounts. Pick one as your c
 2. Note a user's UPN (e.g., `adele.vance@yourtenant.onmicrosoft.com`)
 3. Ensure the user has an Exchange Online license assigned (included in E5)
 
-### SharePoint Site
+### Optional SharePoint Site
+
+This is not needed for the primary Outlook demo. If you also want to exercise the secondary file-canary path:
 
 1. Go to [SharePoint Admin Center](https://yourtenant-admin.sharepoint.com)
 2. Create a new team site (or use an existing one):
@@ -140,7 +149,7 @@ If the dry run succeeds, your app registration, permissions, and credentials are
 
 ---
 
-## 9. First Canary Deployment
+## 9. First Outlook Draft Canary Deployment
 
 ```bash
 anglerfish --non-interactive \
@@ -156,6 +165,38 @@ Verify the deployment:
 ```bash
 anglerfish list
 ```
+
+For draft-mode canaries, you can also verify that the hidden folder and draft still exist:
+
+```bash
+anglerfish verify ~/.anglerfish/records/first-test.json
+```
+
+---
+
+## 10. Live Audit-Log Correlation Demo
+
+This is the reviewer-facing evidence path:
+
+1. Record the deployment timestamp and `internet_message_id` from `~/.anglerfish/records/first-test.json`.
+2. Trigger an authorized read of the deployed Outlook message from the target mailbox. For draft mode, use an approved Graph or Exchange read path that touches the hidden folder/message; the folder is intentionally hidden from normal Outlook navigation.
+3. Wait for Unified Audit Log ingestion. This commonly takes 15-60 minutes.
+4. Poll for correlation:
+
+```bash
+anglerfish monitor \
+  --records-dir ~/.anglerfish/records \
+  --once \
+  --exclude-app-id "$ANGLERFISH_CLIENT_ID"
+```
+
+The evidence to capture in a 2-3 minute demo video:
+
+- Deployment command and saved record path
+- Deployment timestamp and Outlook `internet_message_id`
+- Trigger/access timestamp
+- `MailItemsAccessed` event timestamp from UAL
+- Anglerfish alert showing the record match
 
 Clean up when done:
 
@@ -173,6 +214,7 @@ anglerfish cleanup ~/.anglerfish/records/first-test.json
 | `AuthenticationError: AADSTS700016` | Wrong client ID | Verify app registration client ID |
 | `GraphApiError: 403 Forbidden` | Missing admin consent | Grant admin consent in API permissions |
 | `GraphApiError: 404 Not Found` on mailbox | User doesn't exist or no Exchange license | Verify UPN and license assignment |
+| `monitor` cannot list audit content | Missing `ActivityFeed.Read` or inactive audit subscription | Add Office 365 Management APIs permission, grant admin consent, then rerun monitor |
 | `GraphApiError: 403` on SharePoint | Missing `Sites.ReadWrite.All` | Add permission and re-grant admin consent |
 
 ---

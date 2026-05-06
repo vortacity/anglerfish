@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "anglerfish"
 version = "1.0.0"
-description = "Deploy M365 canary tokens and detect unauthorized access via audit logs — no callbacks, no beacons"
+description = "Deploy Outlook canaries in Microsoft 365 and detect mailbox access via audit logs — no callbacks, no beacons"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }

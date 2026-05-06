@@ -5,26 +5,27 @@
 
 [![CI](https://github.com/vortacity/anglerfish/actions/workflows/ci.yml/badge.svg)](https://github.com/vortacity/anglerfish/actions/workflows/ci.yml)
 
-Deploy M365 canary tokens and detect unauthorized access: no callback URLs, no DNS beacons, no external infrastructure.
+Deploy Outlook canaries inside Microsoft 365 and detect mailbox access through Unified Audit Log events: no callback URLs, no DNS beacons, no external infrastructure.
 
-Anglerfish is a Python CLI that provisions deceptive artifacts (Outlook emails, SharePoint documents, OneDrive files) in Microsoft 365 tenants via the Graph API. When an attacker accesses a canary token, the M365 Unified Audit Log generates an event (`MailItemsAccessed`, `FileAccessed`, `FileDownloaded`) that your SIEM can alert on. Detection is entirely access-based; the canary never phones home.
+Anglerfish is a Python CLI for placing deceptive Outlook messages in Microsoft 365 mailboxes through Microsoft Graph. Its flagship path creates a hidden-folder draft canary, records the deployment metadata, and correlates later `MailItemsAccessed` audit events against that record. Detection is entirely access-based; the canary never phones home.
 
 ## Demo
 
-**Interactive deployment** (`anglerfish`):
+**Primary Outlook draft deployment** (`anglerfish --canary-type outlook --delivery-mode draft`):
 
 ![Interactive deployment](docs/images/interactive-deploy.gif)
 
-**Live dashboard** (`anglerfish dashboard`):
+**Audit-log alert correlation** (`anglerfish monitor`):
 
-![Dashboard TUI](docs/images/dashboard.gif)
+```bash
+anglerfish monitor --records-dir ~/.anglerfish/records --once
+```
 
-**Alert detection** (`anglerfish monitor`):
-
-![Monitor alert](docs/images/monitor-alert.gif)
+For the live 2-3 minute reviewer flow, see the [Arsenal demo script](docs/arsenal-demo-script.md). It shows the expected evidence: deployment timestamp, Outlook `internet_message_id`, `MailItemsAccessed` timestamp, and Anglerfish alert correlation.
 
 ## Documentation
 
+- [Arsenal demo script](docs/arsenal-demo-script.md)
 - [Demo tenant setup guide](docs/demo-tenant-setup.md)
 - [Threat model](docs/threat-model.md)
 - [Architecture notes](docs/architecture.md)
@@ -40,14 +41,14 @@ Maintained by [`@vortacity`](https://github.com/vortacity). Open usage bugs and 
 ## How It Works
 
 ```text
-1. Deploy     anglerfish → Graph API → canary artifact lands in M365
-2. Trigger    attacker reads email / opens file → UAL audit event fires
-3. Alert      anglerfish monitor polls UAL → matches deployment records → alert
+1. Deploy     anglerfish -> Graph API -> hidden Outlook draft lands in mailbox
+2. Trigger    attacker or test actor reads mailbox item -> MailItemsAccessed fires
+3. Alert      anglerfish monitor polls UAL -> matches deployment record -> alert
 ```
 
 No external infrastructure required.
 
-Most canary techniques rely on outbound callbacks — HTTP beacons, DNS lookups, or URL tokens — that require operator-controlled external infrastructure. Anglerfish takes a different approach: canaries are standard M365 objects (mail drafts, SharePoint files, OneDrive files), and detection relies entirely on Microsoft's own Unified Audit Log pipeline. There is no external endpoint to maintain, no firewall exception to request, and no phoning home. The signal is already in your SIEM.
+Most canary techniques rely on outbound callbacks — HTTP beacons, DNS lookups, or URL tokens — that require operator-controlled external infrastructure. Anglerfish takes a different approach: the primary canary is a standard Outlook object, and detection relies on Microsoft's own Unified Audit Log pipeline. There is no external endpoint to maintain, no firewall exception to request, and no phoning home. The signal is already in your SIEM.
 
 ## Why This Is Different
 
@@ -57,7 +58,7 @@ Anglerfish is not trying to replace every callback-based canary workflow. It is 
 |---|---|---|
 | Detection path | Microsoft 365 Unified Audit Log events correlated to deployment records | Outbound HTTP, DNS, or URL callback to operator-controlled infrastructure |
 | Infrastructure required | Microsoft 365 tenant, Graph API app registration, existing SIEM or hunt workflow | External listener, hosted token service, or operator-managed callback endpoint |
-| Target surface | Native M365 artifacts: Outlook drafts, SharePoint files, OneDrive files | Broad internet-visible lures such as documents, links, web bugs, URLs, or files |
+| Target surface | Native Outlook mailbox artifacts, especially hidden-folder draft messages | Broad internet-visible lures such as documents, links, web bugs, URLs, or files |
 | Operational fit | Best when defenders already investigate in UAL, Sentinel, or another M365-aware SIEM | Best when teams want immediate callback visibility across a wider set of lure types |
 | Firewall / egress dependency | No outbound beacon required from the canary itself | Detection depends on the callback reaching the operator-controlled endpoint |
 
@@ -78,7 +79,16 @@ The underlying UAL event looks like this:
   "Operation": "MailItemsAccessed",
   "UserId": "attacker@contoso.com",
   "ClientIPAddress": "203.0.113.42",
-  "InternetMessageId": "<artifact-id-from-deployment-record>",
+  "Folders": [
+    {
+      "Path": "\\\\Recoverable Items\\\\Anglerfish",
+      "FolderItems": [
+        {
+          "InternetMessageId": "<internet-message-id-from-deployment-record>"
+        }
+      ]
+    }
+  ],
   "ResultStatus": "Succeeded"
 }
 ```
@@ -87,20 +97,20 @@ You can also query these events directly from your SIEM. **Microsoft Sentinel KQ
 
 ```kql
 OfficeActivity
-| where Operation in ("MailItemsAccessed", "FileAccessed", "FileDownloaded")
-| where OfficeObjectId in (canary_ids)  // artifact IDs from --output-json records
-| project TimeGenerated, UserId, ClientIPAddress, Operation, OfficeObjectId
+| where Operation == "MailItemsAccessed"
+| where TimeGenerated >= ago(24h)
+| project TimeGenerated, UserId, ClientIPAddress, Operation, ClientInfoString, Folders
 ```
 
-Replace `canary_ids` with the artifact IDs from your `--output-json` deployment records.
+Use Anglerfish's `monitor` for the exact correlation step: it extracts `Folders[].FolderItems[].InternetMessageId` from `MailItemsAccessed` events and matches it to the `internet_message_id` stored in the `--output-json` deployment record.
 
 ## Attack Scenarios
 
 | Threat scenario | Canary type | Detection event |
 |---|---|---|
 | Attacker reads mail in a compromised executive mailbox | Outlook draft | `MailItemsAccessed` |
-| Insider threat browses a restricted HR document library | SharePoint | `FileAccessed` |
-| Credential-stuffing actor enumerates a personal OneDrive | OneDrive | `FileAccessed`, `FileDownloaded` |
+| Operator sends a controlled lure to a test mailbox | Outlook send | `MailItemsAccessed` |
+| Hunter validates mailbox-access detection without external beaconing | Outlook draft | `MailItemsAccessed` |
 
 ## Quickstart
 
@@ -118,17 +128,30 @@ export ANGLERFISH_CLIENT_SECRET="..."
 
 # 3. Try it offline — no tenant required
 anglerfish --demo
+
+# 4. Primary live path — deploy an Outlook draft canary
+anglerfish --non-interactive \
+  --canary-type outlook \
+  --template "Fake Password Reset" \
+  --target test@example.com \
+  --delivery-mode draft \
+  --output-json ~/.anglerfish/records/outlook-draft-demo.json
+
+# 5. Poll M365 audit logs for MailItemsAccessed correlation
+anglerfish monitor --records-dir ~/.anglerfish/records --once
 ```
 
 For a full Azure AD app registration walkthrough, see [Demo Tenant Setup Guide](docs/demo-tenant-setup.md).
 
 ## Supported Canary Types
 
-| Type | Delivery | Auth | Detection event |
-|------|----------|------|-----------------|
-| Outlook | Draft in hidden folder, or send to Inbox | Application | `MailItemsAccessed` |
-| SharePoint | File upload to an existing site folder | Application | `FileAccessed`, `FileDownloaded` |
-| OneDrive | File upload to personal OneDrive for Business | Application | `FileAccessed`, `FileDownloaded` |
+For Arsenal demos and first-time evaluation, start with the Outlook draft workflow because it isolates the callback-free M365 mailbox-access signal. Current v1.0.0 also includes SharePoint and OneDrive file canaries, batch deployment, and a dashboard as secondary capabilities.
+
+| Type | Delivery | Review/demo role | Detection event |
+|------|----------|------------------|-----------------|
+| Outlook | Draft in hidden folder, or send to Inbox | Primary path; use `draft` first | `MailItemsAccessed` |
+| SharePoint | File upload to an existing site folder | Secondary v1.0.0 capability | `FileAccessed`, `FileDownloaded` |
+| OneDrive | File upload to personal OneDrive for Business | Secondary v1.0.0 capability | `FileAccessed`, `FileDownloaded` |
 
 ## Installation
 
@@ -158,15 +181,15 @@ pip install -e ".[dev]"  # contributor install (adds pytest, ruff, bandit)
 
 See [Demo Tenant Setup Guide](docs/demo-tenant-setup.md) for step-by-step instructions including app registration, permission grants, and admin consent.
 
-### Required Graph Permissions
+### Required API Permissions
 
 | Canary type | Permission | Type |
 |-------------|-----------|------|
-| Outlook (draft) | `Mail.ReadWrite` | Application |
-| Outlook (send) | `Mail.ReadWrite`, `Mail.Send` | Application |
+| Outlook draft deployment | `Mail.ReadWrite` | Microsoft Graph application |
+| Outlook send deployment | `Mail.ReadWrite`, `Mail.Send` | Microsoft Graph application |
 | SharePoint | `Sites.ReadWrite.All`, `Files.ReadWrite.All` | Application |
 | OneDrive | `Files.ReadWrite.All` | Application |
-| Monitor | `ActivityFeed.Read` | Application (Office 365 Management APIs) |
+| Monitor | `ActivityFeed.Read` | Office 365 Management APIs application |
 
 ### Environment Variables
 
@@ -211,7 +234,11 @@ anglerfish \
   --target victim@contoso.com \
   --delivery-mode draft \
   --output-json ./deployment-record.json
+```
 
+Secondary file-canary examples are still supported in v1.0.0:
+
+```bash
 anglerfish \
   --non-interactive \
   --canary-type sharepoint \
@@ -253,18 +280,6 @@ canaries:
     delivery_mode: draft
     vars:
       target_name: "Jane Chen"
-
-  - canary_type: sharepoint
-    template: "Employee Salary Bands"
-    target: HRSite
-    folder_path: "Compensation/Restricted"
-    filename: "2026_Salary_Bands_Engineering.txt"
-
-  - canary_type: onedrive
-    template: "VPN Credentials Backup"
-    target: j.smith@contoso.com
-    folder_path: "IT/Backups"
-    filename: "VPN_Config_GlobalProtect_Backup.txt"
 ```
 
 Authenticates once, deploys all entries sequentially, writes one deployment record per canary to `--output-dir`. Failures are logged and skipped; remaining canaries still deploy.
@@ -281,11 +296,10 @@ Validate configuration and authenticate without performing any writes:
 anglerfish \
   --non-interactive \
   --dry-run \
-  --canary-type sharepoint \
-  --template "Employee Salary Bands" \
-  --target HRSite \
-  --folder-path "Compensation/Restricted" \
-  --filename "2026_Salary_Bands_Engineering.txt"
+  --canary-type outlook \
+  --template "Fake Password Reset" \
+  --target test@example.com \
+  --delivery-mode draft
 ```
 
 ### Listing Deployments
@@ -417,10 +431,6 @@ Expected layout:
 <custom-dir>/
 ├── outlook/
 │   └── *.yaml
-├── sharepoint/
-│   └── *.yaml
-└── onedrive/
-    └── *.yaml
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for template schema documentation.
@@ -493,6 +503,7 @@ Each subcommand has its own `--help`: `anglerfish monitor --help`, `anglerfish b
 ## Known Limitations
 
 - **UAL ingest latency (~15–60 min):** M365 Unified Audit Log events are typically available within 15–60 minutes of access. Anglerfish is not a real-time detection system. Configure your SIEM to query on a schedule.
+- **M365 audit dependency:** Live detection requires Microsoft 365 audit logging and the Office 365 Management Activity API. Tenant licensing, audit settings, and retention vary; validate them before relying on alerts.
 - **Deploying service account appears in audit logs:** The app registration used to deploy canaries may generate its own `MailItemsAccessed` or `FileAccessed` events. Filter these out using `--exclude-app-id` or by excluding the deploying principal's UPN in your SIEM query.
 - **Coverage is point-in-time:** Canaries cover specific artifacts deployed at a specific time. Rotate them periodically and after suspected compromise to maintain coverage.
 

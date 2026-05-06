@@ -9,13 +9,24 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Changed
+
+- Refocused public documentation on the Outlook draft canary workflow:
+  deploy a hidden Outlook draft, capture the deployment record, and correlate
+  `MailItemsAccessed` events without callback infrastructure.
+- Added a reviewer-facing Arsenal demo script with live evidence requirements,
+  UAL latency notes, and permission limitations.
+- Updated demo recording scripts so the primary offline demo shows Outlook draft
+  deployment and a single Outlook audit-log alert.
 
 ---
 
 ## [1.0.0] — 2026-03-11
 
-First public release, prepared for Black Hat Arsenal submission.
+First public release, prepared for Arsenal evaluation. The recommended reviewer
+path is Outlook draft canary deployment and `MailItemsAccessed` correlation
+without callback infrastructure; SharePoint, OneDrive, batch, and dashboard are
+secondary capabilities in this release.
 
 ### Added
 
