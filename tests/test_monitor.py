@@ -172,6 +172,27 @@ def test_cleaned_index_entry_matches_until_expiry(tmp_path):
     assert idx.match(event, now=expires_at + timedelta(microseconds=1)) is None
 
 
+def test_cleaned_index_entry_folder_fallback_matches_until_expiry(tmp_path):
+    now = datetime(2026, 5, 6, 12, 0, tzinfo=timezone.utc)
+    rec = _outlook_record(
+        internet_message_id="",
+        status="cleaned_up",
+        status_updated_at=(now - timedelta(hours=2)).isoformat(),
+    )
+    (tmp_path / "rec.json").write_text(json.dumps(rec), encoding="utf-8")
+
+    records = load_records(tmp_path, cleaned_up_lookback=timedelta(hours=24), now=now)
+    idx = CanaryIndex(records)
+    event = _mail_items_accessed_event(
+        Folders=[{"Path": "\\Mailbox\\IT Notifications\\SubFolder"}],
+    )
+    expires_at = now + timedelta(hours=22)
+
+    assert idx.match(event, now=expires_at - timedelta(microseconds=1)) is not None
+    assert idx.match(event, now=expires_at) is not None
+    assert idx.match(event, now=expires_at + timedelta(microseconds=1)) is None
+
+
 # ------------------------------------------------------------------
 # CanaryIndex.match — unrelated operations
 # ------------------------------------------------------------------

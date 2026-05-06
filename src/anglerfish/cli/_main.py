@@ -34,6 +34,7 @@ _ASCII_BANNER = (
     "/_/  |_/_/ /_/\\__, /_/\\___/_/  /_/ /_/____/_/ /_/ \n"
     "             /____/                               \n"
 )
+_MAX_CLEANED_UP_LOOKBACK_HOURS = 8760.0
 
 
 def _print_banner(console: Console) -> None:
@@ -93,13 +94,17 @@ def _print_error(console: Console, message: str) -> None:
     )
 
 
-def _finite_float(value: str) -> float:
+def _cleaned_up_lookback_hours(value: str) -> float:
     try:
         parsed = float(value)
     except ValueError as exc:
         raise argparse.ArgumentTypeError(f"invalid float value: {value!r}") from exc
     if not math.isfinite(parsed):
         raise argparse.ArgumentTypeError("value must be a finite number")
+    if parsed > _MAX_CLEANED_UP_LOOKBACK_HOURS:
+        raise argparse.ArgumentTypeError(
+            f"value must be at most {_MAX_CLEANED_UP_LOOKBACK_HOURS:g} hours"
+        )
     return parsed
 
 
@@ -303,7 +308,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     monitor_parser.add_argument(
         "--cleaned-up-lookback-hours",
-        type=_finite_float,
+        type=_cleaned_up_lookback_hours,
         default=24.0,
         metavar="HOURS",
         help=(

@@ -196,6 +196,18 @@ class TestParseArgs:
         args = _parse_args(["monitor", "--cleaned-up-lookback-hours", "6.5"])
         assert args.cleaned_up_lookback_hours == 6.5
 
+    def test_monitor_cleaned_up_lookback_hours_allows_maximum(self):
+        args = _parse_args(["monitor", "--cleaned-up-lookback-hours", "8760"])
+        assert args.cleaned_up_lookback_hours == 8760.0
+
+    def test_monitor_cleaned_up_lookback_hours_rejects_over_maximum(self):
+        with pytest.raises(SystemExit):
+            _parse_args(["monitor", "--cleaned-up-lookback-hours", "8760.1"])
+
+    def test_monitor_cleaned_up_lookback_hours_rejects_huge_value(self):
+        with pytest.raises(SystemExit):
+            _parse_args(["monitor", "--cleaned-up-lookback-hours", "1e308"])
+
     def test_monitor_cleaned_up_lookback_hours_rejects_nan(self):
         with pytest.raises(SystemExit):
             _parse_args(["monitor", "--cleaned-up-lookback-hours", "nan"])
