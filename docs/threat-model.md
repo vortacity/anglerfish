@@ -83,10 +83,10 @@ Test with a dedicated canary mailbox first.
 
 ### No Detection of Access by the Deploying Principal
 
-The service account or delegated user used to deploy canaries may generate its
-own `MailItemsAccessed` events during
-deployment. Filter these out in your detection logic by excluding the deploying
-principal's UPN or app registration object ID from canary alert rules.
+The application principal used to deploy canaries may generate its own
+`MailItemsAccessed` events during deployment. Filter these out in your
+detection logic by excluding the deploying app registration object ID from
+canary alert rules.
 
 ### Coverage is Point-in-Time
 

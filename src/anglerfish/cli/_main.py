@@ -125,6 +125,15 @@ def _print_auth_success(console: Console, **_unused: object) -> None:
     console.print("[bold green]\u2713[/bold green] Authenticated using [green]application permissions[/green]")
 
 
+def _apply_non_interactive_demo_defaults(args: argparse.Namespace) -> None:
+    if not args.canary_type:
+        args.canary_type = "outlook"
+    if not args.template:
+        args.template = "Fake Password Reset"
+    if not args.delivery_mode:
+        args.delivery_mode = "draft"
+
+
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Deploy Microsoft 365 canary artifacts.")
     parser.add_argument("--version", action="store_true", help="Print version and exit.")
@@ -425,6 +434,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     non_interactive = args.non_interactive
     if not non_interactive and args.demo and not sys.stdin.isatty():
         non_interactive = True
+    if non_interactive and args.demo:
+        _apply_non_interactive_demo_defaults(args)
     total_steps = 4
 
     try:
@@ -499,7 +510,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 130
 
         if getattr(args, "demo", False):
-            return _run_demo_deploy(console, canary_type, rendered_template)
+            return _run_demo_deploy(console, canary_type, rendered_template, args.delivery_mode)
 
         return _run_outlook_deploy(
             args,

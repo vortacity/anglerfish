@@ -346,6 +346,27 @@ def test_verify_demo_exits_one():
     assert "Canary Verification" in result.stdout or "GONE" in result.stdout
 
 
+def test_no_arg_demo_runs_with_src_pythonpath_under_non_tty():
+    import subprocess
+
+    root = Path(__file__).resolve().parents[1]
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(root / "src")
+    result = subprocess.run(
+        [sys.executable, "-m", "anglerfish", "--demo"],
+        input="",
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env=env,
+        cwd=root,
+    )
+    assert result.returncode == 0
+    assert "Simulated Deployment" in result.stdout
+    assert "Fake Password Reset" in result.stdout
+    assert "draft" in result.stdout
+
+
 def test_verify_send_record_returns_error_without_auth(monkeypatch):
     monkeypatch.setattr(
         deploy_mod,

@@ -111,7 +111,7 @@ def _run_list(args: argparse.Namespace, console: Console) -> int:
         return 0
 
     table = Table(
-        title=f"Deployed Canary Artifacts  ({records_dir})",
+        title=f"Deployed Outlook Canary Artifacts  ({records_dir})",
         box=box.SIMPLE_HEAVY,
         show_lines=False,
         highlight=True,
@@ -123,6 +123,7 @@ def _run_list(args: argparse.Namespace, console: Console) -> int:
     table.add_column("Deployed", no_wrap=True)
     table.add_column("Status", no_wrap=True)
 
+    row_count = 0
     for record_file in record_files:
         try:
             record = read_deployment_record(record_file)
@@ -130,9 +131,11 @@ def _run_list(args: argparse.Namespace, console: Console) -> int:
             continue  # Skip malformed records silently
 
         record_id = record_file.stem[:12]
-        canary_type = str(record.get("canary_type", record.get("type", "unknown")))
+        canary_type = str(record.get("canary_type", record.get("type", "unknown"))).strip().lower()
+        if canary_type != "outlook":
+            continue
         template_name = str(record.get("template_name", "\u2014"))
-        target = str(record.get("target_user") or record.get("site_name") or "\u2014")
+        target = str(record.get("target_user") or "\u2014")
         timestamp = str(record.get("timestamp", "\u2014"))
 
         try:
@@ -150,8 +153,12 @@ def _run_list(args: argparse.Namespace, console: Console) -> int:
             status_markup = f"[dim]{status}[/dim]"
 
         table.add_row(record_id, canary_type, template_name, target, deployed_str, status_markup)
+        row_count += 1
 
-    console.print(table)
+    if row_count:
+        console.print(table)
+    else:
+        console.print("[yellow]No Outlook deployment records found in[/yellow] " + str(records_dir))
     return 0
 
 
@@ -350,6 +357,7 @@ def _run_demo_deploy(
     console: Console,
     canary_type: str,
     template: OutlookTemplate,
+    delivery_mode: str | None,
 ) -> int:
     """Print simulated deployment output for demo/offline mode."""
     console.print()
@@ -360,6 +368,8 @@ def _run_demo_deploy(
         ("Canary type", canary_type),
         ("Template", template.name),
     ]
+    if canary_type == "outlook" and delivery_mode:
+        rows.append(("Delivery mode", delivery_mode))
     rows.append(("Subject", template.subject))
     rows.append(("Sender", f"{template.sender_name} <{template.sender_email}>"))
     _print_summary_table(console, rows)

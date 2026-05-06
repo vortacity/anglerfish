@@ -19,7 +19,6 @@ from anglerfish.cli.prompts import (
     _validate_email,
     _validate_file_path,
     _validate_non_empty,
-    _validate_single_filename,
     _validate_subject,
     _validate_variable_value,
 )
@@ -87,36 +86,6 @@ class TestValidateFilePath:
         result = _validate_file_path("/nonexistent/file.txt")
         assert isinstance(result, str)
         assert "valid file path" in result
-
-
-# ---------------------------------------------------------------------------
-# _validate_single_filename
-# ---------------------------------------------------------------------------
-
-
-class TestValidateSingleFilename:
-    def test_valid_filename(self):
-        assert _validate_single_filename("report.pdf") is True
-
-    def test_empty(self):
-        result = _validate_single_filename("")
-        assert isinstance(result, str)
-        assert "filename" in result.lower()
-
-    def test_comma_separated(self):
-        result = _validate_single_filename("file1.txt,file2.txt")
-        assert isinstance(result, str)
-        assert "one" in result.lower()
-
-    def test_forward_slash(self):
-        result = _validate_single_filename("dir/file.txt")
-        assert isinstance(result, str)
-        assert "separator" in result.lower()
-
-    def test_backslash(self):
-        result = _validate_single_filename("dir\\file.txt")
-        assert isinstance(result, str)
-        assert "separator" in result.lower()
 
 
 # ---------------------------------------------------------------------------

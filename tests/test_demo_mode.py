@@ -47,6 +47,42 @@ def test_demo_list_fixture_records_are_valid():
         assert data["status"] == "active"
 
 
+def test_list_filters_non_outlook_records(tmp_path, capsys):
+    """The current release list surface only includes Outlook deployment records."""
+    (tmp_path / "outlook.json").write_text(
+        json.dumps(
+            {
+                "timestamp": "2026-05-06T18:00:00+00:00",
+                "canary_type": "outlook",
+                "template_name": "Outlook",
+                "target_user": "adele.vance@contoso.com",
+                "status": "active",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "sharepoint.json").write_text(
+        json.dumps(
+            {
+                "timestamp": "2026-05-06T18:00:00+00:00",
+                "canary_type": "sharepoint",
+                "template_name": "Legacy",
+                "site_name": "HR Site",
+                "status": "active",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = main(["list", "--records-dir", str(tmp_path)])
+
+    assert result == 0
+    output = capsys.readouterr().out
+    assert "Outlook" in output
+    assert "Legacy" not in output
+    assert "sharepoint" not in output
+
+
 # --- cleanup subcommand in demo mode ---
 
 

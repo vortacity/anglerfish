@@ -81,17 +81,6 @@ def _validate_file_path(value: str) -> bool | str:
     return "Enter a valid file path."
 
 
-def _validate_single_filename(value: str) -> bool | str:
-    filename = value.strip()
-    if not filename:
-        return "Enter a filename."
-    if "," in filename:
-        return "Enter exactly one filename."
-    if "/" in filename or "\\" in filename:
-        return "Filename must not contain path separators."
-    return True
-
-
 def _validate_subject(value: str) -> bool | str:
     if not value.strip():
         return "This value is required."
