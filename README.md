@@ -5,9 +5,9 @@
 
 [![CI](https://github.com/vortacity/anglerfish/actions/workflows/ci.yml/badge.svg)](https://github.com/vortacity/anglerfish/actions/workflows/ci.yml)
 
-Deploy Outlook canaries and detect Outlook access events in Microsoft 365.
+Deploy Outlook canaries inside Microsoft 365 and detect mailbox access through Unified Audit Log correlation: self-hosted, open source, no third-party data plane, no DNS callbacks, no HTTP beacons, no external listener.
 
-Anglerfish is a Python CLI for planting deceptive Outlook messages with Microsoft Graph and detecting `MailItemsAccessed` events from the Microsoft 365 Unified Audit Log. It supports hidden-folder draft canaries, inbox send canaries, local deployment records, health checks for draft deployments, and access monitoring without external callback infrastructure.
+Anglerfish is a Python CLI for planting deceptive Outlook messages with Microsoft Graph and matching `MailItemsAccessed` events from the Microsoft 365 Unified Audit Log back to local deployment records. It supports hidden-folder draft canaries, inbox send canaries, local health checks for draft deployments, and access monitoring without callback infrastructure.
 
 ## Demo
 
@@ -26,17 +26,27 @@ Anglerfish is a Python CLI for planting deceptive Outlook messages with Microsof
 - [Threat model](docs/threat-model.md)
 
 > [!WARNING]
-> This tool is for authorized security testing and defensive canary deployments only. Use a non-production tenant unless your organization has explicitly approved the permissions and mailbox scope involved.
+> This tool is for authorized security testing and defensive canary deployments only. `Mail.ReadWrite` application permission grants tenant-wide mailbox write access by default. Production use requires formal approval and explicit scoping decisions.
 
 ## How It Works
 
 ```text
 1. Deploy     anglerfish -> Microsoft Graph -> Outlook draft or inbox canary
 2. Access     mailbox activity -> Microsoft 365 Unified Audit Log -> MailItemsAccessed
-3. Detect     anglerfish monitor -> correlates audit event to deployment record -> alert
+3. Detect     anglerfish monitor -> matches MailItemsAccessed to deployment record -> alert
 ```
 
 Anglerfish is intentionally narrow in this release: Outlook only, application authentication only, and one primary workflow built around deploy, list, verify, cleanup, and monitor.
+
+## Positioning
+
+| Tool | Open-source | Self-hosted | Third-party data plane | Tenant-native telemetry |
+|---|---|---|---|---|
+| Anglerfish | yes (MIT) | yes | no | yes (UAL) |
+| Managed Canarytokens / Canarytools | no | no (SaaS) | yes (Thinkst) | n/a (callback pattern) |
+| Self-hosted Canarytokens | yes | yes | operator-controlled | n/a (callback pattern) |
+| Defender for Office 365 anomalous mailbox detection | no | n/a (Microsoft-hosted) | n/a | yes (UAL) |
+| DIY Sentinel KQL on `MailItemsAccessed` | yes (operator-built) | yes | no | yes (UAL) |
 
 ## Supported Surface
 
@@ -141,7 +151,10 @@ PEM certificate configuration is also supported. See `.env.example` for the full
 | Send deploy | `Mail.ReadWrite`, `Mail.Send` | Microsoft Graph |
 | Monitor | `ActivityFeed.Read` | Office 365 Management Activity API |
 
-Grant admin consent after adding the permissions. `Mail.ReadWrite` is tenant-wide mailbox access, so do not grant it casually in production.
+Grant admin consent after adding the permissions.
+
+> [!WARNING]
+> `Mail.ReadWrite` application permission grants tenant-wide mailbox write access by default. Production use requires formal approval and explicit scoping decisions. Operators can use Exchange Online RBAC for Applications to scope access to selected mailboxes, but must ensure unscoped Microsoft Entra grants do not remain in place.
 
 ## Templates
 
@@ -225,6 +238,14 @@ anglerfish monitor --records-dir ~/.anglerfish/records \
   --alert-log ~/.anglerfish/alerts.jsonl \
   --slack-webhook-url https://hooks.slack.com/services/...
 ```
+
+Suppress known-good actors:
+
+```bash
+anglerfish monitor --exclude-app-id "<known-good-app-id>"
+```
+
+`--exclude-app-id` is a static allowlist for known-good actors such as backup, DLP, or eDiscovery tools. The option is repeatable when more than one known-good app principal should be excluded from matching.
 
 Demo mode:
 

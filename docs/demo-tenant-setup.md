@@ -8,7 +8,7 @@ This guide sets up a safe Microsoft 365 tenant for Anglerfish's Outlook-only MVP
 2. Confirm you have Exchange Online and audit logging available.
 3. Record the tenant domain, such as `contoso.onmicrosoft.com`.
 
-Do not use a production tenant unless your organization has explicitly approved the mailbox access scope.
+Production use requires formal approval and explicit scoping decisions for mailbox access.
 
 ## 2. Create an Entra App Registration
 
@@ -54,7 +54,7 @@ After adding permissions, grant admin consent.
 
 Scope warning:
 
-> `Mail.ReadWrite` grants application access across tenant mailboxes. Use a dedicated demo tenant whenever possible.
+> `Mail.ReadWrite` application permission grants tenant-wide mailbox write access by default. Production use requires formal approval and explicit scoping decisions. Operators can use Exchange Online RBAC for Applications to scope access to selected mailboxes, but must ensure unscoped Microsoft Entra grants do not remain in place.
 
 ## 5. Pick a Test Mailbox
 
@@ -152,6 +152,14 @@ Run the monitor:
 ```bash
 anglerfish monitor --records-dir ~/.anglerfish/records
 ```
+
+If the tenant has known-good mailbox access from backup, DLP, or eDiscovery tooling, exclude those app principals from matches:
+
+```bash
+anglerfish monitor --exclude-app-id "<known-good-app-id>"
+```
+
+`--exclude-app-id` is a static allowlist. Use it only for actors whose mailbox access is expected and approved for the demo tenant.
 
 Clean up when done:
 
