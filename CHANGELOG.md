@@ -17,6 +17,11 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Prepared a breaking Outlook-only release for Black Hat Europe Arsenal submission.
+- Removed non-Outlook canary surfaces from the main product path.
+- Added Management Activity API URL host validation.
+- Added cleaned-up record lookback for late UAL correlation.
+- Added Black Hat Europe demo collateral and sanitized evidence examples.
 - Rewrote the README, architecture notes, and demo tenant guide around the
   supported Outlook deploy, list, verify, cleanup, and monitor workflow.
 - Added a reviewer-facing Arsenal demo script with live evidence requirements,
