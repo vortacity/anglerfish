@@ -58,9 +58,7 @@ def _run_monitor(args: argparse.Namespace, console: Console) -> int:
     lookback_hours = max(float(getattr(args, "cleaned_up_lookback_hours", 24.0)), 0.0)
     records = load_records(args.records_dir, cleaned_up_lookback=timedelta(hours=lookback_hours))
     if not records:
-        console.print(
-            f"[yellow]No active or recently cleaned deployment records found in {args.records_dir}[/yellow]"
-        )
+        console.print(f"[yellow]No active or recently cleaned deployment records found in {args.records_dir}[/yellow]")
         console.print(
             "[dim]Deploy canaries with --output-json to create records, "
             "or pass --records-dir to specify a different path.[/dim]"

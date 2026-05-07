@@ -61,9 +61,7 @@ def update_deployment_status(
     previous_status = record.get("status")
     record["status"] = status
     if previous_status != status or not record.get("status_updated_at"):
-        record["status_updated_at"] = (
-            updated_at or datetime.datetime.now(datetime.timezone.utc)
-        ).isoformat()
+        record["status_updated_at"] = (updated_at or datetime.datetime.now(datetime.timezone.utc)).isoformat()
     output_path = Path(path)
     _write_record_atomically(output_path, record)
 

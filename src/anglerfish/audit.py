@@ -249,9 +249,7 @@ def _compute_backoff(attempt: int, *, max_seconds: int = 8) -> int:
 
 def _validate_management_api_url(url: str, *, base_url: str = MANAGEMENT_API_BASE_URL) -> None:
     if _management_api_origin(url) != _management_api_origin(base_url):
-        raise AuditApiError(
-            "Management Activity API URL must stay on the configured Management API host"
-        )
+        raise AuditApiError("Management Activity API URL must stay on the configured Management API host")
 
 
 def _management_api_origin(url: str) -> tuple[str, str, int]:

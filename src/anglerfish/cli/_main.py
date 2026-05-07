@@ -102,9 +102,7 @@ def _cleaned_up_lookback_hours(value: str) -> float:
     if not math.isfinite(parsed):
         raise argparse.ArgumentTypeError("value must be a finite number")
     if parsed > _MAX_CLEANED_UP_LOOKBACK_HOURS:
-        raise argparse.ArgumentTypeError(
-            f"value must be at most {_MAX_CLEANED_UP_LOOKBACK_HOURS:g} hours"
-        )
+        raise argparse.ArgumentTypeError(f"value must be at most {_MAX_CLEANED_UP_LOOKBACK_HOURS:g} hours")
     return parsed
 
 
@@ -311,10 +309,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         type=_cleaned_up_lookback_hours,
         default=24.0,
         metavar="HOURS",
-        help=(
-            "Include cleaned-up records this many hours after cleanup for late audit-log "
-            "correlation (default: 24)."
-        ),
+        help=("Include cleaned-up records this many hours after cleanup for late audit-log correlation (default: 24)."),
     )
     monitor_parser.add_argument(
         "--once",
