@@ -9,6 +9,7 @@ Current release scope:
 - Outlook send canaries
 - Local record inventory
 - Draft-mode verify
+- Authorized demo access trigger
 - Audit-log monitoring
 
 ## Layers
@@ -65,12 +66,13 @@ Record guarantees:
 - required `timestamp`
 - required `canary_type` or `type`
 
-Outlook draft records store folder metadata for verify and cleanup. Outlook send records store the inbox message ID used for cleanup and the internet message ID used for monitoring correlation.
+Outlook draft records store a per-deployment `canary_id`, hidden-folder metadata for verify/cleanup, and `internet_message_id` for primary UAL correlation. Outlook send records store the inbox message ID used for cleanup and the internet message ID used for monitoring correlation.
 
 ## Command Surface
 
 - default command: deploy Outlook canary
 - `cleanup <record>`
+- `demo-access <record>`
 - `list [--records-dir DIR]`
 - `monitor [--once] [--interval N] [--exclude-app-id ID] [--alert-log PATH] [--slack-webhook-url URL]`
 - `verify [RECORD] [--records-dir DIR]`

@@ -54,6 +54,7 @@ class _CanaryEntry:
     folder_id: str = ""
     target_user: str = ""
     subject: str = ""
+    canary_id: str = ""
     expires_at: datetime | None = None
 
 
@@ -140,12 +141,21 @@ class CanaryIndex:
         for folder in folders:
             if not isinstance(folder, dict):
                 continue
+            event_folder_id = str(folder.get("Id") or "").strip()
             folder_path = str(folder.get("Path") or "")
             for entry in self._entries:
                 if _entry_is_expired(entry, now):
                     continue
-                if entry.canary_type == "outlook" and entry.folder_name:
-                    if entry.folder_name.lower() in folder_path.lower():
+                if entry.canary_type != "outlook":
+                    continue
+                if entry.folder_id and event_folder_id and entry.folder_id == event_folder_id:
+                    return _build_alert(entry, event, artifact_label=f"folder_id: {entry.folder_id}")
+                if entry.canary_id and entry.folder_name:
+                    folder_path_lower = folder_path.casefold()
+                    if (
+                        entry.canary_id.casefold() in folder_path_lower
+                        and entry.folder_name.casefold() in folder_path_lower
+                    ):
                         return _build_alert(entry, event, artifact_label=f"folder: {entry.folder_name}")
 
         return None
@@ -520,11 +530,16 @@ _DEMO_ALERTS = [
 ]
 
 
+_DEMO_BANNER = "[DEMO MODE — NOT A REAL EVENT]"
+
+
 def render_demo_alert(console: Console, count: int = 1) -> None:
     """Print simulated alerts for demo/offline mode."""
+    console.print(f"[bold yellow]{_DEMO_BANNER}[/bold yellow] Format demonstration only; no live tenant evidence.")
     disp = AlertDispatcher(console=console)
     for i in range(count):
-        data = _DEMO_ALERTS[i % len(_DEMO_ALERTS)]
+        data = dict(_DEMO_ALERTS[i % len(_DEMO_ALERTS)])
+        data["template_name"] = f"{_DEMO_BANNER} {data['template_name']}"
         alert = CanaryAlert(
             timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             **data,
@@ -552,6 +567,7 @@ def _build_entry(record_path: str, rec: dict) -> _CanaryEntry:
         folder_id=rec.get("folder_id", ""),
         target_user=rec.get("target_user", ""),
         subject=rec.get("subject", ""),
+        canary_id=rec.get("canary_id", ""),
         expires_at=_parse_record_datetime(rec.get("_monitor_expires_at")),
     )
 

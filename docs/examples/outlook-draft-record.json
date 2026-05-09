@@ -5,10 +5,11 @@
   "auth_mode": "application",
   "status": "active",
   "delivery_mode": "draft",
+  "canary_id": "af-demo-001",
   "target_user": "adele.vance@contoso.onmicrosoft.com",
   "folder_id": "AAMkADAwMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMAA_demo_folder",
   "message_id": "AAMkADAwMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMABG_demo_msg_001",
-  "folder_name": "IT Security Notifications",
+  "folder_name": "IT Security Notifications - af-demo-001",
   "subject": "[ACTION REQUIRED] Password Expiry Notice",
   "internet_message_id": "<canary-fake-password-reset-001@contoso.onmicrosoft.com>"
 }

@@ -40,6 +40,7 @@ deployment-record*.json
 
 # Internal planning documents
 docs/plans/
+docs/superpowers/
 
 # OS
 .DS_Store

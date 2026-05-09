@@ -60,7 +60,7 @@ Anglerfish requires explicit authorization before deployment. Operators must:
 
 | Workflow | Permission | Type |
 |----------|-----------|------|
-| Outlook draft deploy, cleanup, verify | `Mail.ReadWrite` | Microsoft Graph application |
+| Outlook draft deploy, cleanup, verify, demo access | `Mail.ReadWrite` | Microsoft Graph application |
 | Outlook send deploy, cleanup | `Mail.ReadWrite`, `Mail.Send` | Microsoft Graph application |
 | Monitor audit-log events | `ActivityFeed.Read` | Office 365 Management APIs application |
 

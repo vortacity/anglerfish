@@ -405,6 +405,33 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Credential type for application auth.",
     )
 
+    demo_access_parser = subparsers.add_parser(
+        "demo-access",
+        help="Read a deployed Outlook canary to generate authorized audit evidence.",
+    )
+    demo_access_parser.add_argument("record", metavar="RECORD", help="Path to deployment record JSON.")
+    demo_access_parser.add_argument(
+        "--non-interactive",
+        action="store_true",
+        help="Skip confirmation prompt.",
+    )
+    demo_access_parser.add_argument(
+        "--tenant-id",
+        default=None,
+        help="Microsoft Entra tenant ID. Overrides ANGLERFISH_TENANT_ID for this run.",
+    )
+    demo_access_parser.add_argument(
+        "--client-id",
+        default=None,
+        help="Microsoft Entra application (client) ID. Overrides ANGLERFISH_CLIENT_ID for this run.",
+    )
+    demo_access_parser.add_argument(
+        "--credential-mode",
+        choices=("auto", "secret", "certificate"),
+        default=None,
+        help="Credential type for application auth. Overrides ANGLERFISH_APP_CREDENTIAL_MODE.",
+    )
+
     return parser.parse_args(list(argv) if argv is not None else sys.argv[1:])
 
 
@@ -447,6 +474,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         except (AuthenticationError, DeploymentError, GraphApiError) as exc:
             _print_error(console, _format_exception_message(exc))
             return 1
+
+    if args.subcommand == "demo-access":
+        from .deploy import _run_demo_access
+
+        return _run_demo_access(args, console)
 
     _print_banner(console)
 

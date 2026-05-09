@@ -52,14 +52,20 @@ anglerfish --non-interactive \
 Show the correlation fields:
 
 ```bash
-jq '{timestamp, canary_type, delivery_mode, target_user, internet_message_id, folder_id, message_id}' "$RECORD"
+jq '{timestamp, canary_type, delivery_mode, canary_id, target_user, internet_message_id, folder_name, folder_id, message_id}' "$RECORD"
 ```
 
 If `jq` is unavailable, open the JSON record and show the same fields.
 
 ### 0:50 - Trigger Authorized Mailbox Access
 
-For draft mode, trigger access with an approved Graph or Exchange read path because the canary lives in a hidden folder. For manual Outlook-on-the-Web interaction, use send mode or a visible test artifact.
+For draft mode, trigger access with Anglerfish's reviewer helper or another approved Graph or Exchange read path because the canary lives in a hidden folder:
+
+```bash
+anglerfish demo-access --non-interactive "$RECORD"
+```
+
+For manual Outlook-on-the-Web interaction, use send mode or a visible test artifact.
 
 If the same app registration triggers the access event, explain that actor attribution in the recording. Do not exclude that app from monitor matching, because excluded app or user IDs are suppressed and can hide the demo alert.
 
@@ -94,12 +100,52 @@ Say the limitations plainly:
 
 > This release is Outlook-only. It depends on Microsoft 365 audit availability and ingestion latency, and audit record timing is not guaranteed. Draft canaries require application `Mail.ReadWrite`; production use requires approval and scoping decisions. Sanitized examples are included for review, but live tenant evidence should come from an authorized demo or security tenant.
 
+## Booth Operating Plan
+
+Unified Audit Log ingestion latency is real (60 to 90+ minutes, sometimes longer). A booth demo cannot show the full deploy → access → detect loop end-to-end inside a 10-minute window on canaries deployed in front of a reviewer. This section describes how to run a credible live booth without that being a problem.
+
+### Pre-show staging (T-2h before doors)
+
+Deploy a slate of staggered draft canaries, one per planned booth slot, recording exact timestamps:
+
+```bash
+for SLOT in slot-09 slot-11 slot-13 slot-15 slot-17; do
+  anglerfish --non-interactive \
+    --canary-type outlook \
+    --template "Fake Password Reset" \
+    --target "$DEMO_TARGET" \
+    --delivery-mode draft \
+    --output-json "$HOME/.anglerfish/records/booth-$SLOT.json"
+  anglerfish demo-access --non-interactive "$HOME/.anglerfish/records/booth-$SLOT.json"
+done
+```
+
+Capture each `(slot, deploy timestamp, demo-access timestamp, record path, internet_message_id)` row in a slide. The 90-minute clock starts at the demo-access call.
+
+### During each booth slot
+
+1. Show the slide with that slot's row: deployed at HH:MM, accessed at HH:MM, expected to surface in monitor at HH:MM.
+2. Run `anglerfish monitor --once --records-dir "$HOME/.anglerfish/records"` live. The alert that fires corresponds to a *previous* slot's deployment, demonstrating the loop is real on real audit telemetry, not on a simulation.
+3. Walk the reviewer through the deployment record JSON for that slot and the matched `internet_message_id` in the alert.
+
+### Walk-up reviewers
+
+Reviewers who arrive between scheduled slots can still see the loop close:
+
+1. Deploy a fresh canary in front of them (`anglerfish --non-interactive ...`) and hand them the `--output-json` record path — they have proof of the deploy timestamp.
+2. Trigger access with `anglerfish demo-access --non-interactive "$RECORD"`.
+3. Invite them to the next scheduled slot, where their canary's `MailItemsAccessed` event will appear in the live `anglerfish monitor --once` run. The slide gets a new row.
+
+### Hard fallback
+
+If the booth network or tenant access is unavailable, run `anglerfish monitor --demo --count 2`. Each demo alert is rendered with a `[DEMO MODE — NOT A REAL EVENT]` banner so it cannot be mistaken for live evidence. State on the booth display: "format demonstration only — no live tenant connection right now."
+
 ## Booth Demo Procedure
 
 1. Start with the README claim and the supported command table.
 2. Run `anglerfish monitor --demo --count 2` if the booth network or tenant access is unavailable.
 3. For a live tenant, deploy a draft canary and show the local JSON record.
-4. Trigger access through an approved Graph or Exchange read path for draft mode.
+4. Trigger access with `anglerfish demo-access --non-interactive "$RECORD"` or another approved Graph or Exchange read path for draft mode.
 5. For a human interaction demo in Outlook-on-the-Web, deploy send mode instead:
 
 ```bash
@@ -123,8 +169,8 @@ anglerfish --non-interactive \
 - README claim is visible.
 - Deployment command is visible.
 - Local deployment JSON record is visible.
-- Deployment record identifiers are visible: `folder_id`, `message_id` or `inbox_message_id`, and `internet_message_id` where present.
-- Monitor correlation key is visible: `internet_message_id` for bind events, with folder-name/path fallback for sync events.
+- Deployment record identifiers are visible: `canary_id`, `folder_id`, `message_id` or `inbox_message_id`, and `internet_message_id`.
+- Monitor correlation key is visible: `internet_message_id` for bind events, with folder ID or unique canary folder fallback for sync events.
 - Trigger timestamp and authorized actor are documented.
 - `MailItemsAccessed` event timestamp is visible in the monitor output or sanitized example.
 - `anglerfish monitor` alert references the deployment record.
@@ -136,7 +182,7 @@ anglerfish --non-interactive \
 
 Use this wording when asked about scope:
 
-> Anglerfish is not an immediate detection stream. It correlates against Microsoft 365 Unified Audit Log events, so latency depends on the tenant and audit ingestion. Microsoft does not guarantee audit record timing. The current release is Outlook-only. Draft mode stores the canary in a hidden folder, so manual Outlook-on-the-Web browsing is not a valid draft trigger; use an approved Graph or Exchange read path, send mode, or a visible test artifact for human interaction. `Mail.ReadWrite` is powerful and must be approved and scoped for production. The repository includes sanitized examples, not raw tenant evidence.
+> Anglerfish is not an immediate detection stream. It correlates against Microsoft 365 Unified Audit Log events, so latency depends on the tenant and audit ingestion. Microsoft does not guarantee audit record timing. The current release is Outlook-only. Draft mode stores the canary in a hidden folder, so manual Outlook-on-the-Web browsing is not a valid draft trigger; use `anglerfish demo-access`, another approved Graph or Exchange read path, send mode, or a visible test artifact for human interaction. `Mail.ReadWrite` is powerful and must be approved and scoped for production. The repository includes sanitized examples, not raw tenant evidence.
 
 ## Cleanup
 

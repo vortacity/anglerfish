@@ -135,9 +135,10 @@ def _acquire_app_token(*, scope: str, app_credential_mode: str | None = None) ->
 
     result = app.acquire_token_for_client(scopes=[scope])
     if not isinstance(result, dict) or "access_token" not in result:
-        details = "Unknown error"
+        details: str = "Unknown error"
         if isinstance(result, dict):
-            details = result.get("error_description", result.get("error", details))
+            raw = result.get("error_description", result.get("error", details))
+            details = str(raw) if raw is not None else details
         raise AuthenticationError(f"Application authentication failed: {details}")
 
     return str(result["access_token"])

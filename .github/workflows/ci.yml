@@ -38,13 +38,16 @@ jobs:
             --records-dir /tmp/anglerfish-smoke-records
 
       - name: Run tests with coverage
-        run: pytest --tb=short --cov=anglerfish --cov-report=term-missing
+        run: pytest --tb=short --cov=anglerfish --cov-report=term-missing --cov-fail-under=85
 
       - name: Lint (ruff check)
         run: ruff check src tests
 
       - name: Format check (ruff format)
         run: ruff format --check src tests
+
+      - name: Type check (mypy)
+        run: mypy
 
       - name: Security scan (bandit)
         run: bandit -r src -ll

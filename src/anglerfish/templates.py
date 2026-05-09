@@ -7,6 +7,7 @@ import os
 from importlib import resources
 from pathlib import Path
 from string import Template as StringTemplate
+from typing import Any
 
 import yaml
 
@@ -106,7 +107,7 @@ def _list_custom_templates(root: Path, canary_type: str) -> list[dict[str, str]]
 
 
 def _list_packaged_templates(canary_type: str) -> list[dict[str, str]]:
-    directory = resources.files("anglerfish").joinpath("templates", canary_type)
+    directory = resources.files("anglerfish").joinpath("templates").joinpath(canary_type)
     if not directory.is_dir():
         return []
 
@@ -137,7 +138,7 @@ def _load_template_data(path: str) -> dict:
             raise TemplateError(f"Invalid package template path: {path}")
 
         canary_type, filename = parts
-        target = resources.files("anglerfish").joinpath("templates", canary_type, filename)
+        target = resources.files("anglerfish").joinpath("templates").joinpath(canary_type).joinpath(filename)
         if not target.is_file():
             raise TemplateError(f"Template not found: {path}")
 
@@ -207,7 +208,7 @@ def render_template(
         raise TemplateError(f"Missing required template variables: {', '.join(missing)}")
 
     if isinstance(template, OutlookTemplate):
-        updates: dict[str, str] = {}
+        updates: dict[str, Any] = {}
         for field in _OUTLOOK_RENDER_FIELDS:
             original = getattr(template, field)
             updates[field] = StringTemplate(original).safe_substitute(merged)

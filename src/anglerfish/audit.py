@@ -143,7 +143,8 @@ class AuditClient:
         if isinstance(result, list):
             return result
         if isinstance(result, dict):
-            return result.get("value", [])
+            value = result.get("value", [])
+            return value if isinstance(value, list) else []
         return []
 
     # ------------------------------------------------------------------
@@ -244,7 +245,7 @@ class AuditClient:
 
 
 def _compute_backoff(attempt: int, *, max_seconds: int = 8) -> int:
-    return min(2**attempt, max_seconds)
+    return int(min(2**attempt, max_seconds))
 
 
 def _validate_management_api_url(url: str, *, base_url: str = MANAGEMENT_API_BASE_URL) -> None:
