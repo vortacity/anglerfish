@@ -9,6 +9,10 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+---
+
+## [2.0.0] — 2026-05-08
+
 ### Breaking
 
 - Reset the public MVP around Outlook canaries only. SharePoint deployment,
@@ -22,6 +26,12 @@ This project uses [Semantic Versioning](https://semver.org/).
 - Added Management Activity API URL host validation.
 - Added cleaned-up record lookback for late UAL correlation.
 - Added Black Hat Europe demo collateral and sanitized evidence examples.
+- Added `demo-access` to trigger authorized Graph reads for reviewer and booth
+  demo evidence.
+- Added per-deployment canary IDs to draft hidden-folder names for stronger
+  fallback correlation.
+- Require `internetMessageId` in deployment records so primary UAL correlation
+  cannot silently degrade.
 - Rewrote the README, architecture notes, and demo tenant guide around the
   supported Outlook deploy, list, verify, cleanup, and monitor workflow.
 - Added a reviewer-facing Arsenal demo script with live evidence requirements,

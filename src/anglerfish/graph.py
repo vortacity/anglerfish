@@ -138,7 +138,7 @@ def _parse_retry_after(value: str | None) -> int:
 
 
 def _compute_backoff(attempt: int, *, max_seconds: int = 8) -> int:
-    return min(2**attempt, max_seconds)
+    return int(min(2**attempt, max_seconds))
 
 
 def _extract_error_details(response: Response) -> tuple[str, str, str]:

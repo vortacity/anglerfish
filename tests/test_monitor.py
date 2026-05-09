@@ -91,7 +91,7 @@ def test_match_outlook_by_internet_message_id():
     assert "<canary-msg-001@contoso.com>" in alert.artifact_label
 
 
-def test_match_outlook_by_folder_name_fallback():
+def test_no_match_outlook_by_folder_name_without_canary_id():
     rec = _outlook_record(internet_message_id="")
     idx = CanaryIndex([("rec.json", rec)])
 
@@ -103,8 +103,41 @@ def test_match_outlook_by_folder_name_fallback():
     }
     alert = idx.match(event)
 
+    assert alert is None
+
+
+def test_match_outlook_by_folder_id_fallback():
+    rec = _outlook_record(internet_message_id="", folder_id="folder-abc")
+    idx = CanaryIndex([("rec.json", rec)])
+
+    event = {
+        "Operation": "MailItemsAccessed",
+        "UserId": "attacker@evil.com",
+        "Folders": [{"Id": "folder-abc", "Path": "\\Other Folder"}],
+    }
+    alert = idx.match(event)
+
     assert alert is not None
-    assert "folder" in alert.artifact_label.lower()
+    assert "folder_id" in alert.artifact_label
+
+
+def test_match_outlook_by_unique_folder_name_fallback():
+    rec = _outlook_record(
+        internet_message_id="",
+        canary_id="af-test-001",
+        folder_name="IT Notifications - af-test-001",
+    )
+    idx = CanaryIndex([("rec.json", rec)])
+
+    event = {
+        "Operation": "MailItemsAccessed",
+        "UserId": "attacker@evil.com",
+        "Folders": [{"Path": "\\Mailbox\\IT Notifications - af-test-001"}],
+    }
+    alert = idx.match(event)
+
+    assert alert is not None
+    assert "folder:" in alert.artifact_label.lower()
 
 
 def test_no_match_outlook_wrong_message_id():
@@ -176,6 +209,8 @@ def test_cleaned_index_entry_folder_fallback_matches_until_expiry(tmp_path):
     now = datetime(2026, 5, 6, 12, 0, tzinfo=timezone.utc)
     rec = _outlook_record(
         internet_message_id="",
+        canary_id="af-test-clean",
+        folder_name="IT Notifications - af-test-clean",
         status="cleaned_up",
         status_updated_at=(now - timedelta(hours=2)).isoformat(),
     )
@@ -184,7 +219,7 @@ def test_cleaned_index_entry_folder_fallback_matches_until_expiry(tmp_path):
     records = load_records(tmp_path, cleaned_up_lookback=timedelta(hours=24), now=now)
     idx = CanaryIndex(records)
     event = _mail_items_accessed_event(
-        Folders=[{"Path": "\\Mailbox\\IT Notifications\\SubFolder"}],
+        Folders=[{"Path": "\\Mailbox\\IT Notifications - af-test-clean\\SubFolder"}],
     )
     expires_at = now + timedelta(hours=22)
 
@@ -233,11 +268,13 @@ def test_build_entry_sets_outlook_fields():
         "canary_type": "outlook",
         "internet_message_id": "<m1@contoso.com>",
         "folder_name": "Inbox/IT Notifications",
+        "canary_id": "af-test-001",
     }
     entry = _build_entry("rec.json", rec)
 
     assert entry.internet_message_id == "<m1@contoso.com>"
     assert entry.folder_name == "Inbox/IT Notifications"
+    assert entry.canary_id == "af-test-001"
 
 
 def test_build_entry_defaults_missing_outlook_fields_to_empty_strings():

@@ -5,7 +5,7 @@ import pytest
 
 from urllib.parse import quote as _quote
 
-from anglerfish.deployers.outlook import OutlookDeployer, _parse_graph_datetime, remove_canary
+from anglerfish.deployers.outlook import OutlookDeployer, _parse_graph_datetime, remove_canary, trigger_canary_access
 from anglerfish.exceptions import DeploymentError, GraphApiError
 from anglerfish.models import OutlookTemplate
 
@@ -64,6 +64,58 @@ def test_outlook_deployer_happy_path():
     assert graph.post_calls[0][0] == f"/users/{encoded_user}/mailFolders"
     assert graph.post_calls[1][0] == f"/users/{encoded_user}/mailFolders/{encoded_folder_id}/messages"
     assert graph.get_calls[0][0] == f"/users/{encoded_user}/mailFolders/{encoded_folder_id}"
+
+
+def test_outlook_deployer_draft_adds_unique_canary_id_to_folder(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr("anglerfish.deployers.outlook._new_canary_id", lambda: "af-test-001")
+    graph = StubGraph()
+    deployer = OutlookDeployer(graph, _template())
+
+    result = deployer.deploy("user@contoso.com")
+
+    assert result["canary_id"] == "af-test-001"
+    assert result["folder_name"] == "IT Notifications - af-test-001"
+    assert graph.post_calls[0][1]["displayName"] == "IT Notifications - af-test-001"
+
+
+def test_outlook_deployer_draft_uses_verified_internet_message_id_when_create_response_omits_it(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr("anglerfish.deployers.outlook._new_canary_id", lambda: "af-test-002")
+
+    class VerifyInternetMessageGraph(StubGraph):
+        def post(self, path, json=None):
+            self.post_calls.append((path, json))
+            if len(self.post_calls) == 1:
+                return {"id": self.folder_id}
+            return {"id": self.message_id}
+
+        def get(self, path, params=None):
+            result = super().get(path, params)
+            if path.endswith(f"/messages/{quote(self.message_id, safe='')}"):
+                return {**result, "internetMessageId": self.internet_message_id}
+            return result
+
+    graph = VerifyInternetMessageGraph()
+    deployer = OutlookDeployer(graph, _template())
+
+    result = deployer.deploy("user@contoso.com")
+
+    assert result["internet_message_id"] == graph.internet_message_id
+
+
+def test_outlook_deployer_draft_requires_internet_message_id():
+    class MissingInternetMessageGraph(StubGraph):
+        def post(self, path, json=None):
+            self.post_calls.append((path, json))
+            if len(self.post_calls) == 1:
+                return {"id": self.folder_id}
+            return {"id": self.message_id}
+
+    deployer = OutlookDeployer(MissingInternetMessageGraph(), _template())
+
+    with pytest.raises(DeploymentError, match="internetMessageId"):
+        deployer.deploy("user@contoso.com")
 
 
 def test_outlook_deployer_wraps_graph_errors():
@@ -341,6 +393,22 @@ def test_outlook_deployer_send_verify_skips_wrong_subject(monkeypatch: pytest.Mo
     assert result["inbox_message_id"] == "msg-ok"
 
 
+def test_outlook_deployer_send_requires_internet_message_id(monkeypatch: pytest.MonkeyPatch):
+    class MissingInternetMessageGraph:
+        def post(self, path, json=None):
+            return {}
+
+        def get(self, path, params=None):
+            timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            return {"value": [{"id": "msg-no-imid", "subject": "Subject", "receivedDateTime": timestamp}]}
+
+    monkeypatch.setattr("anglerfish.deployers.outlook.time.sleep", lambda *_: None)
+    deployer = OutlookDeployer(MissingInternetMessageGraph(), _template())
+
+    with pytest.raises(DeploymentError, match="internetMessageId"):
+        deployer.deploy("user@contoso.com", delivery_mode="send")
+
+
 def test_parse_graph_datetime_empty_string_returns_none():
     assert _parse_graph_datetime("") is None
     assert _parse_graph_datetime("   ") is None
@@ -458,3 +526,68 @@ def test_outlook_remove_canary_defaults_to_draft_when_delivery_mode_absent():
     result = remove_canary(graph, record)
     assert result["delivery_mode"] == "draft"
     assert result["removed"] == "true"
+
+
+class _GetGraph:
+    def __init__(self):
+        self.get_calls: list[tuple[str, dict | None]] = []
+
+    def get(self, path: str, params=None):
+        self.get_calls.append((path, params))
+        return {
+            "id": "msg/456?abc",
+            "subject": "Subject",
+            "internetMessageId": "<canary-msg@contoso.com>",
+        }
+
+
+def test_trigger_canary_access_reads_draft_message():
+    graph = _GetGraph()
+    record = {
+        "canary_type": "outlook",
+        "delivery_mode": "draft",
+        "target_user": "user@contoso.com",
+        "folder_id": "folder/123==",
+        "message_id": "msg/456?abc",
+    }
+
+    result = trigger_canary_access(graph, record)
+
+    encoded_user = _quote("user@contoso.com", safe="")
+    encoded_folder = _quote("folder/123==", safe="")
+    encoded_message = _quote("msg/456?abc", safe="")
+    assert graph.get_calls == [
+        (
+            f"/users/{encoded_user}/mailFolders/{encoded_folder}/messages/{encoded_message}",
+            {"$select": "id,subject,internetMessageId,receivedDateTime"},
+        )
+    ]
+    assert result["triggered"] == "true"
+    assert result["delivery_mode"] == "draft"
+    assert result["internet_message_id"] == "<canary-msg@contoso.com>"
+
+
+def test_trigger_canary_access_reads_send_message_from_inbox():
+    graph = _GetGraph()
+    record = {
+        "canary_type": "outlook",
+        "delivery_mode": "send",
+        "target_user": "user@contoso.com",
+        "inbox_message_id": "msg/456?abc",
+    }
+
+    result = trigger_canary_access(graph, record)
+
+    encoded_user = _quote("user@contoso.com", safe="")
+    encoded_message = _quote("msg/456?abc", safe="")
+    assert graph.get_calls[0][0] == f"/users/{encoded_user}/mailFolders/inbox/messages/{encoded_message}"
+    assert result["triggered"] == "true"
+    assert result["delivery_mode"] == "send"
+
+
+def test_trigger_canary_access_rejects_missing_draft_fields():
+    with pytest.raises(DeploymentError, match="message_id"):
+        trigger_canary_access(
+            _GetGraph(),
+            {"canary_type": "outlook", "delivery_mode": "draft", "target_user": "u@c.com", "folder_id": "f1"},
+        )

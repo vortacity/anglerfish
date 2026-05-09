@@ -112,5 +112,5 @@ def run_verify(
 
 def _get_target(record: dict, canary_type: str) -> str:
     if canary_type == "outlook":
-        return record.get("target_user", "")
+        return str(record.get("target_user", ""))
     return ""

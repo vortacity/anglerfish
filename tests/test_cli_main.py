@@ -125,6 +125,12 @@ class TestParseArgs:
         assert args.subcommand == "verify"
         assert args.demo is True
 
+    def test_demo_access(self):
+        args = _parse_args(["demo-access", "--non-interactive", "record.json"])
+        assert args.subcommand == "demo-access"
+        assert args.non_interactive is True
+        assert args.record == "record.json"
+
     def test_var_args(self):
         args = _parse_args(["--var", "name=Alice", "--var", "role=Admin"])
         assert args.vars == ["name=Alice", "role=Admin"]

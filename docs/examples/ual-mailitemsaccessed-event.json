@@ -30,7 +30,7 @@
   "Folders": [
     {
       "Id": "AAMkADAwMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMAA_demo_folder",
-      "Path": "\\\\Recoverable Items\\\\IT Security Notifications",
+      "Path": "\\\\Recoverable Items\\\\IT Security Notifications - af-demo-001",
       "FolderItems": [
         {
           "InternetMessageId": "<canary-fake-password-reset-001@contoso.onmicrosoft.com>"

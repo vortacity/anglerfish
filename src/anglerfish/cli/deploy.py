@@ -17,6 +17,7 @@ from rich.table import Table
 from ..auth import authenticate
 from ..deployers.outlook import OutlookDeployer
 from ..deployers.outlook import remove_canary as outlook_remove_canary
+from ..deployers.outlook import trigger_canary_access as outlook_trigger_canary_access
 from ..exceptions import (
     AnglerfishError,
     AuthenticationError,
@@ -84,6 +85,24 @@ def _print_cleanup_success(console: Console, result: dict[str, str]) -> None:
     panel = Panel(
         table,
         title="[bold green]\u2713 Canary Removed[/bold green]",
+        border_style="green",
+        expand=False,
+        padding=(1, 2),
+    )
+    console.print()
+    console.print(panel)
+    console.print()
+
+
+def _print_demo_access_success(console: Console, result: dict[str, str]) -> None:
+    table = Table(show_header=False, show_edge=False, padding=(0, 2))
+    table.add_column("Key", style="bold")
+    table.add_column("Value")
+    for key, value in result.items():
+        table.add_row(key, str(value))
+    panel = Panel(
+        table,
+        title="[bold green]\u2713 Canary Access Triggered[/bold green]",
         border_style="green",
         expand=False,
         padding=(1, 2),
@@ -215,6 +234,59 @@ def _run_cleanup(args: argparse.Namespace, console: Console) -> int:
             pass  # Best-effort; do not fail cleanup if record can't be updated
         return 0
 
+    except (AuthenticationError, DeploymentError, GraphApiError, AnglerfishError) as exc:
+        _print_error(console, _format_exception_message(exc))
+        return 1
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Cancelled.[/yellow]")
+        return 130
+
+
+def _run_demo_access(args: argparse.Namespace, console: Console) -> int:
+    _print_banner(console)
+    non_interactive = args.non_interactive
+
+    try:
+        _step_rule(console, 1, 3, "Read Record")
+        record = read_deployment_record(args.record)
+        canary_type = str(record.get("type", record.get("canary_type", ""))).strip().lower()
+        if canary_type != "outlook":
+            raise DeploymentError("Only outlook canaries are supported in this release.")
+        _print_cleanup_summary(console, record)
+
+        if not non_interactive:
+            confirmed = questionary.confirm(
+                "Read this canary through Graph to generate authorized audit evidence?",
+                default=False,
+                style=_STYLE,
+                qmark=_QMARK,
+            ).ask()
+            if not confirmed:
+                console.print("[yellow]Cancelled.[/yellow]")
+                return 0
+
+        _step_rule(console, 2, 3, "Authentication")
+        auth_result = _normalize_auth_prompt_result(
+            _prompt_auth_setup(args, console, auth_mode="application", non_interactive=non_interactive)
+        )
+        if auth_result is None:
+            return 130
+        console.print("Authenticating with Microsoft Graph...")
+        try:
+            token = authenticate(auth_mode="application", app_credential_mode=auth_result.credential_mode)
+        finally:
+            _clear_prompted_env_values(auth_result)
+        _print_auth_success(console)
+        graph = GraphClient(token)
+
+        _step_rule(console, 3, 3, "Trigger Access")
+        result = outlook_trigger_canary_access(graph, record)
+        _print_demo_access_success(console, result)
+        console.print(
+            "[dim]Unified Audit Log ingestion is delayed. Run `anglerfish monitor --once` after the "
+            "MailItemsAccessed event is available.[/dim]"
+        )
+        return 0
     except (AuthenticationError, DeploymentError, GraphApiError, AnglerfishError) as exc:
         _print_error(console, _format_exception_message(exc))
         return 1

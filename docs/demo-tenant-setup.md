@@ -41,7 +41,7 @@ Microsoft Graph:
 
 | Permission | Required for |
 | --- | --- |
-| `Mail.ReadWrite` | Draft deploy, cleanup, verify, and send deploy |
+| `Mail.ReadWrite` | Draft deploy, cleanup, verify, `demo-access`, and send deploy |
 | `Mail.Send` | Send deploy only |
 
 Office 365 Management APIs:
@@ -155,6 +155,14 @@ Run the monitor:
 ```bash
 anglerfish monitor --records-dir ~/.anglerfish/records
 ```
+
+For a reviewer recording or booth rehearsal, trigger an authorized Graph read of the canary first:
+
+```bash
+anglerfish demo-access --non-interactive ~/.anglerfish/records/adele-draft.json
+```
+
+`demo-access` reads the deployed Outlook message so the tenant can emit a real `MailItemsAccessed` event. Unified Audit Log ingestion is delayed, so run `monitor --once` only after the event is available.
 
 For a new Office 365 Management Activity API subscription, run and confirm monitor setup well before the demo, preferably the day before. Microsoft notes that first content blobs for a new subscription can take up to 12 hours to become available. See [Microsoft's Management Activity API guidance](https://learn.microsoft.com/en-us/office/office-365-management-api/office-365-management-activity-api-reference).
 

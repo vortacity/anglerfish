@@ -4,10 +4,16 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timedelta, timezone
+import secrets
+from typing import Any, TYPE_CHECKING
+
 from ..exceptions import DeploymentError, GraphApiError
 from ..models import OutlookTemplate
 from .base import BaseDeployer
 from ._paths import path_segment as _path_segment
+
+if TYPE_CHECKING:
+    from ..graph import GraphClient
 
 _VERIFY_ATTEMPTS = 3
 _SEND_VERIFY_ATTEMPTS = 5
@@ -15,10 +21,10 @@ _SEND_VERIFY_WINDOW = timedelta(minutes=2)
 
 
 class OutlookDeployer(BaseDeployer):
-    def __init__(self, graph, template: OutlookTemplate):
+    def __init__(self, graph: GraphClient, template: OutlookTemplate) -> None:
         super().__init__(graph, template)
 
-    def deploy(self, target_user: str, **kwargs) -> dict[str, str]:
+    def deploy(self, target_user: str, **kwargs: Any) -> dict[str, str]:
         if not target_user or "@" not in target_user:
             raise DeploymentError("Target user must be a valid mailbox UPN/email.")
 
@@ -32,10 +38,12 @@ class OutlookDeployer(BaseDeployer):
 
     def _deploy_draft(self, target_user: str) -> dict[str, str]:
         encoded_user = _path_segment(target_user)
+        canary_id = _new_canary_id()
+        folder_name = _deployment_folder_name(self.template.folder_name, canary_id)
         try:
             folder = self.graph.post(
                 f"/users/{encoded_user}/mailFolders",
-                json={"displayName": self.template.folder_name, "isHidden": True},
+                json={"displayName": folder_name, "isHidden": True},
             )
             folder_id = str(folder.get("id", ""))
             if not folder_id:
@@ -62,19 +70,24 @@ class OutlookDeployer(BaseDeployer):
             message_id = str(message.get("id", ""))
             if not message_id:
                 raise DeploymentError("Graph response missing message id.")
-            internet_message_id = str(message.get("internetMessageId", ""))
+            internet_message_id = str(message.get("internetMessageId", "")).strip()
 
-            self._verify_created_artifacts(
+            verified_message = self._verify_created_artifacts(
                 encoded_user=encoded_user,
                 encoded_folder_id=encoded_folder_id,
                 folder_id=folder_id,
                 message_id=message_id,
             )
+            if not internet_message_id:
+                internet_message_id = str(verified_message.get("internetMessageId", "")).strip()
+            if not internet_message_id:
+                raise DeploymentError("Outlook deployment failed: Graph response missing internetMessageId.")
 
             return {
                 "delivery_mode": "draft",
+                "canary_id": canary_id,
                 "folder_id": folder_id,
-                "folder_name": self.template.folder_name,
+                "folder_name": folder_name,
                 "message_id": message_id,
                 "internet_message_id": internet_message_id,
                 "subject": self.template.subject,
@@ -112,12 +125,15 @@ class OutlookDeployer(BaseDeployer):
                 encoded_user=encoded_user,
                 started_at=started_at,
             )
+            internet_message_id = str(inbox_message.get("internetMessageId", "")).strip()
+            if not internet_message_id:
+                raise DeploymentError("Outlook verification failed: sent message response missing internetMessageId.")
             return {
                 "delivery_mode": "send",
                 "subject": self.template.subject,
                 "target_user": target_user,
                 "inbox_message_id": str(inbox_message.get("id", "")),
-                "internet_message_id": str(inbox_message.get("internetMessageId", "")),
+                "internet_message_id": internet_message_id,
                 "verified": "true",
             }
         except GraphApiError as exc:
@@ -130,7 +146,7 @@ class OutlookDeployer(BaseDeployer):
         encoded_folder_id: str,
         folder_id: str,
         message_id: str,
-    ) -> None:
+    ) -> dict:
         encoded_message_id = _path_segment(message_id)
 
         for attempt in range(_VERIFY_ATTEMPTS):
@@ -141,7 +157,7 @@ class OutlookDeployer(BaseDeployer):
                 )
                 message = self.graph.get(
                     f"/users/{encoded_user}/mailFolders/{encoded_folder_id}/messages/{encoded_message_id}",
-                    params={"$select": "id"},
+                    params={"$select": "id,internetMessageId"},
                 )
             except GraphApiError as exc:
                 if exc.status_code == 404 and attempt < _VERIFY_ATTEMPTS - 1:
@@ -155,7 +171,7 @@ class OutlookDeployer(BaseDeployer):
                 raise DeploymentError("Outlook verification failed: created folder is not hidden.")
             if str(message.get("id", "")) != message_id:
                 raise DeploymentError("Outlook verification failed: created message could not be confirmed.")
-            return
+            return message
 
         raise DeploymentError("Outlook verification failed: created artifacts were not readable after retries.")
 
@@ -199,7 +215,7 @@ class OutlookDeployer(BaseDeployer):
         raise DeploymentError("Outlook verification failed: sent message was not found in the Inbox.")
 
 
-def remove_canary(graph, record: dict[str, str]) -> dict[str, str]:
+def remove_canary(graph: GraphClient, record: dict[str, str]) -> dict[str, str]:
     """Remove a deployed Outlook canary artifact."""
     delivery_mode = record.get("delivery_mode", "draft").strip().lower()
     target_user = record.get("target_user", "").strip()
@@ -235,6 +251,63 @@ def remove_canary(graph, record: dict[str, str]) -> dict[str, str]:
         "removed": "true",
         "note": "Message moved to Deleted Items. Empty Deleted Items to permanently remove.",
     }
+
+
+def trigger_canary_access(graph: GraphClient, record: dict[str, str]) -> dict[str, str]:
+    """Read a deployed Outlook canary through Graph to generate authorized audit evidence."""
+    canary_type = str(record.get("canary_type") or record.get("type") or "").strip().lower()
+    if canary_type != "outlook":
+        raise DeploymentError("Only outlook canaries are supported in this release.")
+
+    target_user = str(record.get("target_user", "")).strip()
+    if not target_user:
+        raise DeploymentError("Deployment record missing 'target_user'.")
+    encoded_user = _path_segment(target_user)
+
+    delivery_mode = str(record.get("delivery_mode", "draft")).strip().lower()
+    try:
+        if delivery_mode == "draft":
+            folder_id = str(record.get("folder_id", "")).strip()
+            message_id = str(record.get("message_id", "")).strip()
+            if not folder_id:
+                raise DeploymentError("Deployment record missing 'folder_id'.")
+            if not message_id:
+                raise DeploymentError("Deployment record missing 'message_id'.")
+            message = graph.get(
+                f"/users/{encoded_user}/mailFolders/{_path_segment(folder_id)}/messages/{_path_segment(message_id)}",
+                params={"$select": "id,subject,internetMessageId,receivedDateTime"},
+            )
+        elif delivery_mode == "send":
+            message_id = str(record.get("inbox_message_id", "")).strip()
+            if not message_id:
+                raise DeploymentError("Deployment record missing 'inbox_message_id'.")
+            message = graph.get(
+                f"/users/{encoded_user}/mailFolders/inbox/messages/{_path_segment(message_id)}",
+                params={"$select": "id,subject,internetMessageId,receivedDateTime"},
+            )
+        else:
+            raise DeploymentError("Invalid delivery mode. Supported values are 'draft' and 'send'.")
+    except GraphApiError as exc:
+        raise DeploymentError(f"Outlook demo access trigger failed: {exc}") from exc
+
+    return {
+        "type": "outlook",
+        "delivery_mode": delivery_mode,
+        "target_user": target_user,
+        "message_id": str(message.get("id") or record.get("message_id") or record.get("inbox_message_id") or ""),
+        "internet_message_id": str(message.get("internetMessageId", "")),
+        "subject": str(message.get("subject", record.get("subject", ""))),
+        "triggered": "true",
+    }
+
+
+def _new_canary_id() -> str:
+    return f"af-{secrets.token_hex(4)}"
+
+
+def _deployment_folder_name(base_name: str, canary_id: str) -> str:
+    clean_base = str(base_name or "Anglerfish Canary").strip() or "Anglerfish Canary"
+    return f"{clean_base} - {canary_id}"
 
 
 def _parse_graph_datetime(raw: str) -> datetime | None:

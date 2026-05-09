@@ -5,9 +5,12 @@
 
 [![CI](https://github.com/vortacity/anglerfish/actions/workflows/ci.yml/badge.svg)](https://github.com/vortacity/anglerfish/actions/workflows/ci.yml)
 
-Deploy Outlook canaries inside Microsoft 365 and detect mailbox access through Unified Audit Log correlation: self-hosted, open source, no third-party data plane for detection, no DNS callbacks, no HTTP beacons, no external listener.
+Anglerfish is a CLI for security teams in Microsoft 365 shops. It plants Outlook canary messages with Microsoft Graph, then detects mailbox access by matching `MailItemsAccessed` events from the Microsoft 365 Unified Audit Log back to local deployment records — using the tenant's own audit telemetry as the detection plane. No callback receiver, DNS zone, webhook, or external SIEM is required to identify access; correlation runs against records you keep on disk.
 
-Anglerfish is a Python CLI for planting deceptive Outlook messages with Microsoft Graph and matching `MailItemsAccessed` events from the Microsoft 365 Unified Audit Log back to local deployment records. It supports hidden-folder draft canaries, inbox send canaries, local health checks for draft deployments, and access monitoring without callback infrastructure.
+It supports hidden-folder draft canaries, inbox send canaries, local health checks for draft deployments, and audit-log monitoring without callback infrastructure.
+
+> [!NOTE]
+> Detection is delayed, not real-time. Microsoft Unified Audit Log records typically appear 60–90 minutes after the access event, sometimes longer. Anglerfish surfaces the event when it lands; it does not stream from Exchange directly. See the [threat model](docs/threat-model.md#ual-ingest-latency) for details.
 
 ## Demo
 
@@ -19,11 +22,23 @@ Anglerfish is a Python CLI for planting deceptive Outlook messages with Microsof
 
 ![Monitor alert](docs/images/monitor-alert.gif)
 
+## Reviewer Evidence
+
+For Black Hat Arsenal review, use the live-tenant flow in [Black Hat Europe demo script](docs/blackhat-europe-demo-script.md): deploy a draft canary, show the JSON record, run `anglerfish demo-access` to create authorized mailbox access, then run `anglerfish monitor --once` after UAL ingestion.
+
+Sanitized reference artifacts are included for explaining the evidence shape without exposing tenant data:
+
+- [Draft deployment record](docs/examples/outlook-draft-record.json)
+- [Send deployment record](docs/examples/outlook-send-record.json)
+- [MailItemsAccessed event](docs/examples/ual-mailitemsaccessed-event.json)
+
 ## Documentation
 
 - [Demo tenant setup guide](docs/demo-tenant-setup.md)
 - [Architecture notes](docs/architecture.md)
 - [Threat model](docs/threat-model.md)
+- [Black Hat Europe demo script](docs/blackhat-europe-demo-script.md)
+- [Sentinel KQL validation snippet](docs/sentinel-kql.md)
 
 > [!WARNING]
 > This tool is for authorized security testing and defensive canary deployments only. `Mail.ReadWrite` application permission grants tenant-wide mailbox write access by default. Production use requires formal approval and explicit scoping decisions.
@@ -37,6 +52,7 @@ Anglerfish is a Python CLI for planting deceptive Outlook messages with Microsof
 ```
 
 Anglerfish is intentionally narrow in this release: Outlook only, application authentication only, and one primary workflow built around deploy, list, verify, cleanup, and monitor.
+Draft deployments add a per-canary ID to the hidden folder name and require an `internetMessageId` correlation key in the deployment record.
 
 ## Positioning
 
@@ -48,6 +64,17 @@ Anglerfish is intentionally narrow in this release: Outlook only, application au
 | Defender for Office 365 anomalous mailbox detection | no | n/a (Microsoft-hosted) | n/a | yes (UAL) |
 | DIY Sentinel KQL on `MailItemsAccessed` | yes (operator-built content) | no (Microsoft-hosted SIEM) | no | yes (UAL) |
 
+**Where Anglerfish fits.** Anglerfish is not a Canarytokens replacement. It is a narrower, M365-native option for teams that want canary deploys plus native UAL correlation without standing up a separate canary platform, configuring webhook receivers, or maintaining their own KQL hunt. If you already run Sentinel and write your own queries, the [Sentinel KQL snippet](docs/sentinel-kql.md) gives you the same correlation primitive without the CLI; if you want a self-contained operator tool that owns deploy, list, verify, cleanup, and detection in one workflow, that is the gap Anglerfish fills.
+
+## Related work
+
+Anglerfish sits next to several existing approaches; each does something Anglerfish does not.
+
+- **[Thinkst Canary / Canarytokens](https://canarytokens.org/)** — the most mature canary platform; commercial managed appliance plus an open-source [self-hosted token server](https://github.com/thinkst/canarytokens). Detection is callback-based (DNS, HTTP, SMTP). Anglerfish is M365-only, has no token server, and does not use callback transport — it correlates against the tenant's existing audit log instead.
+- **DIY Sentinel KQL hunts on `MailItemsAccessed`** — same audit primitive, surfaced through Microsoft Sentinel queries (the [Microsoft Sentinel community repo](https://github.com/Azure/Azure-Sentinel) is the canonical example library). Anglerfish adds the deploy side and gives operators a non-SIEM path; the bundled [`docs/sentinel-kql.md`](docs/sentinel-kql.md) snippet is provided so Sentinel users can validate Anglerfish's correlation against their own queries.
+- **Defender for Office 365 anomalous-mailbox detection** — Microsoft-hosted, statistical, and not deterministic per-canary. Anglerfish is deterministic: a deployed canary plus a `MailItemsAccessed` event with the canary's `internetMessageId` is the alert.
+- **Mailoney / open-source mail honeypots** — different threat model (inbound network/SMTP); not M365-native and does not interact with Exchange Online or the Unified Audit Log.
+
 ## Supported Surface
 
 | Command | Purpose |
@@ -56,6 +83,7 @@ Anglerfish is intentionally narrow in this release: Outlook only, application au
 | `anglerfish list` | List deployment records |
 | `anglerfish verify` | Check active draft-mode Outlook canaries |
 | `anglerfish cleanup <record>` | Remove a deployed Outlook canary |
+| `anglerfish demo-access <record>` | Read a deployed canary through Graph to generate authorized audit evidence |
 | `anglerfish monitor` | Poll for Outlook access alerts |
 
 Notes:
@@ -96,12 +124,21 @@ anglerfish --dry-run --non-interactive \
 Deploy a real canary and write a local record:
 
 ```bash
+export RECORD="$HOME/.anglerfish/records/adele-password-reset.json"
+
 anglerfish --non-interactive \
   --canary-type outlook \
   --template "Fake Password Reset" \
   --target adele.vance@contoso.com \
   --delivery-mode draft \
-  --output-json ~/.anglerfish/records/adele-password-reset.json
+  --output-json "$RECORD"
+```
+
+Trigger authorized access for a demo tenant, then poll after UAL ingestion:
+
+```bash
+anglerfish demo-access --non-interactive "$RECORD"
+anglerfish monitor --once --records-dir "$HOME/.anglerfish/records"
 ```
 
 Try the product offline:
@@ -229,6 +266,15 @@ anglerfish cleanup --non-interactive ~/.anglerfish/records/adele-draft.json
 anglerfish cleanup --non-interactive ~/.anglerfish/records/adele-send.json
 ```
 
+Trigger authorized access for reviewer or booth evidence:
+
+```bash
+anglerfish demo-access --non-interactive ~/.anglerfish/records/adele-draft.json
+anglerfish demo-access --non-interactive ~/.anglerfish/records/adele-send.json
+```
+
+`demo-access` performs a Graph read of the deployed canary so a permitted demo tenant can generate a real `MailItemsAccessed` event. It does not bypass Unified Audit Log latency; poll after the event is available.
+
 Monitor for access:
 
 ```bash
@@ -267,6 +313,7 @@ anglerfish monitor --demo --count 2
 ```bash
 anglerfish --help
 anglerfish verify --help
+anglerfish demo-access --help
 anglerfish monitor --help
 ```
 

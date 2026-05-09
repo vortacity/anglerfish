@@ -212,6 +212,44 @@ def test_main_cleanup_demo_skips_auth_and_api(monkeypatch, tmp_path):
     assert result == 0
 
 
+def test_main_demo_access_happy_path(monkeypatch, tmp_path):
+    record_path = tmp_path / "record.json"
+    record_path.write_text("{}", encoding="utf-8")
+
+    monkeypatch.setattr(
+        deploy_mod,
+        "read_deployment_record",
+        lambda path: {
+            "canary_type": "outlook",
+            "delivery_mode": "draft",
+            "target_user": "user@contoso.com",
+            "folder_id": "folder-1",
+            "message_id": "msg-1",
+        },
+    )
+    monkeypatch.setattr(deploy_mod, "_prompt_auth_setup", lambda *args, **kwargs: "")
+    monkeypatch.setattr(deploy_mod, "authenticate", lambda *args, **kwargs: "token-123")
+    monkeypatch.setattr(deploy_mod, "_print_auth_success", lambda *args, **kwargs: None)
+
+    observed: dict[str, object] = {}
+
+    class FakeGraphClient:
+        def __init__(self, token):
+            observed["token"] = token
+
+    monkeypatch.setattr(deploy_mod, "GraphClient", FakeGraphClient)
+    monkeypatch.setattr(
+        deploy_mod,
+        "outlook_trigger_canary_access",
+        lambda graph, record: {"triggered": "true", "delivery_mode": record["delivery_mode"]},
+    )
+
+    result = main(["demo-access", "--non-interactive", str(record_path)])
+
+    assert result == 0
+    assert observed["token"] == "token-123"
+
+
 def test_main_outlook_writes_output_json(monkeypatch, tmp_path):
     monkeypatch.setenv("ANGLERFISH_CLIENT_ID", "client-id")
     monkeypatch.setattr(deploy_mod, "_prompt_auth_setup", lambda *args, **kwargs: "")
