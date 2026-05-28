@@ -108,5 +108,4 @@ Vulnerabilities go through a GitHub Security Advisory (private), not public issu
 - `CONTRIBUTING.md` — dev setup, template authoring, PR rules
 - `docs/architecture.md` — layered overview, command surface
 - `docs/threat-model.md` — assumptions, UAL latency, detection model
-- `docs/blackhat-europe-demo-script.md` — reviewer evidence script
 - `docs/sentinel-kql.md` — KQL for Sentinel-side correlation

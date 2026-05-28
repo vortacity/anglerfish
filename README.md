@@ -22,11 +22,12 @@ It supports hidden-folder draft canaries, inbox send canaries, local health chec
 
 ![Monitor alert](docs/images/monitor-alert.gif)
 
-## Reviewer Evidence
+## Example records
 
-For Black Hat Arsenal review, use the live-tenant flow in [Black Hat Europe demo script](docs/blackhat-europe-demo-script.md): deploy a draft canary, show the JSON record, run `anglerfish demo-access` to create authorized mailbox access, then run `anglerfish monitor --once` after UAL ingestion.
-
-Sanitized reference artifacts are included for explaining the evidence shape without exposing tenant data:
+Deploying a canary writes a local deployment record; when the canary is read, a
+`MailItemsAccessed` event lands in the Unified Audit Log and Anglerfish
+correlates it back to that record. These sanitized artifacts show the shape of
+the evidence without exposing tenant data:
 
 - [Draft deployment record](docs/examples/outlook-draft-record.json)
 - [Send deployment record](docs/examples/outlook-send-record.json)
@@ -37,7 +38,6 @@ Sanitized reference artifacts are included for explaining the evidence shape wit
 - [Demo tenant setup guide](docs/demo-tenant-setup.md)
 - [Architecture notes](docs/architecture.md)
 - [Threat model](docs/threat-model.md)
-- [Black Hat Europe demo script](docs/blackhat-europe-demo-script.md)
 - [Sentinel KQL validation snippet](docs/sentinel-kql.md)
 
 > [!WARNING]
@@ -266,7 +266,7 @@ anglerfish cleanup --non-interactive ~/.anglerfish/records/adele-draft.json
 anglerfish cleanup --non-interactive ~/.anglerfish/records/adele-send.json
 ```
 
-Trigger authorized access for reviewer or booth evidence:
+Trigger authorized access to generate audit evidence:
 
 ```bash
 anglerfish demo-access --non-interactive ~/.anglerfish/records/adele-draft.json

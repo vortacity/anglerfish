@@ -11,6 +11,9 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ### Documentation
 
+- Reframed the project as a general open-source tool: removed Black Hat /
+  Arsenal / reviewer / booth framing from the README, docs, AUTHORS, and
+  CHANGELOG, and removed the conference-specific demo script.
 - Corrected drift: AGENTS.md described `alerts.py` as a "Teams" sink (it is
   Slack); the README listed the third template as "IT Compliance Audit" (its
   real name is "IT Compliance Audit Notice", so `--template` now copy-pastes);
@@ -83,21 +86,19 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- Prepared a breaking Outlook-only release for Black Hat Europe Arsenal submission.
-- Removed non-Outlook canary surfaces from the main product path.
+- Reset to a breaking Outlook-only release; removed non-Outlook canary surfaces
+  from the main product path.
 - Added Management Activity API URL host validation.
 - Added cleaned-up record lookback for late UAL correlation.
-- Added Black Hat Europe demo collateral and sanitized evidence examples.
-- Added `demo-access` to trigger authorized Graph reads for reviewer and booth
-  demo evidence.
+- Added sanitized evidence examples and demo collateral.
+- Added `demo-access` to trigger authorized Graph reads for generating audit
+  evidence.
 - Added per-deployment canary IDs to draft hidden-folder names for stronger
   fallback correlation.
 - Require `internetMessageId` in deployment records so primary UAL correlation
   cannot silently degrade.
 - Rewrote the README, architecture notes, and demo tenant guide around the
   supported Outlook deploy, list, verify, cleanup, and monitor workflow.
-- Added a reviewer-facing Arsenal demo script with live evidence requirements,
-  UAL latency notes, and permission limitations.
 - Demo fixtures now cover the two supported Outlook delivery modes: `draft` and
   `send`.
 - Updated demo recording scripts around Outlook deploy and audit-log alerts.
@@ -106,7 +107,7 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [1.0.0] — 2026-03-11
 
-First public release, prepared for Black Hat Arsenal submission.
+First public release.
 
 ### Added
 
