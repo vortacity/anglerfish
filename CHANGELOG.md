@@ -9,6 +9,26 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Monitor now rebuilds its Management API client only when the access token
+  actually rotates, preserving the HTTP connection pool across polls.
+- Management API pagination header lookup is case-insensitive, and following an
+  absolute `NextPageUri`/content URI no longer appends a duplicate
+  `PublisherIdentifier` query parameter.
+- `.env.example` is now shell-sourceable (all placeholders quoted, all
+  user-supplied credentials commented) and no longer advertises the
+  effectively-fixed `ANGLERFISH_AUTH_MODE`.
+- Pinned the pre-commit `ruff` hook and the dev `ruff` dependency to the same
+  0.15.x line CI uses, so local hooks and CI agree.
+
+### Removed
+
+- Dead/unused code and config: the unreachable `ANGLERFISH_GRAPH_DELEGATED_SCOPES`
+  setting, the always-`True` `_TokenManager.refreshed` property, an unused
+  `cli_var_values` parameter, and the unused `pytest-asyncio` dependency and
+  `asyncio_mode` pytest config (the project has no async code).
+
 ### Security
 
 - Alert fields derived from audit events (which an accessing actor can influence,

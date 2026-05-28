@@ -583,7 +583,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             rendered_template,
             non_interactive,
             total_steps,
-            cli_var_values,
         )
 
     except (AuthenticationError, DeploymentError, GraphApiError) as exc:

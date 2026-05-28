@@ -343,11 +343,10 @@ def test_main_delegates_to_outlook_handler(monkeypatch):
 
     observed: dict[str, object] = {}
 
-    def fake_outlook_handler(args, console, rendered_template, non_interactive, total_steps, cli_var_values):
+    def fake_outlook_handler(args, console, rendered_template, non_interactive, total_steps):
         observed["template"] = rendered_template
         observed["non_interactive"] = non_interactive
         observed["total_steps"] = total_steps
-        observed["cli_var_values"] = cli_var_values
         return 0
 
     monkeypatch.setattr(deploy_mod, "_run_outlook_deploy", fake_outlook_handler)
@@ -370,7 +369,6 @@ def test_main_delegates_to_outlook_handler(monkeypatch):
     assert observed["template"] == template
     assert observed["non_interactive"] is True
     assert observed["total_steps"] == 4
-    assert observed["cli_var_values"] == {}
 
 
 def test_parse_args_verify_subcommand():

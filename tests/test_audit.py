@@ -364,3 +364,25 @@ def test_subscription_start_post_does_not_retry_on_5xx():
     with pytest.raises(AuditApiError):
         client.ensure_subscriptions(["Audit.Exchange"])
     assert session.request.call_count == 2  # 1 list + 1 start, no retry of the write
+
+
+def test_list_content_pagination_is_case_insensitive_and_no_duplicate_publisher():
+    page1 = [{"contentUri": "https://manage.office.com/api/v1.0/tenant-123/content/blob1"}]
+    page2 = [{"contentUri": "https://manage.office.com/api/v1.0/tenant-123/content/blob2"}]
+    sess = _session(
+        # Oddly-cased header that the old two-key lookup would have missed.
+        _response(json_data=page1, headers={"NEXTPAGEURI": "https://manage.office.com/api/v1.0/page2"}),
+        _response(json_data=page2),
+    )
+    client = _client(sess)
+
+    result = client.list_content(
+        "Audit.Exchange",
+        datetime(2026, 3, 1, tzinfo=timezone.utc),
+        datetime(2026, 3, 2, tzinfo=timezone.utc),
+    )
+
+    assert len(result) == 2  # pagination followed regardless of header casing
+    # The absolute NextPageUri already carries PublisherIdentifier; don't re-add it.
+    follow_params = sess.request.call_args_list[1].kwargs["params"]
+    assert "PublisherIdentifier" not in follow_params

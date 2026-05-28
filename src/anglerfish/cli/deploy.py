@@ -306,7 +306,6 @@ def _run_outlook_deploy(
     template: OutlookTemplate,
     non_interactive: bool,
     total_steps: int,
-    cli_var_values: dict[str, str],
 ) -> int:
     if non_interactive:
         delivery_mode = args.delivery_mode

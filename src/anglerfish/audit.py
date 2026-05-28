@@ -9,6 +9,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import requests
+from requests.structures import CaseInsensitiveDict
 
 from .config import MANAGEMENT_API_BASE_URL
 from .exceptions import AuditApiError
@@ -121,7 +122,7 @@ class AuditClient:
             elif isinstance(result, dict):
                 blobs.extend(result.get("value", []))
 
-            next_page = headers.get("NextPageUri") or headers.get("nextpageuri")
+            next_page = CaseInsensitiveDict(headers).get("NextPageUri")
             if not next_page:
                 break
             _validate_management_api_url(next_page, base_url=self.base_url)
@@ -171,13 +172,15 @@ class AuditClient:
     ) -> tuple[Any, dict[str, str]]:
         """GET with retry, returning (parsed_body, response_headers)."""
         if absolute:
+            # Absolute URLs (NextPageUri / contentUri) already carry
+            # PublisherIdentifier; don't append a duplicate query parameter.
             url = path
+            all_params = dict(params) if params else {}
         else:
             url = f"{self.base_url}{path}"
-
-        all_params = {"PublisherIdentifier": self.tenant_id}
-        if params:
-            all_params.update(params)
+            all_params = {"PublisherIdentifier": self.tenant_id}
+            if params:
+                all_params.update(params)
 
         return self._request("GET", url, params=all_params)
 

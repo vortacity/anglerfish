@@ -293,11 +293,6 @@ class _TokenManager:
                         os.environ[name] = previous_value
         return self._token
 
-    @property
-    def refreshed(self) -> bool:
-        """True if the token was ever refreshed (for testing)."""
-        return True  # always returns current token
-
 
 # ------------------------------------------------------------------
 # Heartbeat
@@ -398,20 +393,26 @@ def run_monitor(
         except Exception as exc:
             console.print(f"[yellow]Warning: could not verify subscriptions: {exc}[/yellow]")
 
+        # Seed with the current token so we only rebuild the client (and discard
+        # its connection pool) when the token actually rotates.
+        current_token = token_manager.get_token() if token_manager is not None else None
+
         while True:
             if _interrupted:
                 break
 
-            # Token refresh: rebuild client if token changed.
+            # Rebuild the client only when the refreshed token differs.
             if token_manager is not None:
                 fresh_token = token_manager.get_token()
-                audit_client = AuditClient(
-                    fresh_token,
-                    audit_client.tenant_id,
-                    base_url=audit_client.base_url,
-                    retries=audit_client.retries,
-                    timeout=audit_client.timeout,
-                )
+                if fresh_token != current_token:
+                    current_token = fresh_token
+                    audit_client = AuditClient(
+                        fresh_token,
+                        audit_client.tenant_id,
+                        base_url=audit_client.base_url,
+                        retries=audit_client.retries,
+                        timeout=audit_client.timeout,
+                    )
 
             now = datetime.now(timezone.utc)
             start_time = last_poll_end

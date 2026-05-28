@@ -19,7 +19,6 @@ CLIENT_CERT_SEND_X5C = os.environ.get("ANGLERFISH_CLIENT_CERT_SEND_X5C", "").str
 
 GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
 GRAPH_APP_SCOPE = "https://graph.microsoft.com/.default"
-GRAPH_DELEGATED_SCOPES = os.environ.get("ANGLERFISH_GRAPH_DELEGATED_SCOPES", "").strip()
 
 MANAGEMENT_API_BASE_URL = "https://manage.office.com/api/v1.0"
 MANAGEMENT_API_SCOPE = "https://manage.office.com/.default"
