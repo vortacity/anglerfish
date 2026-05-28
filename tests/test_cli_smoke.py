@@ -551,3 +551,100 @@ def test_verify_demo_runs_with_src_pythonpath():
     )
     assert result.returncode == 1
     assert "Canary Verification" in result.stdout or "GONE" in result.stdout
+
+
+def test_main_deploy_decline_confirm_does_not_deploy(monkeypatch):
+    """Declining the final 'Deploy this canary?' confirm exits 0 without deploying."""
+    monkeypatch.setenv("ANGLERFISH_CLIENT_ID", "client-id")
+    monkeypatch.setattr(deploy_mod, "_prompt_auth_setup", lambda *a, **k: "")
+    monkeypatch.setattr(deploy_mod, "_print_auth_success", lambda *a, **k: None)
+    monkeypatch.setattr(deploy_mod, "authenticate", lambda *a, **k: "token-123")
+
+    template = OutlookTemplate(
+        name="Outlook Template",
+        description="desc",
+        folder_name="IT Notifications",
+        subject="Subject",
+        body_html="<p>Hello</p>",
+        sender_name="IT",
+        sender_email="it@contoso.com",
+        variables=[],
+    )
+    monkeypatch.setattr(
+        main_mod,
+        "list_templates",
+        lambda canary_type: [{"name": "Outlook Template", "description": "desc", "path": "pkg://outlook/test.yaml"}],
+    )
+    monkeypatch.setattr(main_mod, "load_template", lambda path: template)
+
+    select_answers = {
+        "Select canary type:": "outlook",
+        "Select template:": "pkg://outlook/test.yaml",
+        "Select delivery mode:": "draft",
+    }
+    text_answers = {"Hidden folder name:": "IT Notifications", "Target mailbox (UPN/email):": "victim@contoso.com"}
+    monkeypatch.setattr(deploy_mod.questionary, "select", lambda message, *a, **k: _Prompt(select_answers[message]))
+    monkeypatch.setattr(deploy_mod.questionary, "text", lambda message, *a, **k: _Prompt(text_answers[message]))
+    monkeypatch.setattr(deploy_mod.questionary, "confirm", lambda *a, **k: _Prompt(False))  # decline
+
+    class FailDeployer:
+        def __init__(self, *a, **k):
+            raise AssertionError("deployer must not be constructed when the user declines")
+
+    monkeypatch.setattr(deploy_mod, "GraphClient", lambda token: object())
+    monkeypatch.setattr(deploy_mod, "OutlookDeployer", FailDeployer)
+
+    assert main([]) == 0
+
+
+def test_main_deploy_cancel_at_prompt_returns_130(monkeypatch):
+    """Cancelling a select prompt (Ctrl-C/Esc -> None) exits 130, not a traceback."""
+    monkeypatch.setattr(
+        main_mod,
+        "list_templates",
+        lambda canary_type: [{"name": "Outlook Template", "description": "desc", "path": "pkg://outlook/test.yaml"}],
+    )
+    template = OutlookTemplate(
+        name="Outlook Template",
+        description="desc",
+        folder_name="IT Notifications",
+        subject="Subject",
+        body_html="<p>Hello</p>",
+        sender_name="IT",
+        sender_email="it@contoso.com",
+        variables=[],
+    )
+    monkeypatch.setattr(main_mod, "load_template", lambda path: template)
+
+    select_answers = {
+        "Select canary type:": "outlook",
+        "Select template:": "pkg://outlook/test.yaml",
+        "Select delivery mode:": None,
+    }
+    monkeypatch.setattr(deploy_mod.questionary, "select", lambda message, *a, **k: _Prompt(select_answers[message]))
+    monkeypatch.setattr(deploy_mod, "GraphClient", lambda token: pytest.fail("must not authenticate after cancel"))
+
+    assert main([]) == 130
+
+
+def test_main_demo_access_decline_skips_graph(monkeypatch, tmp_path):
+    record_path = tmp_path / "record.json"
+    record_path.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(
+        deploy_mod,
+        "read_deployment_record",
+        lambda path: {
+            "canary_type": "outlook",
+            "delivery_mode": "draft",
+            "target_user": "u@c.com",
+            "folder_id": "f",
+            "message_id": "m",
+        },
+    )
+    monkeypatch.setattr(deploy_mod, "authenticate", lambda *a, **k: pytest.fail("must not authenticate when declined"))
+    monkeypatch.setattr(
+        deploy_mod, "outlook_trigger_canary_access", lambda *a, **k: pytest.fail("must not read canary when declined")
+    )
+    monkeypatch.setattr(deploy_mod.questionary, "confirm", lambda *a, **k: _Prompt(False))
+
+    assert main(["demo-access", str(record_path)]) == 0

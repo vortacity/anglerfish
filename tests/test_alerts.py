@@ -164,3 +164,13 @@ def test_dispatch_slack_skips_non_https_url():
         dispatcher = AlertDispatcher(slack_webhook_url="http://insecure.example/webhook")
         dispatcher.dispatch(_sample_alert())
         mock_post.assert_not_called()
+
+
+def test_dispatch_slack_non_ok_response_does_not_block_other_channels(tmp_path):
+    log_path = tmp_path / "alerts.jsonl"
+    with patch("anglerfish.alerts.requests.post") as mock_post:
+        mock_post.return_value.ok = False
+        mock_post.return_value.status_code = 404
+        dispatcher = AlertDispatcher(alert_log=log_path, slack_webhook_url="https://hooks.slack.com/services/x")
+        dispatcher.dispatch(_sample_alert())  # must not raise on a non-2xx Slack response
+    assert log_path.is_file()  # JSONL channel still wrote

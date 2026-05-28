@@ -73,6 +73,8 @@ This project uses [Semantic Versioning](https://semver.org/).
   load time instead of silently leaking the literal text into a deployed canary.
 - Record, state, alert-log, and heartbeat writes no longer require `os.fchmod`,
   so they work on platforms (e.g. Windows) that lack it.
+- Management Activity API error messages of the `{"Message": "..."}` shape are
+  now surfaced verbatim instead of as a generic `Unknown:` string.
 
 ---
 

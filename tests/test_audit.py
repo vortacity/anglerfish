@@ -386,3 +386,19 @@ def test_list_content_pagination_is_case_insensitive_and_no_duplicate_publisher(
     # The absolute NextPageUri already carries PublisherIdentifier; don't re-add it.
     follow_params = sess.request.call_args_list[1].kwargs["params"]
     assert "PublisherIdentifier" not in follow_params
+
+
+def test_error_message_handles_bare_message_key():
+    sess = _session(_response(400, json_data={"Message": "Subscription disabled"}))
+    client = _client(sess)
+    with pytest.raises(AuditApiError, match="Subscription disabled"):
+        client.fetch_content("https://manage.office.com/api/v1.0/blob")
+
+
+def test_error_message_falls_back_to_text_on_non_json_body():
+    resp = _response(400, text="upstream failure")
+    resp.json.side_effect = ValueError("no json")
+    sess = _session(resp)
+    client = _client(sess)
+    with pytest.raises(AuditApiError, match="upstream failure"):
+        client.fetch_content("https://manage.office.com/api/v1.0/blob")

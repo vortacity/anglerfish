@@ -16,12 +16,15 @@ from anglerfish.cli.prompts import (
     AuthPromptResult,
     _parse_var_args,
     _prompt_auth_setup,
+    _render_deploy_template,
     _validate_email,
     _validate_file_path,
     _validate_non_empty,
     _validate_subject,
     _validate_variable_value,
 )
+from anglerfish.models import OutlookTemplate
+from anglerfish.exceptions import DeploymentError
 from anglerfish.exceptions import AuthenticationError, TemplateError
 from anglerfish.verify import VerifyResult, VerifyStatus
 
@@ -263,6 +266,74 @@ class TestPromptAuthSetup:
         )
         assert os.environ["ANGLERFISH_CLIENT_CERT_PASSPHRASE"] == "prompted-passphrase"
 
+    def test_prompt_auth_setup_interactive_prompts_for_secret(self, monkeypatch):
+        args = type("Args", (), {"tenant_id": None, "client_id": None, "credential_mode": "auto"})()
+        monkeypatch.setenv("ANGLERFISH_TENANT_ID", "tenant-id")
+        monkeypatch.setenv("ANGLERFISH_CLIENT_ID", "client-id")
+        for var in (
+            "ANGLERFISH_CLIENT_SECRET",
+            "ANGLERFISH_CLIENT_CERT_PFX_PATH",
+            "ANGLERFISH_CLIENT_CERT_PRIVATE_KEY_PATH",
+            "ANGLERFISH_CLIENT_CERT_PUBLIC_CERT_PATH",
+            "ANGLERFISH_CLIENT_CERT_THUMBPRINT",
+        ):
+            monkeypatch.delenv(var, raising=False)
+
+        answers = iter(["secret", "prompted-secret"])
+
+        class _FakePrompt:
+            def ask(self):
+                return next(answers)
+
+        monkeypatch.setattr(questionary, "select", lambda *a, **k: _FakePrompt())
+        monkeypatch.setattr(questionary, "password", lambda *a, **k: _FakePrompt())
+
+        result = _prompt_auth_setup(args, console=Console(file=None, force_terminal=False))
+
+        assert result.credential_mode == "secret"
+        assert "ANGLERFISH_CLIENT_SECRET" in result.clear_env_vars
+        assert os.environ["ANGLERFISH_CLIENT_SECRET"] == "prompted-secret"
+
+    def test_prompt_auth_setup_interactive_both_present_selects_certificate(self, monkeypatch):
+        args = type("Args", (), {"tenant_id": None, "client_id": None, "credential_mode": "auto"})()
+        monkeypatch.setenv("ANGLERFISH_TENANT_ID", "tenant-id")
+        monkeypatch.setenv("ANGLERFISH_CLIENT_ID", "client-id")
+        monkeypatch.setenv("ANGLERFISH_CLIENT_SECRET", "secret")
+        monkeypatch.setenv("ANGLERFISH_CLIENT_CERT_PFX_PATH", "/tmp/client.pfx")  # noqa: S108 - not opened here
+
+        class _FakePrompt:
+            def ask(self):
+                return "certificate"
+
+        monkeypatch.setattr(questionary, "select", lambda *a, **k: _FakePrompt())
+
+        result = _prompt_auth_setup(args, console=Console(file=None, force_terminal=False))
+
+        assert result.credential_mode == "certificate"
+
+    def test_prompt_auth_setup_cancellation_returns_none(self, monkeypatch):
+        args = type("Args", (), {"tenant_id": None, "client_id": None, "credential_mode": "auto"})()
+        monkeypatch.setenv("ANGLERFISH_TENANT_ID", "tenant-id")
+        monkeypatch.setenv("ANGLERFISH_CLIENT_ID", "client-id")
+        for var in (
+            "ANGLERFISH_CLIENT_SECRET",
+            "ANGLERFISH_CLIENT_CERT_PFX_PATH",
+            "ANGLERFISH_CLIENT_CERT_PRIVATE_KEY_PATH",
+            "ANGLERFISH_CLIENT_CERT_PUBLIC_CERT_PATH",
+            "ANGLERFISH_CLIENT_CERT_THUMBPRINT",
+        ):
+            monkeypatch.delenv(var, raising=False)
+
+        class _FakePrompt:
+            def ask(self):
+                return None  # user cancelled (Ctrl-C / Esc)
+
+        monkeypatch.setattr(questionary, "select", lambda *a, **k: _FakePrompt())
+
+        result = _prompt_auth_setup(args, console=Console(file=None, force_terminal=False))
+
+        assert result is None
+
 
 def test_verify_prompted_secret_is_cleared_after_auth(monkeypatch):
     args = argparse.Namespace(
@@ -372,3 +443,80 @@ def test_verify_prompted_passphrase_restores_previous_env_value(monkeypatch):
     rc = deploy_mod._run_verify(args, Console(file=None, force_terminal=False))
     assert rc == 0
     assert os.environ["ANGLERFISH_CLIENT_CERT_PASSPHRASE"] == "existing-passphrase"
+
+
+def _template_with_vars():
+    return OutlookTemplate(
+        name="Var Template",
+        description="d",
+        folder_name="F",
+        subject="Hi ${who}",
+        body_html="<p>${who} owes ${amount}</p>",
+        sender_name="S",
+        sender_email="s@c.com",
+        variables=[{"name": "who", "default": "User"}, {"name": "amount"}],
+    )
+
+
+def test_render_deploy_template_non_interactive_uses_cli_vars_and_defaults():
+    rendered = _render_deploy_template(
+        _template_with_vars(),
+        canary_type="outlook",
+        console=Console(file=None, force_terminal=False),
+        non_interactive=True,
+        cli_var_values={"amount": "$100"},
+    )
+    assert rendered is not None
+    assert rendered.subject == "Hi User"
+    assert "$100" in rendered.body_html
+
+
+def test_render_deploy_template_non_interactive_missing_required_var_raises():
+    with pytest.raises(DeploymentError, match="amount"):
+        _render_deploy_template(
+            _template_with_vars(),
+            canary_type="outlook",
+            console=Console(file=None, force_terminal=False),
+            non_interactive=True,
+            cli_var_values={},  # 'amount' has no default and no override
+        )
+
+
+def test_render_deploy_template_interactive_prompts_for_values(monkeypatch):
+    answers = {"who": "Adele", "amount": "$200"}
+
+    class _FakePrompt:
+        def __init__(self, message):
+            # questionary.text is called with the variable description/name as message
+            self._key = "amount" if "amount" in message.lower() else "who"
+
+        def ask(self):
+            return answers[self._key]
+
+    monkeypatch.setattr(questionary, "text", lambda message, *a, **k: _FakePrompt(message))
+    rendered = _render_deploy_template(
+        _template_with_vars(),
+        canary_type="outlook",
+        console=Console(file=None, force_terminal=False),
+        non_interactive=False,
+        cli_var_values={},
+    )
+    assert rendered is not None
+    assert rendered.subject == "Hi Adele"
+    assert "$200" in rendered.body_html
+
+
+def test_render_deploy_template_interactive_cancel_returns_none(monkeypatch):
+    class _FakePrompt:
+        def ask(self):
+            return None  # cancelled
+
+    monkeypatch.setattr(questionary, "text", lambda *a, **k: _FakePrompt())
+    rendered = _render_deploy_template(
+        _template_with_vars(),
+        canary_type="outlook",
+        console=Console(file=None, force_terminal=False),
+        non_interactive=False,
+        cli_var_values={},
+    )
+    assert rendered is None

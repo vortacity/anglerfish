@@ -311,12 +311,12 @@ def _extract_error_message(response: requests.Response) -> str:
         return response.text or f"HTTP {response.status_code}"
 
     if isinstance(payload, dict):
-        error = payload.get("error", {})
+        error = payload.get("error")
         if isinstance(error, dict):
             code = error.get("code", "Unknown")
             message = error.get("message", response.text)
             return f"{code}: {message}"
-        # Some endpoints return {"Message": "..."}
+        # Some endpoints return {"Message": "..."} with no "error" key.
         msg = payload.get("Message") or payload.get("message")
         if msg:
             return str(msg)
