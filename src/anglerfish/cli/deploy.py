@@ -28,6 +28,7 @@ from ..graph import GraphClient
 from ..inventory import read_deployment_record, update_deployment_status, write_deployment_record
 from ..models import OutlookTemplate
 from ._main import (
+    _cancel_no_tty,
     _format_exception_message,
     _print_auth_success,
     _print_banner,
@@ -237,6 +238,8 @@ def _run_cleanup(args: argparse.Namespace, console: Console) -> int:
     except (AuthenticationError, DeploymentError, GraphApiError, AnglerfishError) as exc:
         _print_error(console, _format_exception_message(exc))
         return 1
+    except EOFError:
+        return _cancel_no_tty(console)
     except KeyboardInterrupt:
         console.print("\n[yellow]Cancelled.[/yellow]")
         return 130
@@ -290,6 +293,8 @@ def _run_demo_access(args: argparse.Namespace, console: Console) -> int:
     except (AuthenticationError, DeploymentError, GraphApiError, AnglerfishError) as exc:
         _print_error(console, _format_exception_message(exc))
         return 1
+    except EOFError:
+        return _cancel_no_tty(console)
     except KeyboardInterrupt:
         console.print("\n[yellow]Cancelled.[/yellow]")
         return 130

@@ -98,7 +98,8 @@ def _append_jsonl(path: Path, alert: CanaryAlert) -> None:
     record = asdict(alert)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
     try:
-        os.fchmod(fd, 0o600)
+        if hasattr(os, "fchmod"):  # POSIX only; os.open mode already applied otherwise
+            os.fchmod(fd, 0o600)
         with os.fdopen(fd, "a", encoding="utf-8") as fh:
             fd = -1
             fh.write(json.dumps(record, default=str) + "\n")

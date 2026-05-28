@@ -9,6 +9,25 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Monitor no longer advances its poll watermark when an audit-log list or fetch
+  fails mid-window, so transient API errors can no longer skip canary access
+  events permanently. Re-polling is safe because seen-ID dedup suppresses
+  already-dispatched alerts.
+- Interactive prompts on a non-interactive stdin (CI, pipe, daemon) now exit
+  cleanly with guidance instead of raising an uncaught `EOFError` traceback.
+- `monitor` retry/backoff now honors `Retry-After` headers expressed as an
+  HTTP-date, matching the Graph client (previously collapsed to 1 second).
+- A single malformed YAML file in a custom `ANGLERFISH_TEMPLATES_DIR` no longer
+  hides every other template from listing.
+- Malformed deployment records skipped during monitoring are now logged so an
+  operator can see when a canary drops out of monitoring.
+- Templates that reference an undeclared `${placeholder}` are now rejected at
+  load time instead of silently leaking the literal text into a deployed canary.
+- Record, state, alert-log, and heartbeat writes no longer require `os.fchmod`,
+  so they work on platforms (e.g. Windows) that lack it.
+
 ---
 
 ## [2.0.0] — 2026-05-08

@@ -21,6 +21,19 @@ class _Prompt:
         return self._value
 
 
+class _EOFPrompt:
+    """Mimics questionary raising EOFError when stdin is not a TTY."""
+
+    def ask(self):
+        raise EOFError()
+
+
+def test_main_interactive_prompt_eof_returns_130(monkeypatch):
+    # A prompt hitting EOF (non-TTY stdin) must be handled cleanly, not crash.
+    monkeypatch.setattr("questionary.select", lambda *args, **kwargs: _EOFPrompt())
+    assert main([]) == 130
+
+
 def test_main_version_flag():
     assert main(["--version"]) == 0
 

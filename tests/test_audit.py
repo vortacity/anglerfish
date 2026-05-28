@@ -336,3 +336,11 @@ def test_parse_retry_after():
     assert _parse_retry_after("5") == 5
     assert _parse_retry_after("0") == 1
     assert _parse_retry_after("not-a-number") == 1
+
+
+def test_parse_retry_after_accepts_http_date():
+    # RFC 7231 HTTP-date form must be honored, not collapsed to 1 second.
+    future = _parse_retry_after("Wed, 21 Oct 2099 07:28:00 GMT")
+    assert future > 1
+    # A past HTTP-date clamps to the 1-second floor.
+    assert _parse_retry_after("Wed, 21 Oct 1999 07:28:00 GMT") == 1

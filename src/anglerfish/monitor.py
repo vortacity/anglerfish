@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import signal
 import tempfile
@@ -19,6 +20,8 @@ from .audit import AuditClient, CONTENT_TYPES
 from .auth import authenticate_management_api
 from .inventory import read_deployment_record
 from .state import StateManager
+
+logger = logging.getLogger(__name__)
 
 
 # ------------------------------------------------------------------
@@ -186,9 +189,12 @@ def load_records(
     current_time = now or datetime.now(timezone.utc)
     results: list[tuple[str, dict]] = []
     for json_file in sorted(records_path.glob("*.json")):
+        # Skip records that are unreadable, corrupt, or incomplete, but log the
+        # skip so an operator knows a deployed canary dropped out of monitoring.
         try:
             rec = read_deployment_record(json_file)
-        except Exception:  # nosec B112 — skip malformed records, log elsewhere
+        except Exception as exc:  # nosec B112
+            logger.warning("Skipping unreadable deployment record %s: %s", json_file, exc.__class__.__name__)
             continue
         status = rec.get("status", "active")
         expires_at: datetime | None = None
@@ -325,7 +331,8 @@ def _write_heartbeat(
             delete=False,
         ) as fh:
             temp_path = Path(fh.name)
-            os.fchmod(fh.fileno(), 0o600)
+            if hasattr(os, "fchmod"):  # POSIX only; tempfile already restricts mode elsewhere
+                os.fchmod(fh.fileno(), 0o600)
             json.dump(payload, fh)
             fh.flush()
             os.fsync(fh.fileno())
@@ -415,17 +422,24 @@ def run_monitor(
                 start_time = end_time - timedelta(hours=24)
 
             poll_alerts = 0
+            # Track whether the entire window was ingested. If any content list
+            # or fetch failed (or we were interrupted mid-window), we must NOT
+            # advance the watermark, or those events are skipped forever.
+            window_complete = True
             for content_type in CONTENT_TYPES:
                 if _interrupted:
+                    window_complete = False
                     break
                 try:
                     blobs = audit_client.list_content(content_type, start_time, end_time)
                 except Exception as exc:
                     console.print(f"[yellow]Warning: list_content({content_type}) failed: {exc}[/yellow]")
+                    window_complete = False
                     continue
 
                 for blob in blobs:
                     if _interrupted:
+                        window_complete = False
                         break
                     content_uri = blob.get("contentUri") or ""
                     if not content_uri:
@@ -434,6 +448,7 @@ def run_monitor(
                         events = audit_client.fetch_content(content_uri)
                     except Exception as exc:
                         console.print(f"[yellow]Warning: fetch_content failed: {exc}[/yellow]")
+                        window_complete = False
                         continue
 
                     for event in events:
@@ -455,12 +470,16 @@ def run_monitor(
                             poll_alerts += 1
                             session_alerts += 1
 
-            last_poll_end = end_time
+            # Only advance the watermark when the whole window was ingested.
+            # Re-polling an incomplete window is safe: seen-ID dedup suppresses
+            # any alerts that were already dispatched.
+            if window_complete:
+                last_poll_end = end_time
             session_polls += 1
 
             # Persist state.
             if sm:
-                sm.record_poll(end_time.isoformat(), alerts=poll_alerts)
+                sm.record_poll(last_poll_end.isoformat(), alerts=poll_alerts)
                 sm.save()
 
             # Heartbeat.

@@ -81,6 +81,14 @@ def _print_success(console: Console, result: dict[str, str]) -> None:
     console.print()
 
 
+def _cancel_no_tty(console: Console) -> int:
+    """Handle a prompt hitting EOF on a non-interactive stdin (CI, pipe, daemon)."""
+    console.print(
+        "\n[yellow]No interactive input available. Re-run with --non-interactive and the required flags.[/yellow]"
+    )
+    return 130
+
+
 def _print_error(console: Console, message: str) -> None:
     console.print()
     console.print(
@@ -462,6 +470,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         except (AuthenticationError, AuditApiError, DeploymentError, MonitorError) as exc:
             _print_error(console, _format_exception_message(exc))
             return 1
+        except EOFError:
+            return _cancel_no_tty(console)
         except KeyboardInterrupt:
             console.print("\n[yellow]Cancelled.[/yellow]")
             return 130
@@ -474,6 +484,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         except (AuthenticationError, DeploymentError, GraphApiError) as exc:
             _print_error(console, _format_exception_message(exc))
             return 1
+        except EOFError:
+            return _cancel_no_tty(console)
 
     if args.subcommand == "demo-access":
         from .deploy import _run_demo_access
@@ -580,6 +592,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     except AnglerfishError as exc:
         _print_error(console, _format_exception_message(exc))
         return 1
+    except EOFError:
+        return _cancel_no_tty(console)
     except KeyboardInterrupt:
         console.print("\n[yellow]Cancelled.[/yellow]")
         return 130

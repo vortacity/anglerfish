@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any
 from urllib.parse import urlparse
 
@@ -277,7 +278,13 @@ def _parse_retry_after(value: str | None) -> int:
     try:
         return max(int(value), 1)
     except ValueError:
-        return 1
+        # RFC 7231 also permits an HTTP-date; Microsoft throttling may use either.
+        try:
+            retry_at = parsedate_to_datetime(value)
+            delay = int((retry_at - datetime.now(timezone.utc)).total_seconds())
+            return max(delay, 1)
+        except (TypeError, ValueError):
+            return 1
 
 
 def _extract_error_message(response: requests.Response) -> str:
