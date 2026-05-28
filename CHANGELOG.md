@@ -9,6 +9,14 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Documentation
+
+- Corrected drift: AGENTS.md described `alerts.py` as a "Teams" sink (it is
+  Slack); the README listed the third template as "IT Compliance Audit" (its
+  real name is "IT Compliance Audit Notice", so `--template` now copy-pastes);
+  AGENTS.md/CONTRIBUTING.md referenced a non-existent `_TEMPLATE_SCHEMA`.
+- Documented the optional `examples/anglerfish-monitor.service` systemd unit.
+
 ### Changed
 
 - Monitor now rebuilds its Management API client only when the access token

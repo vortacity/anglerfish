@@ -64,7 +64,7 @@ Draft deployments add a per-canary ID to the hidden folder name and require an `
 | Defender for Office 365 anomalous mailbox detection | no | n/a (Microsoft-hosted) | n/a | yes (UAL) |
 | DIY Sentinel KQL on `MailItemsAccessed` | yes (operator-built content) | no (Microsoft-hosted SIEM) | no | yes (UAL) |
 
-**Where Anglerfish fits.** Anglerfish is not a Canarytokens replacement. It is a narrower, M365-native option for teams that want canary deploys plus native UAL correlation without standing up a separate canary platform, configuring webhook receivers, or maintaining their own KQL hunt. If you already run Sentinel and write your own queries, the [Sentinel KQL snippet](docs/sentinel-kql.md) gives you the same correlation primitive without the CLI; if you want a self-contained operator tool that owns deploy, list, verify, cleanup, and detection in one workflow, that is the gap Anglerfish fills.
+**Where Anglerfish fits.** Anglerfish is not a Canarytokens replacement. It is a narrower, M365-native option for teams that want canary deploys plus native UAL correlation without standing up a separate canary platform, configuring webhook receivers, or maintaining their own KQL hunt. If you already run Sentinel and write your own queries, the [Sentinel KQL snippet](docs/sentinel-kql.md) gives you the same correlation primitive without the CLI; if you want a single self-contained CLI that handles deploy, list, verify, cleanup, and detection, Anglerfish covers that path.
 
 ## Related work
 
@@ -199,7 +199,7 @@ Bundled Outlook templates:
 
 - `Fake Password Reset`
 - `Fake Wire Transfer`
-- `IT Compliance Audit`
+- `IT Compliance Audit Notice`
 - `Payroll Direct Deposit Update`
 
 Custom Outlook YAML templates are supported through `ANGLERFISH_TEMPLATES_DIR`:
@@ -286,6 +286,8 @@ anglerfish monitor --records-dir ~/.anglerfish/records \
 ```
 
 Unified Audit Log polling is delayed, not an immediate stream. Microsoft does not guarantee a return time for audit records; core service records are typically available after 60 to 90 minutes. See [Microsoft audit search guidance](https://learn.microsoft.com/en-us/purview/audit-search).
+
+To keep the poll loop running unattended, [`examples/anglerfish-monitor.service`](examples/anglerfish-monitor.service) is an optional sample systemd unit that supervises `anglerfish monitor --no-console`. It is a convenience example for operators, not a built-in daemon mode.
 
 The no third-party data plane claim applies to detection. Optional Slack alerting sends post-detection notifications to the configured webhook.
 

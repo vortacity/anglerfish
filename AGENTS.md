@@ -27,7 +27,7 @@ src/anglerfish/
   graph.py        # GraphClient: requests.Session wrapper with retries
   audit.py        # Management Activity API polling
   monitor.py      # main monitor loop
-  alerts.py       # Teams webhook + alert log sinks
+  alerts.py       # Slack webhook + alert log sinks
   inventory.py    # atomic deployment-record persistence
   verify.py       # draft-mode verification
   state.py        # monitor state checkpoint
@@ -76,7 +76,7 @@ All tests must pass and `ruff check` must be clean before a PR can be merged. CI
 Not part of the current product, but the extension shape is fixed:
 1. `src/anglerfish/deployers/<type>.py` implementing `BaseDeployer`
 2. Dataclass in `models.py`
-3. Register in `_TEMPLATE_SCHEMA` (`templates.py`)
+3. Register the type in `templates.py` (add to `_SUPPORTED_TEMPLATE_TYPES` and a loader branch in `load_template`)
 4. Wire into `cli/_main.py`, `cli/deploy.py`, `cli/prompts.py`
 5. Unit tests in `tests/test_<type>_deployer.py`
 6. At least one bundled template in `src/anglerfish/templates/<type>/`

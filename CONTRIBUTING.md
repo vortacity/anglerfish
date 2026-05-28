@@ -122,7 +122,8 @@ permissions guidance in the same change.
 
 1. Create `src/anglerfish/deployers/<type>.py` implementing `BaseDeployer`.
 2. Add a corresponding `dataclass` model to `src/anglerfish/models.py`.
-3. Register the new type in `src/anglerfish/templates.py` (`_TEMPLATE_SCHEMA`).
+3. Register the new type in `src/anglerfish/templates.py` (add it to
+   `_SUPPORTED_TEMPLATE_TYPES` and a loader branch in `load_template`).
 4. Wire up the new type in the `src/anglerfish/cli/` package
    (`_main.py`, `deploy.py`, and `prompts.py` as needed for template selection,
    auth mode, target prompts, and deployer instantiation).
