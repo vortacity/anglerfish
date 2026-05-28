@@ -254,3 +254,44 @@ def test_render_template_unsupported_type_raises():
 
     with pytest.raises(TemplateError, match="Unsupported template object"):
         render_template(FakeTemplate(), {})
+
+
+def test_load_template_rejects_undeclared_placeholder(tmp_path: Path):
+    template_file = tmp_path / "typo.yaml"
+    template_file.write_text(
+        "name: Typo\ndescription: desc\ntype: outlook\nfolder_name: Folder\n"
+        "subject: 'Hi ${compnay_name}'\nbody_html: '<p>x</p>'\nsender_name: IT\n"
+        "sender_email: it@test.com\nvariables:\n  - name: company_name\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(TemplateError, match="undeclared variable"):
+        load_template(str(template_file))
+
+
+def test_load_template_allows_literal_dollar_amount(tmp_path: Path):
+    # A literal "$47,500.00" is not a string.Template placeholder and must load.
+    template_file = tmp_path / "amount.yaml"
+    template_file.write_text(
+        "name: Amount\ndescription: desc\ntype: outlook\nfolder_name: Folder\n"
+        "subject: Payment\nbody_html: '<p>Amount: $47,500.00</p>'\nsender_name: IT\n"
+        "sender_email: it@test.com\n",
+        encoding="utf-8",
+    )
+    template = load_template(str(template_file))
+    assert "$47,500.00" in template.body_html
+
+
+def test_list_custom_templates_isolates_bad_file(tmp_path: Path, monkeypatch):
+    outlook_dir = tmp_path / "outlook"
+    outlook_dir.mkdir()
+    (outlook_dir / "good.yaml").write_text(
+        "name: Good One\ndescription: ok\ntype: outlook\nfolder_name: F\nsubject: S\n"
+        "body_html: '<p>x</p>'\nsender_name: IT\nsender_email: it@test.com\n",
+        encoding="utf-8",
+    )
+    # A malformed YAML file must not hide the good template from listing.
+    (outlook_dir / "broken.yaml").write_text(": : not valid yaml : :\n- [\n", encoding="utf-8")
+    monkeypatch.setenv("ANGLERFISH_TEMPLATES_DIR", str(tmp_path))
+
+    names = [t["name"] for t in list_templates("outlook")]
+    assert "Good One" in names

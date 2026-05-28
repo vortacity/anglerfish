@@ -336,3 +336,69 @@ def test_parse_retry_after():
     assert _parse_retry_after("5") == 5
     assert _parse_retry_after("0") == 1
     assert _parse_retry_after("not-a-number") == 1
+
+
+def test_parse_retry_after_accepts_http_date():
+    # RFC 7231 HTTP-date form must be honored, not collapsed to 1 second.
+    future = _parse_retry_after("Wed, 21 Oct 2099 07:28:00 GMT")
+    assert future > 1
+    # A past HTTP-date clamps to the 1-second floor.
+    assert _parse_retry_after("Wed, 21 Oct 1999 07:28:00 GMT") == 1
+
+
+def test_request_raises_on_unexpected_redirect():
+    session = _session(_response(302, headers={"Location": "https://evil.example"}))
+    client = _client(session)
+    with pytest.raises(AuditApiError):
+        client.fetch_content("https://manage.office.com/api/v1.0/blob")
+    assert session.request.call_count == 1
+
+
+def test_subscription_start_post_does_not_retry_on_5xx():
+    # Write (POST /subscriptions/start) must not auto-retry on transient 5xx.
+    session = _session(
+        _response(200, json_data=[]),  # list: no active subscriptions
+        _response(503, json_data={"error": {"code": "ServiceUnavailable", "message": "later"}}),
+    )
+    client = _client(session)
+    with pytest.raises(AuditApiError):
+        client.ensure_subscriptions(["Audit.Exchange"])
+    assert session.request.call_count == 2  # 1 list + 1 start, no retry of the write
+
+
+def test_list_content_pagination_is_case_insensitive_and_no_duplicate_publisher():
+    page1 = [{"contentUri": "https://manage.office.com/api/v1.0/tenant-123/content/blob1"}]
+    page2 = [{"contentUri": "https://manage.office.com/api/v1.0/tenant-123/content/blob2"}]
+    sess = _session(
+        # Oddly-cased header that the old two-key lookup would have missed.
+        _response(json_data=page1, headers={"NEXTPAGEURI": "https://manage.office.com/api/v1.0/page2"}),
+        _response(json_data=page2),
+    )
+    client = _client(sess)
+
+    result = client.list_content(
+        "Audit.Exchange",
+        datetime(2026, 3, 1, tzinfo=timezone.utc),
+        datetime(2026, 3, 2, tzinfo=timezone.utc),
+    )
+
+    assert len(result) == 2  # pagination followed regardless of header casing
+    # The absolute NextPageUri already carries PublisherIdentifier; don't re-add it.
+    follow_params = sess.request.call_args_list[1].kwargs["params"]
+    assert "PublisherIdentifier" not in follow_params
+
+
+def test_error_message_handles_bare_message_key():
+    sess = _session(_response(400, json_data={"Message": "Subscription disabled"}))
+    client = _client(sess)
+    with pytest.raises(AuditApiError, match="Subscription disabled"):
+        client.fetch_content("https://manage.office.com/api/v1.0/blob")
+
+
+def test_error_message_falls_back_to_text_on_non_json_body():
+    resp = _response(400, text="upstream failure")
+    resp.json.side_effect = ValueError("no json")
+    sess = _session(resp)
+    client = _client(sess)
+    with pytest.raises(AuditApiError, match="upstream failure"):
+        client.fetch_content("https://manage.office.com/api/v1.0/blob")

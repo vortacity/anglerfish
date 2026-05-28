@@ -9,6 +9,73 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Documentation
+
+- Reframed the project as a general open-source tool: removed Black Hat /
+  Arsenal / reviewer / booth framing from the README, docs, AUTHORS, and
+  CHANGELOG, and removed the conference-specific demo script.
+- Corrected drift: AGENTS.md described `alerts.py` as a "Teams" sink (it is
+  Slack); the README listed the third template as "IT Compliance Audit" (its
+  real name is "IT Compliance Audit Notice", so `--template` now copy-pastes);
+  AGENTS.md/CONTRIBUTING.md referenced a non-existent `_TEMPLATE_SCHEMA`.
+- Documented the optional `examples/anglerfish-monitor.service` systemd unit.
+
+### Changed
+
+- Monitor now rebuilds its Management API client only when the access token
+  actually rotates, preserving the HTTP connection pool across polls.
+- Management API pagination header lookup is case-insensitive, and following an
+  absolute `NextPageUri`/content URI no longer appends a duplicate
+  `PublisherIdentifier` query parameter.
+- `.env.example` is now shell-sourceable (all placeholders quoted, all
+  user-supplied credentials commented) and no longer advertises the
+  effectively-fixed `ANGLERFISH_AUTH_MODE`.
+- Pinned the pre-commit `ruff` hook and the dev `ruff` dependency to the same
+  0.15.x line CI uses, so local hooks and CI agree.
+
+### Removed
+
+- Dead/unused code and config: the unreachable `ANGLERFISH_GRAPH_DELEGATED_SCOPES`
+  setting, the always-`True` `_TokenManager.refreshed` property, an unused
+  `cli_var_values` parameter, and the unused `pytest-asyncio` dependency and
+  `asyncio_mode` pytest config (the project has no async code).
+
+### Security
+
+- Alert fields derived from audit events (which an accessing actor can influence,
+  e.g. `ClientInfoString`) are now escaped before console rendering, preventing
+  Rich console-markup injection / alert spoofing.
+- HTTP clients no longer follow redirects; an unexpected 3xx from Graph or the
+  Management Activity API is treated as an error instead of being followed to a
+  potentially unvalidated host.
+- The Slack webhook sink rejects non-`https` URLs and no longer logs the webhook
+  URL (a bearer secret) on failure.
+- The `pkg://` template loader rejects `.`/`..`/separator path segments,
+  closing in-package path traversal.
+- The Management Activity API subscription-start `POST` no longer auto-retries,
+  so a transient failure cannot double-execute the write.
+
+### Fixed
+
+- Monitor no longer advances its poll watermark when an audit-log list or fetch
+  fails mid-window, so transient API errors can no longer skip canary access
+  events permanently. Re-polling is safe because seen-ID dedup suppresses
+  already-dispatched alerts.
+- Interactive prompts on a non-interactive stdin (CI, pipe, daemon) now exit
+  cleanly with guidance instead of raising an uncaught `EOFError` traceback.
+- `monitor` retry/backoff now honors `Retry-After` headers expressed as an
+  HTTP-date, matching the Graph client (previously collapsed to 1 second).
+- A single malformed YAML file in a custom `ANGLERFISH_TEMPLATES_DIR` no longer
+  hides every other template from listing.
+- Malformed deployment records skipped during monitoring are now logged so an
+  operator can see when a canary drops out of monitoring.
+- Templates that reference an undeclared `${placeholder}` are now rejected at
+  load time instead of silently leaking the literal text into a deployed canary.
+- Record, state, alert-log, and heartbeat writes no longer require `os.fchmod`,
+  so they work on platforms (e.g. Windows) that lack it.
+- Management Activity API error messages of the `{"Message": "..."}` shape are
+  now surfaced verbatim instead of as a generic `Unknown:` string.
+
 ---
 
 ## [2.0.0] — 2026-05-08
@@ -21,21 +88,19 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- Prepared a breaking Outlook-only release for Black Hat Europe Arsenal submission.
-- Removed non-Outlook canary surfaces from the main product path.
+- Reset to a breaking Outlook-only release; removed non-Outlook canary surfaces
+  from the main product path.
 - Added Management Activity API URL host validation.
 - Added cleaned-up record lookback for late UAL correlation.
-- Added Black Hat Europe demo collateral and sanitized evidence examples.
-- Added `demo-access` to trigger authorized Graph reads for reviewer and booth
-  demo evidence.
+- Added sanitized evidence examples and demo collateral.
+- Added `demo-access` to trigger authorized Graph reads for generating audit
+  evidence.
 - Added per-deployment canary IDs to draft hidden-folder names for stronger
   fallback correlation.
 - Require `internetMessageId` in deployment records so primary UAL correlation
   cannot silently degrade.
 - Rewrote the README, architecture notes, and demo tenant guide around the
   supported Outlook deploy, list, verify, cleanup, and monitor workflow.
-- Added a reviewer-facing Arsenal demo script with live evidence requirements,
-  UAL latency notes, and permission limitations.
 - Demo fixtures now cover the two supported Outlook delivery modes: `draft` and
   `send`.
 - Updated demo recording scripts around Outlook deploy and audit-log alerts.
@@ -44,7 +109,7 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [1.0.0] — 2026-03-11
 
-First public release, prepared for Black Hat Arsenal submission.
+First public release.
 
 ### Added
 

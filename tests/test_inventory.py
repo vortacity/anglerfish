@@ -132,3 +132,15 @@ def test_write_deployment_record_uses_0600_permissions(tmp_path):
     record_file = tmp_path / "record.json"
     write_deployment_record(record_file, {"canary_type": "outlook", "status": "active"})
     assert stat.S_IMODE(record_file.stat().st_mode) == 0o600
+
+
+def test_write_deployment_record_without_fchmod(tmp_path, monkeypatch):
+    """On platforms without os.fchmod (e.g. Windows) writing must still succeed."""
+    from anglerfish import inventory
+
+    monkeypatch.delattr(inventory.os, "fchmod", raising=False)
+    record_file = tmp_path / "record.json"
+    write_deployment_record(record_file, {"canary_type": "outlook", "status": "active"})
+
+    assert record_file.is_file()
+    assert read_deployment_record(record_file)["canary_type"] == "outlook"

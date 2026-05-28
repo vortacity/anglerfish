@@ -657,3 +657,77 @@ def test_write_heartbeat(tmp_path):
     assert data["alerts_this_session"] == 2
     assert data["status"] == "healthy"
     assert stat.S_IMODE(hb_path.stat().st_mode) == 0o600
+
+
+# ------------------------------------------------------------------
+# Watermark advancement on partial failure (regression)
+# ------------------------------------------------------------------
+
+
+def test_run_monitor_does_not_advance_watermark_on_fetch_failure(tmp_path):
+    """A failed audit fetch must NOT advance the poll watermark, or events are lost."""
+    state_path = tmp_path / "state.json"
+    fixed = "2026-03-01T00:00:00+00:00"
+    state_path.write_text(
+        json.dumps(
+            {
+                "last_poll_end": fixed,
+                "seen_ids": [],
+                "total_alerts": 0,
+                "total_polls": 0,
+                "started_at": fixed,
+            }
+        )
+    )
+
+    client = _mock_audit_client([])
+    client.list_content.side_effect = RuntimeError("audit API unavailable")
+    idx = CanaryIndex([("rec.json", _outlook_record())])
+    sm = StateManager(state_path)
+    console = Console(file=None, force_terminal=False)
+
+    rc = run_monitor(client, idx, once=True, console=console, state_manager=sm, heartbeat_path=None)
+
+    assert rc == 0
+    data = json.loads(state_path.read_text())
+    assert data["last_poll_end"] == fixed  # unchanged: the failed window will be re-polled
+
+
+def test_run_monitor_advances_watermark_on_success(tmp_path):
+    """A clean poll advances the watermark past the previous value."""
+    state_path = tmp_path / "state.json"
+    fixed = "2026-03-01T00:00:00+00:00"
+    state_path.write_text(
+        json.dumps(
+            {
+                "last_poll_end": fixed,
+                "seen_ids": [],
+                "total_alerts": 0,
+                "total_polls": 0,
+                "started_at": fixed,
+            }
+        )
+    )
+
+    client = _mock_audit_client([])
+    idx = CanaryIndex([("rec.json", _outlook_record())])
+    sm = StateManager(state_path)
+    console = Console(file=None, force_terminal=False)
+
+    rc = run_monitor(client, idx, once=True, console=console, state_manager=sm, heartbeat_path=None)
+
+    assert rc == 0
+    data = json.loads(state_path.read_text())
+    assert data["last_poll_end"] != fixed  # advanced after a complete window
+
+
+def test_load_records_logs_warning_for_malformed_record(tmp_path, caplog):
+    """Malformed records are skipped AND logged (the comment used to lie about this)."""
+    (tmp_path / "good.json").write_text(json.dumps(_outlook_record()))
+    (tmp_path / "broken.json").write_text("{ this is not valid json")
+
+    with caplog.at_level("WARNING", logger="anglerfish.monitor"):
+        results = load_records(tmp_path)
+
+    assert len(results) == 1
+    assert any("broken.json" in rec.message for rec in caplog.records)

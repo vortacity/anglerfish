@@ -21,6 +21,19 @@ class _Prompt:
         return self._value
 
 
+class _EOFPrompt:
+    """Mimics questionary raising EOFError when stdin is not a TTY."""
+
+    def ask(self):
+        raise EOFError()
+
+
+def test_main_interactive_prompt_eof_returns_130(monkeypatch):
+    # A prompt hitting EOF (non-TTY stdin) must be handled cleanly, not crash.
+    monkeypatch.setattr("questionary.select", lambda *args, **kwargs: _EOFPrompt())
+    assert main([]) == 130
+
+
 def test_main_version_flag():
     assert main(["--version"]) == 0
 
@@ -330,11 +343,10 @@ def test_main_delegates_to_outlook_handler(monkeypatch):
 
     observed: dict[str, object] = {}
 
-    def fake_outlook_handler(args, console, rendered_template, non_interactive, total_steps, cli_var_values):
+    def fake_outlook_handler(args, console, rendered_template, non_interactive, total_steps):
         observed["template"] = rendered_template
         observed["non_interactive"] = non_interactive
         observed["total_steps"] = total_steps
-        observed["cli_var_values"] = cli_var_values
         return 0
 
     monkeypatch.setattr(deploy_mod, "_run_outlook_deploy", fake_outlook_handler)
@@ -357,7 +369,6 @@ def test_main_delegates_to_outlook_handler(monkeypatch):
     assert observed["template"] == template
     assert observed["non_interactive"] is True
     assert observed["total_steps"] == 4
-    assert observed["cli_var_values"] == {}
 
 
 def test_parse_args_verify_subcommand():
@@ -540,3 +551,100 @@ def test_verify_demo_runs_with_src_pythonpath():
     )
     assert result.returncode == 1
     assert "Canary Verification" in result.stdout or "GONE" in result.stdout
+
+
+def test_main_deploy_decline_confirm_does_not_deploy(monkeypatch):
+    """Declining the final 'Deploy this canary?' confirm exits 0 without deploying."""
+    monkeypatch.setenv("ANGLERFISH_CLIENT_ID", "client-id")
+    monkeypatch.setattr(deploy_mod, "_prompt_auth_setup", lambda *a, **k: "")
+    monkeypatch.setattr(deploy_mod, "_print_auth_success", lambda *a, **k: None)
+    monkeypatch.setattr(deploy_mod, "authenticate", lambda *a, **k: "token-123")
+
+    template = OutlookTemplate(
+        name="Outlook Template",
+        description="desc",
+        folder_name="IT Notifications",
+        subject="Subject",
+        body_html="<p>Hello</p>",
+        sender_name="IT",
+        sender_email="it@contoso.com",
+        variables=[],
+    )
+    monkeypatch.setattr(
+        main_mod,
+        "list_templates",
+        lambda canary_type: [{"name": "Outlook Template", "description": "desc", "path": "pkg://outlook/test.yaml"}],
+    )
+    monkeypatch.setattr(main_mod, "load_template", lambda path: template)
+
+    select_answers = {
+        "Select canary type:": "outlook",
+        "Select template:": "pkg://outlook/test.yaml",
+        "Select delivery mode:": "draft",
+    }
+    text_answers = {"Hidden folder name:": "IT Notifications", "Target mailbox (UPN/email):": "victim@contoso.com"}
+    monkeypatch.setattr(deploy_mod.questionary, "select", lambda message, *a, **k: _Prompt(select_answers[message]))
+    monkeypatch.setattr(deploy_mod.questionary, "text", lambda message, *a, **k: _Prompt(text_answers[message]))
+    monkeypatch.setattr(deploy_mod.questionary, "confirm", lambda *a, **k: _Prompt(False))  # decline
+
+    class FailDeployer:
+        def __init__(self, *a, **k):
+            raise AssertionError("deployer must not be constructed when the user declines")
+
+    monkeypatch.setattr(deploy_mod, "GraphClient", lambda token: object())
+    monkeypatch.setattr(deploy_mod, "OutlookDeployer", FailDeployer)
+
+    assert main([]) == 0
+
+
+def test_main_deploy_cancel_at_prompt_returns_130(monkeypatch):
+    """Cancelling a select prompt (Ctrl-C/Esc -> None) exits 130, not a traceback."""
+    monkeypatch.setattr(
+        main_mod,
+        "list_templates",
+        lambda canary_type: [{"name": "Outlook Template", "description": "desc", "path": "pkg://outlook/test.yaml"}],
+    )
+    template = OutlookTemplate(
+        name="Outlook Template",
+        description="desc",
+        folder_name="IT Notifications",
+        subject="Subject",
+        body_html="<p>Hello</p>",
+        sender_name="IT",
+        sender_email="it@contoso.com",
+        variables=[],
+    )
+    monkeypatch.setattr(main_mod, "load_template", lambda path: template)
+
+    select_answers = {
+        "Select canary type:": "outlook",
+        "Select template:": "pkg://outlook/test.yaml",
+        "Select delivery mode:": None,
+    }
+    monkeypatch.setattr(deploy_mod.questionary, "select", lambda message, *a, **k: _Prompt(select_answers[message]))
+    monkeypatch.setattr(deploy_mod, "GraphClient", lambda token: pytest.fail("must not authenticate after cancel"))
+
+    assert main([]) == 130
+
+
+def test_main_demo_access_decline_skips_graph(monkeypatch, tmp_path):
+    record_path = tmp_path / "record.json"
+    record_path.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(
+        deploy_mod,
+        "read_deployment_record",
+        lambda path: {
+            "canary_type": "outlook",
+            "delivery_mode": "draft",
+            "target_user": "u@c.com",
+            "folder_id": "f",
+            "message_id": "m",
+        },
+    )
+    monkeypatch.setattr(deploy_mod, "authenticate", lambda *a, **k: pytest.fail("must not authenticate when declined"))
+    monkeypatch.setattr(
+        deploy_mod, "outlook_trigger_canary_access", lambda *a, **k: pytest.fail("must not read canary when declined")
+    )
+    monkeypatch.setattr(deploy_mod.questionary, "confirm", lambda *a, **k: _Prompt(False))
+
+    assert main(["demo-access", str(record_path)]) == 0

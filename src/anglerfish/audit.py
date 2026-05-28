@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any
 from urllib.parse import urlparse
 
 import requests
+from requests.structures import CaseInsensitiveDict
 
 from .config import MANAGEMENT_API_BASE_URL
 from .exceptions import AuditApiError
@@ -120,7 +122,7 @@ class AuditClient:
             elif isinstance(result, dict):
                 blobs.extend(result.get("value", []))
 
-            next_page = headers.get("NextPageUri") or headers.get("nextpageuri")
+            next_page = CaseInsensitiveDict(headers).get("NextPageUri")
             if not next_page:
                 break
             _validate_management_api_url(next_page, base_url=self.base_url)
@@ -170,13 +172,15 @@ class AuditClient:
     ) -> tuple[Any, dict[str, str]]:
         """GET with retry, returning (parsed_body, response_headers)."""
         if absolute:
+            # Absolute URLs (NextPageUri / contentUri) already carry
+            # PublisherIdentifier; don't append a duplicate query parameter.
             url = path
+            all_params = dict(params) if params else {}
         else:
             url = f"{self.base_url}{path}"
-
-        all_params = {"PublisherIdentifier": self.tenant_id}
-        if params:
-            all_params.update(params)
+            all_params = {"PublisherIdentifier": self.tenant_id}
+            if params:
+                all_params.update(params)
 
         return self._request("GET", url, params=all_params)
 
@@ -199,12 +203,17 @@ class AuditClient:
         url: str,
         **kwargs: Any,
     ) -> tuple[Any, dict[str, str]]:
-        """Execute an HTTP request with retry and backoff."""
+        """Execute an HTTP request with retry and backoff.
+
+        Only idempotent reads (GET) auto-retry; the subscription-start POST does
+        not, so a transient failure cannot double-execute the write.
+        """
+        can_retry = method.strip().upper() == "GET"
         for attempt in range(self.retries):
             try:
-                response = self.session.request(method, url, timeout=self.timeout, **kwargs)
+                response = self.session.request(method, url, timeout=self.timeout, allow_redirects=False, **kwargs)
             except requests.RequestException as exc:
-                if attempt < self.retries - 1:
+                if can_retry and attempt < self.retries - 1:
                     time.sleep(_compute_backoff(attempt))
                     continue
                 raise AuditApiError(
@@ -213,14 +222,23 @@ class AuditClient:
                     url=url,
                 ) from exc
 
-            if response.status_code == 429 and attempt < self.retries - 1:
+            if response.status_code == 429 and can_retry and attempt < self.retries - 1:
                 retry_after = _parse_retry_after(response.headers.get("Retry-After"))
                 time.sleep(retry_after)
                 continue
 
-            if 500 <= response.status_code <= 599 and attempt < self.retries - 1:
+            if 500 <= response.status_code <= 599 and can_retry and attempt < self.retries - 1:
                 time.sleep(_compute_backoff(attempt))
                 continue
+
+            # Redirects are disabled; the Management API should not 3xx here.
+            if 300 <= response.status_code < 400:
+                raise AuditApiError(
+                    f"Unexpected redirect response (HTTP {response.status_code})",
+                    status_code=response.status_code,
+                    method=method,
+                    url=url,
+                )
 
             if not response.ok:
                 raise AuditApiError(
@@ -277,7 +295,13 @@ def _parse_retry_after(value: str | None) -> int:
     try:
         return max(int(value), 1)
     except ValueError:
-        return 1
+        # RFC 7231 also permits an HTTP-date; Microsoft throttling may use either.
+        try:
+            retry_at = parsedate_to_datetime(value)
+            delay = int((retry_at - datetime.now(timezone.utc)).total_seconds())
+            return max(delay, 1)
+        except (TypeError, ValueError):
+            return 1
 
 
 def _extract_error_message(response: requests.Response) -> str:
@@ -287,12 +311,12 @@ def _extract_error_message(response: requests.Response) -> str:
         return response.text or f"HTTP {response.status_code}"
 
     if isinstance(payload, dict):
-        error = payload.get("error", {})
+        error = payload.get("error")
         if isinstance(error, dict):
             code = error.get("code", "Unknown")
             message = error.get("message", response.text)
             return f"{code}: {message}"
-        # Some endpoints return {"Message": "..."}
+        # Some endpoints return {"Message": "..."} with no "error" key.
         msg = payload.get("Message") or payload.get("message")
         if msg:
             return str(msg)

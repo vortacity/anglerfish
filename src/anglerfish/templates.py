@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import logging
 import os
 from importlib import resources
 from pathlib import Path
@@ -14,6 +15,8 @@ import yaml
 from .config import TEMPLATE_KIND_OUTLOOK, TEMPLATES_ENV_VAR
 from .exceptions import TemplateError
 from .models import OutlookTemplate
+
+logger = logging.getLogger(__name__)
 
 _PACKAGE_PATH_PREFIX = "pkg://"
 _SUPPORTED_TEMPLATE_TYPES = (TEMPLATE_KIND_OUTLOOK,)
@@ -68,12 +71,36 @@ def load_template(path: str) -> OutlookTemplate:
     raise TemplateError(f"Template type must be one of: {supported}. Found '{template_type}'")
 
 
+def _placeholders_in(text: str) -> set[str]:
+    """Return the variable names string.Template would substitute in ``text``."""
+    names: set[str] = set()
+    for match in StringTemplate.pattern.finditer(text):
+        name = match.group("named") or match.group("braced")
+        if name:
+            names.add(name)
+    return names
+
+
 def _load_outlook_template(data: dict) -> OutlookTemplate:
     missing = [field for field in _REQUIRED_OUTLOOK_FIELDS if not str(data.get(field, "")).strip()]
     if missing:
         raise TemplateError(f"Template missing required fields: {', '.join(missing)}")
 
     variables = _parse_variables(data.get("variables"))
+
+    # Reject templates whose render fields reference variables that are not
+    # declared, so a typo'd ${placeholder} fails at load instead of silently
+    # leaking literal text into a deployed canary.
+    declared = {var["name"] for var in variables}
+    used: set[str] = set()
+    for field in _OUTLOOK_RENDER_FIELDS:
+        used |= _placeholders_in(str(data.get(field, "")))
+    undeclared = sorted(used - declared)
+    if undeclared:
+        raise TemplateError(
+            f"Template references undeclared variable(s): {', '.join(undeclared)}. "
+            "Declare them under 'variables' or fix the placeholder name."
+        )
 
     return OutlookTemplate(
         name=str(data["name"]),
@@ -94,7 +121,14 @@ def _list_custom_templates(root: Path, canary_type: str) -> list[dict[str, str]]
 
     templates: list[dict[str, str]] = []
     for path in sorted(directory.glob("*.y*ml")):
-        data = _read_yaml_from_path(path)
+        if not path.is_file():
+            continue
+        # Isolate per-file parse errors so one bad template does not hide the rest.
+        try:
+            data = _read_yaml_from_path(path)
+        except TemplateError as exc:
+            logger.warning("Skipping unreadable template %s: %s", path, exc)
+            continue
         templates.append(
             {
                 "name": str(data.get("name", path.stem)),
@@ -138,6 +172,10 @@ def _load_template_data(path: str) -> dict:
             raise TemplateError(f"Invalid package template path: {path}")
 
         canary_type, filename = parts
+        # Reject traversal/separator tricks; package templates are flat files
+        # under templates/<type>/, never nested or parent paths.
+        if any(seg in ("", ".", "..") or "/" in seg or "\\" in seg for seg in (canary_type, filename)):
+            raise TemplateError(f"Invalid package template path: {path}")
         target = resources.files("anglerfish").joinpath("templates").joinpath(canary_type).joinpath(filename)
         if not target.is_file():
             raise TemplateError(f"Template not found: {path}")

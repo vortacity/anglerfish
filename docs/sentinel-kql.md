@@ -1,6 +1,6 @@
 # Sentinel KQL Validation
 
-Use this query as a reviewer or operator cross-check when Microsoft 365 audit logs are connected to Microsoft Sentinel.
+Use this query as an operator cross-check when Microsoft 365 audit logs are connected to Microsoft Sentinel.
 
 Replace the example `internetMessageId` values with values from Anglerfish deployment records.
 

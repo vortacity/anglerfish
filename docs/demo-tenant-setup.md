@@ -156,7 +156,7 @@ Run the monitor:
 anglerfish monitor --records-dir ~/.anglerfish/records
 ```
 
-For a reviewer recording or booth rehearsal, trigger an authorized Graph read of the canary first:
+To generate audit evidence on demand, trigger an authorized Graph read of the canary first:
 
 ```bash
 anglerfish demo-access --non-interactive ~/.anglerfish/records/adele-draft.json
@@ -181,7 +181,7 @@ anglerfish cleanup --non-interactive ~/.anglerfish/records/adele-draft.json
 anglerfish cleanup --non-interactive ~/.anglerfish/records/adele-send.json
 ```
 
-Send-mode cleanup moves the inbox message to Deleted Items. For booth demos, use a disposable test mailbox or empty Deleted Items after cleanup if the visible artifact must be removed from the mailbox.
+Send-mode cleanup moves the inbox message to Deleted Items. Use a disposable test mailbox, or empty Deleted Items after cleanup, if the visible artifact must be removed from the mailbox entirely.
 
 ## Troubleshooting
 
