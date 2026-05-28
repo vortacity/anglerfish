@@ -146,3 +146,21 @@ def test_dispatch_slack_failure_does_not_raise():
         dispatcher = AlertDispatcher(slack_webhook_url="https://hooks.slack.com/services/T/B/xxx")
         # Should not raise.
         dispatcher.dispatch(_sample_alert())
+
+
+def test_console_alert_escapes_markup_in_untrusted_fields():
+    """Audit-derived fields must not be interpreted as Rich console markup."""
+    console = Console(record=True, force_terminal=False, width=200)
+    dispatcher = AlertDispatcher(console=console)
+    dispatcher.dispatch(_sample_alert(client_info="[red]SPOOFED[/red]", accessed_by="[bold]evil[/bold]"))
+    out = console.export_text()
+    # Escaped markup renders literally; if interpreted, these brackets vanish.
+    assert "[red]SPOOFED[/red]" in out
+    assert "[bold]evil[/bold]" in out
+
+
+def test_dispatch_slack_skips_non_https_url():
+    with patch("anglerfish.alerts.requests.post") as mock_post:
+        dispatcher = AlertDispatcher(slack_webhook_url="http://insecure.example/webhook")
+        dispatcher.dispatch(_sample_alert())
+        mock_post.assert_not_called()

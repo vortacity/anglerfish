@@ -200,12 +200,17 @@ class AuditClient:
         url: str,
         **kwargs: Any,
     ) -> tuple[Any, dict[str, str]]:
-        """Execute an HTTP request with retry and backoff."""
+        """Execute an HTTP request with retry and backoff.
+
+        Only idempotent reads (GET) auto-retry; the subscription-start POST does
+        not, so a transient failure cannot double-execute the write.
+        """
+        can_retry = method.strip().upper() == "GET"
         for attempt in range(self.retries):
             try:
-                response = self.session.request(method, url, timeout=self.timeout, **kwargs)
+                response = self.session.request(method, url, timeout=self.timeout, allow_redirects=False, **kwargs)
             except requests.RequestException as exc:
-                if attempt < self.retries - 1:
+                if can_retry and attempt < self.retries - 1:
                     time.sleep(_compute_backoff(attempt))
                     continue
                 raise AuditApiError(
@@ -214,14 +219,23 @@ class AuditClient:
                     url=url,
                 ) from exc
 
-            if response.status_code == 429 and attempt < self.retries - 1:
+            if response.status_code == 429 and can_retry and attempt < self.retries - 1:
                 retry_after = _parse_retry_after(response.headers.get("Retry-After"))
                 time.sleep(retry_after)
                 continue
 
-            if 500 <= response.status_code <= 599 and attempt < self.retries - 1:
+            if 500 <= response.status_code <= 599 and can_retry and attempt < self.retries - 1:
                 time.sleep(_compute_backoff(attempt))
                 continue
+
+            # Redirects are disabled; the Management API should not 3xx here.
+            if 300 <= response.status_code < 400:
+                raise AuditApiError(
+                    f"Unexpected redirect response (HTTP {response.status_code})",
+                    status_code=response.status_code,
+                    method=method,
+                    url=url,
+                )
 
             if not response.ok:
                 raise AuditApiError(

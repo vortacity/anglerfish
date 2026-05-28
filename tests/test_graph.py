@@ -403,3 +403,12 @@ def test_parse_retry_after_returns_1_for_invalid_string():
     from anglerfish.graph import _parse_retry_after
 
     assert _parse_retry_after("not-a-number-or-date") == 1
+
+
+def test_graph_client_raises_on_unexpected_redirect():
+    session = requests.Session()
+    session.request = Mock(return_value=FakeResponse(status_code=302, headers={"Location": "https://evil.example"}))
+    client = GraphClient("token", session=session)
+    with pytest.raises(GraphApiError):
+        client.get("/me")
+    assert session.request.call_count == 1

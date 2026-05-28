@@ -9,6 +9,21 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+
+- Alert fields derived from audit events (which an accessing actor can influence,
+  e.g. `ClientInfoString`) are now escaped before console rendering, preventing
+  Rich console-markup injection / alert spoofing.
+- HTTP clients no longer follow redirects; an unexpected 3xx from Graph or the
+  Management Activity API is treated as an error instead of being followed to a
+  potentially unvalidated host.
+- The Slack webhook sink rejects non-`https` URLs and no longer logs the webhook
+  URL (a bearer secret) on failure.
+- The `pkg://` template loader rejects `.`/`..`/separator path segments,
+  closing in-package path traversal.
+- The Management Activity API subscription-start `POST` no longer auto-retries,
+  so a transient failure cannot double-execute the write.
+
 ### Fixed
 
 - Monitor no longer advances its poll watermark when an audit-log list or fetch

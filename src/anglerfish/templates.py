@@ -172,6 +172,10 @@ def _load_template_data(path: str) -> dict:
             raise TemplateError(f"Invalid package template path: {path}")
 
         canary_type, filename = parts
+        # Reject traversal/separator tricks; package templates are flat files
+        # under templates/<type>/, never nested or parent paths.
+        if any(seg in ("", ".", "..") or "/" in seg or "\\" in seg for seg in (canary_type, filename)):
+            raise TemplateError(f"Invalid package template path: {path}")
         target = resources.files("anglerfish").joinpath("templates").joinpath(canary_type).joinpath(filename)
         if not target.is_file():
             raise TemplateError(f"Template not found: {path}")

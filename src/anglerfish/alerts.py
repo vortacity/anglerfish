@@ -8,9 +8,11 @@ import os
 from dataclasses import asdict
 from pathlib import Path
 from typing import TYPE_CHECKING
+from urllib.parse import urlsplit
 
 import requests
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 
 if TYPE_CHECKING:
@@ -64,19 +66,24 @@ class AlertDispatcher:
 
 
 def _render_console(console: Console, alert: CanaryAlert) -> None:
-    """Print a Rich panel for a canary access alert."""
+    """Print a Rich panel for a canary access alert.
+
+    Alert fields originate from audit events influenced by the accessing actor
+    (e.g. ClientInfoString), so they are escaped to prevent Rich console-markup
+    injection or alert spoofing.
+    """
     lines = [
-        f"[bold]Type:[/bold]        {alert.canary_type}",
-        f"[bold]Canary:[/bold]      {alert.template_name}",
-        f"[bold]Artifact:[/bold]    {alert.artifact_label}",
-        f"[bold]Accessed by:[/bold] {alert.accessed_by}",
-        f"[bold]Source IP:[/bold]   {alert.source_ip}",
-        f"[bold]Timestamp:[/bold]   {alert.timestamp}",
-        f"[bold]Operation:[/bold]   {alert.operation}",
+        f"[bold]Type:[/bold]        {escape(alert.canary_type)}",
+        f"[bold]Canary:[/bold]      {escape(alert.template_name)}",
+        f"[bold]Artifact:[/bold]    {escape(alert.artifact_label)}",
+        f"[bold]Accessed by:[/bold] {escape(alert.accessed_by)}",
+        f"[bold]Source IP:[/bold]   {escape(alert.source_ip)}",
+        f"[bold]Timestamp:[/bold]   {escape(alert.timestamp)}",
+        f"[bold]Operation:[/bold]   {escape(alert.operation)}",
     ]
     if alert.client_info:
-        lines.append(f"[bold]Client:[/bold]     {alert.client_info}")
-    lines.append(f"[bold]Record:[/bold]     {alert.record_path}")
+        lines.append(f"[bold]Client:[/bold]     {escape(alert.client_info)}")
+    lines.append(f"[bold]Record:[/bold]     {escape(alert.record_path)}")
 
     panel = Panel(
         "\n".join(lines),
@@ -117,6 +124,11 @@ def _append_jsonl(path: Path, alert: CanaryAlert) -> None:
 
 def _post_slack(url: str, alert: CanaryAlert) -> None:
     """POST a Block Kit message to a Slack incoming webhook."""
+    if urlsplit(url).scheme != "https":
+        # Refuse to send alert payloads (which carry tenant/actor metadata) over
+        # cleartext or to a non-URL value.
+        logger.warning("Slack webhook URL is not https; skipping Slack alert")
+        return
     blocks = [
         {
             "type": "header",
@@ -144,6 +156,7 @@ def _post_slack(url: str, alert: CanaryAlert) -> None:
         },
     ]
     payload = {"text": f"Canary Alert: {alert.template_name} accessed by {alert.accessed_by}", "blocks": blocks}
-    resp = requests.post(url, json=payload, timeout=10)
+    resp = requests.post(url, json=payload, timeout=10, allow_redirects=False)
     if not resp.ok:
-        logger.warning("Slack POST to %s returned HTTP %d", url, resp.status_code)
+        # Do not log the webhook URL itself; it is a bearer secret.
+        logger.warning("Slack POST returned HTTP %d", resp.status_code)

@@ -344,3 +344,23 @@ def test_parse_retry_after_accepts_http_date():
     assert future > 1
     # A past HTTP-date clamps to the 1-second floor.
     assert _parse_retry_after("Wed, 21 Oct 1999 07:28:00 GMT") == 1
+
+
+def test_request_raises_on_unexpected_redirect():
+    session = _session(_response(302, headers={"Location": "https://evil.example"}))
+    client = _client(session)
+    with pytest.raises(AuditApiError):
+        client.fetch_content("https://manage.office.com/api/v1.0/blob")
+    assert session.request.call_count == 1
+
+
+def test_subscription_start_post_does_not_retry_on_5xx():
+    # Write (POST /subscriptions/start) must not auto-retry on transient 5xx.
+    session = _session(
+        _response(200, json_data=[]),  # list: no active subscriptions
+        _response(503, json_data={"error": {"code": "ServiceUnavailable", "message": "later"}}),
+    )
+    client = _client(session)
+    with pytest.raises(AuditApiError):
+        client.ensure_subscriptions(["Audit.Exchange"])
+    assert session.request.call_count == 2  # 1 list + 1 start, no retry of the write

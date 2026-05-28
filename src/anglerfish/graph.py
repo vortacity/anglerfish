@@ -81,7 +81,9 @@ class GraphClient:
         for attempt in range(self.retries):
             logger.debug("%s %s", normalized_method, url)
             try:
-                response = self.session.request(normalized_method, url, timeout=self.timeout, **kwargs)
+                response = self.session.request(
+                    normalized_method, url, timeout=self.timeout, allow_redirects=False, **kwargs
+                )
             except requests.RequestException as exc:
                 if can_retry and attempt < self.retries - 1:
                     time.sleep(_compute_backoff(attempt))
@@ -102,6 +104,16 @@ class GraphClient:
             if 500 <= response.status_code <= 599 and can_retry and attempt < self.retries - 1:
                 time.sleep(_compute_backoff(attempt))
                 continue
+
+            # Redirects are disabled; the Graph JSON API should never 3xx here.
+            # Treat one as an error rather than parsing an empty redirect body.
+            if 300 <= response.status_code < 400:
+                raise GraphApiError(
+                    f"Unexpected redirect response (HTTP {response.status_code})",
+                    status_code=response.status_code,
+                    method=normalized_method,
+                    path=request_path,
+                )
 
             if not response.ok:
                 error_message, request_id, client_request_id = _extract_error_details(response)
