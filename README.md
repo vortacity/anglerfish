@@ -14,9 +14,9 @@ It supports hidden-folder draft canaries, inbox send canaries, local health chec
 
 ## Demo
 
-**Interactive deployment** (`anglerfish`):
+**Non-interactive demo deployment** (`anglerfish --demo --non-interactive ...`):
 
-![Interactive deployment](docs/images/interactive-deploy.gif)
+![Non-interactive demo deployment](docs/images/interactive-deploy.gif)
 
 **Alert detection** (`anglerfish monitor`):
 
@@ -101,6 +101,8 @@ source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install -e .
 ```
+
+[`scripts/quickstart.sh`](scripts/quickstart.sh) automates the venv and install steps above.
 
 Anglerfish reads credentials from the process environment. It does not auto-load `.env`, so export values directly or source a file yourself before running commands.
 
@@ -284,6 +286,11 @@ anglerfish monitor --records-dir ~/.anglerfish/records \
   --alert-log ~/.anglerfish/alerts.jsonl \
   --slack-webhook-url https://hooks.slack.com/services/...
 ```
+
+The monitor flags can also be set via environment variables
+(`ANGLERFISH_MONITOR_STATE_FILE`, `ANGLERFISH_MONITOR_ALERT_LOG`,
+`ANGLERFISH_SLACK_WEBHOOK_URL`, `ANGLERFISH_MONITOR_NO_CONSOLE`); CLI flags
+take precedence. See `.env.example` for the full variable set.
 
 Unified Audit Log polling is delayed, not an immediate stream. Microsoft does not guarantee a return time for audit records; core service records are typically available after 60 to 90 minutes. See [Microsoft audit search guidance](https://learn.microsoft.com/en-us/purview/audit-search).
 

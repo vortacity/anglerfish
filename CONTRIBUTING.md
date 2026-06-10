@@ -33,8 +33,8 @@ anglerfish --version
 # Run all tests
 pytest
 
-# Run tests with verbose output
-pytest -v
+# Run tests with the coverage gate CI enforces
+pytest --cov=anglerfish --cov-fail-under=85
 
 # Lint
 ruff check src tests
@@ -45,14 +45,20 @@ ruff format --check src tests
 # Apply formatting
 ruff format src tests
 
-# Security scan (optional, requires dev install)
-bandit -r src
+# Type check (strict; configured in pyproject.toml)
+mypy
 
-# Dependency vulnerability audit (optional)
+# Security scan
+bandit -r src -ll
+
+# Dependency vulnerability audit
 pip-audit
 ```
 
-All tests must pass and `ruff check` must be clean before a PR can be merged.
+CI runs all of the above as required gates: tests with `--cov-fail-under=85`,
+`ruff check`, `ruff format --check`, `mypy`, `bandit -r src -ll`, plus a CLI
+smoke step and a `pip-audit` job. A PR must pass all of them to merge, so run
+the full list locally before pushing.
 
 ---
 
@@ -136,7 +142,8 @@ permissions guidance in the same change.
 
 - Open an issue first for significant changes (new deployer types, breaking changes).
 - Keep PRs focused: one logical change per PR.
-- All tests must pass (`pytest`) and linting must be clean (`ruff check src tests`).
+- All CI gates must pass: tests with the 85% coverage floor, `ruff check`,
+  `ruff format --check`, `mypy`, and `bandit -r src -ll`.
 - Update `CHANGELOG.md` with a brief description of your change under `[Unreleased]`.
 - Do not commit credentials, `.env` files, certificate material (`*.pfx`, `*.pem`,
   `*.key`), or any file matched by `.gitignore`.
