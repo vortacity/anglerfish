@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/vortacity/anglerfish/security/advisories/new
+    about: Use a private security advisory, never a public issue.

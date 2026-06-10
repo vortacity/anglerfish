@@ -10,7 +10,7 @@ This is a security tool used by defenders. It is production-stable (v2.x; see `C
 
 ## Stack
 
-- Python 3.10+ (CI targets 3.10/3.11/3.12)
+- Python 3.10+ (CI targets 3.10–3.13)
 - Build: `hatchling`
 - Runtime deps: `msal`, `requests`, `pyyaml`, `questionary`, `rich`
 - Dev: `pytest`, `pytest-cov`, `pytest-mock`, `responses`, `ruff`, `mypy` (strict), `types-requests`, `bandit`, `pip-audit`
