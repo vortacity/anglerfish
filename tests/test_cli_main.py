@@ -125,6 +125,16 @@ class TestParseArgs:
         assert args.subcommand == "verify"
         assert args.demo is True
 
+    def test_list_json_format(self):
+        args = _parse_args(["list", "--format", "json"])
+        assert args.subcommand == "list"
+        assert args.format == "json"
+
+    def test_verify_json_format(self):
+        args = _parse_args(["verify", "--format", "json"])
+        assert args.subcommand == "verify"
+        assert args.format == "json"
+
     def test_demo_access(self):
         args = _parse_args(["demo-access", "--non-interactive", "record.json"])
         assert args.subcommand == "demo-access"

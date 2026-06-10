@@ -166,6 +166,41 @@ def test_main_list_returns_zero_when_records_dir_missing(tmp_path):
     assert main(["list", "--records-dir", str(missing)]) == 0
 
 
+def test_main_list_json_outputs_filtered_records(tmp_path, capsys):
+    (tmp_path / "outlook.json").write_text(
+        json.dumps(
+            {
+                "timestamp": "2026-05-06T18:00:00+00:00",
+                "canary_type": "outlook",
+                "template_name": "Outlook",
+                "target_user": "adele.vance@contoso.com",
+                "status": "active",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "sharepoint.json").write_text(
+        json.dumps(
+            {
+                "timestamp": "2026-05-06T18:00:00+00:00",
+                "canary_type": "sharepoint",
+                "template_name": "Legacy",
+                "site_name": "HR Site",
+                "status": "active",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = main(["list", "--records-dir", str(tmp_path), "--format", "json"])
+
+    assert result == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["records_dir"] == str(tmp_path)
+    assert [record["template"] for record in payload["records"]] == ["Outlook"]
+    assert payload["records"][0]["type"] == "outlook"
+
+
 def test_main_cleanup_outlook_happy_path(monkeypatch, tmp_path):
     record_path = tmp_path / "record.json"
     record_path.write_text("{}", encoding="utf-8")
@@ -527,6 +562,33 @@ def test_verify_send_record_returns_error_without_auth(monkeypatch):
     assert result == 1
     assert auth_setup_calls == []
     assert auth_calls == []
+
+
+def test_verify_json_outputs_machine_readable_errors_without_auth(monkeypatch, capsys):
+    monkeypatch.setattr(
+        deploy_mod,
+        "read_deployment_record",
+        lambda _path: {
+            "canary_type": "outlook",
+            "delivery_mode": "send",
+            "target_user": "alice@contoso.com",
+            "inbox_message_id": "msg-123",
+            "template_name": "Fake Password Reset",
+        },
+    )
+    monkeypatch.setattr(
+        deploy_mod,
+        "authenticate",
+        lambda *args, **kwargs: pytest.fail("verify --format json must not authenticate for local validation errors"),
+    )
+
+    result = main(["verify", "record.json", "--format", "json"])
+
+    assert result == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["summary"] == {"ok": 0, "gone": 0, "errors": 1}
+    assert payload["results"][0]["status"] == "ERROR"
+    assert payload["results"][0]["target"] == "alice@contoso.com"
 
 
 def test_verify_unsupported_record_returns_error_without_auth(monkeypatch):
