@@ -16,8 +16,7 @@ from rich.table import Table
 
 from ..auth import authenticate
 from ..deployers.outlook import OutlookDeployer
-from ..deployers.outlook import remove_canary as outlook_remove_canary
-from ..deployers.outlook import trigger_canary_access as outlook_trigger_canary_access
+from ..deployers.registry import find_canary_type, get_canary_type
 from ..exceptions import (
     AnglerfishError,
     AuthenticationError,
@@ -190,8 +189,7 @@ def _run_cleanup(args: argparse.Namespace, console: Console) -> int:
         # Step 1: Read Record
         _step_rule(console, 1, total_steps, "Read Record")
         record = read_deployment_record(args.record)
-        if record.canary_type != "outlook":
-            raise DeploymentError("Only outlook canaries are supported in this release.")
+        canary_type = get_canary_type(record.canary_type)
         _print_cleanup_summary(console, record)
 
         if demo:
@@ -223,7 +221,7 @@ def _run_cleanup(args: argparse.Namespace, console: Console) -> int:
                 console.print("[yellow]Cancelled.[/yellow]")
                 return 0
 
-        result = outlook_remove_canary(graph, record)
+        result = canary_type.remove(graph, record)
 
         _print_cleanup_success(console, result)
         try:
@@ -249,8 +247,7 @@ def _run_demo_access(args: argparse.Namespace, console: Console) -> int:
     try:
         _step_rule(console, 1, 3, "Read Record")
         record = read_deployment_record(args.record)
-        if record.canary_type != "outlook":
-            raise DeploymentError("Only outlook canaries are supported in this release.")
+        canary_type = get_canary_type(record.canary_type)
         _print_cleanup_summary(console, record)
 
         if not non_interactive:
@@ -279,7 +276,7 @@ def _run_demo_access(args: argparse.Namespace, console: Console) -> int:
         graph = GraphClient(token)
 
         _step_rule(console, 3, 3, "Trigger Access")
-        result = outlook_trigger_canary_access(graph, record)
+        result = canary_type.trigger_access(graph, record)
         _print_demo_access_success(console, result)
         console.print(
             "[dim]Unified Audit Log ingestion is delayed. Run `anglerfish monitor --once` after the "
@@ -511,39 +508,21 @@ def _run_verify(args: argparse.Namespace, console: Console) -> int:
 
         for index, record_item in enumerate(records):
             _record_path, record = record_item
-            canary_type = record.canary_type
-            template_name = record.template_name
 
-            if canary_type != "outlook":
+            handler = find_canary_type(record.canary_type)
+            if handler is None:
                 ordered_results[index] = VerifyResult(
-                    canary_type=canary_type,
-                    template_name=template_name,
+                    canary_type=record.canary_type,
+                    template_name=record.template_name,
                     target="",
                     status=VerifyStatus.ERROR,
-                    detail=f"Unsupported canary type: {canary_type}",
+                    detail=f"Unsupported canary type: {record.canary_type}",
                 )
                 continue
 
-            target_user = record.target_user
-            if record.delivery_mode == "send":
-                ordered_results[index] = VerifyResult(
-                    canary_type="outlook",
-                    template_name=template_name,
-                    target=target_user,
-                    status=VerifyStatus.ERROR,
-                    detail="Verify only supports draft-mode outlook records",
-                )
-                continue
-
-            folder_id = record.folder_id
-            if not target_user or not folder_id:
-                ordered_results[index] = VerifyResult(
-                    canary_type="outlook",
-                    template_name=template_name,
-                    target=target_user,
-                    status=VerifyStatus.ERROR,
-                    detail="Record missing target_user or folder_id",
-                )
+            preflight = handler.preflight_verify(record)
+            if preflight is not None:
+                ordered_results[index] = preflight
                 continue
 
             pending_graph_checks.append((index, record_item))

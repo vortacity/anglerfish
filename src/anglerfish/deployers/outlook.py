@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import secrets
-from typing import Any, TYPE_CHECKING
+from typing import Any, Sequence, TYPE_CHECKING
 
-from .._io import parse_utc_datetime
+from .._io import as_utc, parse_utc_datetime
 from ..exceptions import DeploymentError, GraphApiError
 from ..inventory import DeploymentRecord, coerce_record
-from ..models import OutlookTemplate
-from .base import BaseDeployer
+from ..models import CanaryAlert, OutlookTemplate, VerifyResult, VerifyStatus
+from .base import BaseDeployer, CanaryMatcher, CanaryType
 from ._paths import path_segment as _path_segment
 
 if TYPE_CHECKING:
@@ -349,3 +350,201 @@ def _from_matches_target(message: dict, target_user: str) -> bool:
     if not address:
         return True
     return address.casefold() == target_user.casefold()
+
+
+# ------------------------------------------------------------------
+# Audit-event matching
+# ------------------------------------------------------------------
+
+
+@dataclass
+class _CanaryEntry:
+    """Internal index entry for a single deployed Outlook canary."""
+
+    canary_type: str
+    template_name: str
+    record_path: str
+    internet_message_id: str = ""
+    folder_name: str = ""
+    folder_id: str = ""
+    target_user: str = ""
+    subject: str = ""
+    canary_id: str = ""
+    expires_at: datetime | None = None
+
+
+def _build_entry(record_path: str, rec: DeploymentRecord) -> _CanaryEntry:
+    return _CanaryEntry(
+        canary_type=rec.canary_type or "unknown",
+        template_name=rec.template_name,
+        record_path=record_path,
+        internet_message_id=rec.internet_message_id,
+        folder_name=rec.folder_name,
+        folder_id=rec.folder_id,
+        target_user=rec.target_user,
+        subject=rec.subject,
+        canary_id=rec.canary_id,
+        expires_at=rec.monitor_expires_at,
+    )
+
+
+def _build_alert(entry: _CanaryEntry, event: dict, *, artifact_label: str) -> CanaryAlert:
+    return CanaryAlert(
+        canary_type=entry.canary_type,
+        template_name=entry.template_name or entry.subject or "(unnamed)",
+        artifact_label=artifact_label,
+        accessed_by=str(event.get("UserId") or event.get("UserKey") or "unknown"),
+        source_ip=str(event.get("ClientIP") or event.get("ClientIPAddress") or "unknown"),
+        timestamp=str(event.get("CreationTime") or event.get("Timestamp") or ""),
+        operation=str(event.get("Operation") or ""),
+        client_info=str(event.get("ClientInfoString") or event.get("ClientAppId") or ""),
+        record_path=entry.record_path,
+    )
+
+
+def _entry_is_expired(entry: _CanaryEntry, now: datetime | None) -> bool:
+    if entry.expires_at is None:
+        return False
+    current_time = as_utc(now or datetime.now(timezone.utc))
+    return current_time > entry.expires_at
+
+
+class OutlookMatcher(CanaryMatcher):
+    """Match MailItemsAccessed audit events against deployed Outlook canaries."""
+
+    def __init__(self, records: Sequence[tuple[str, DeploymentRecord]]):
+        self._entries: list[_CanaryEntry] = []
+        self._by_internet_message_id: dict[str, _CanaryEntry] = {}
+        for path, rec in records:
+            entry = _build_entry(path, rec)
+            self._entries.append(entry)
+            if entry.internet_message_id:
+                self._by_internet_message_id[entry.internet_message_id] = entry
+
+    @property
+    def count(self) -> int:
+        return len(self._entries)
+
+    def match(self, event: dict, *, now: datetime | None = None) -> CanaryAlert | None:
+        if str(event.get("Operation", "")) != "MailItemsAccessed":
+            return None
+
+        # Check MailAccessType — "Bind" events carry FolderItems.
+        folders = event.get("Folders") or []
+        for folder in folders:
+            if not isinstance(folder, dict):
+                continue
+            folder_items = folder.get("FolderItems") or []
+            for item in folder_items:
+                if not isinstance(item, dict):
+                    continue
+                imid = str(item.get("InternetMessageId") or "").strip()
+                if imid and imid in self._by_internet_message_id:
+                    entry = self._by_internet_message_id[imid]
+                    if _entry_is_expired(entry, now):
+                        continue
+                    return _build_alert(entry, event, artifact_label=f"internet_message_id: {imid}")
+
+        # Secondary: match by folder name (Sync events lack FolderItems).
+        for folder in folders:
+            if not isinstance(folder, dict):
+                continue
+            event_folder_id = str(folder.get("Id") or "").strip()
+            folder_path = str(folder.get("Path") or "")
+            for entry in self._entries:
+                if _entry_is_expired(entry, now):
+                    continue
+                if entry.folder_id and event_folder_id and entry.folder_id == event_folder_id:
+                    return _build_alert(entry, event, artifact_label=f"folder_id: {entry.folder_id}")
+                if entry.canary_id and entry.folder_name:
+                    folder_path_lower = folder_path.casefold()
+                    if (
+                        entry.canary_id.casefold() in folder_path_lower
+                        and entry.folder_name.casefold() in folder_path_lower
+                    ):
+                        return _build_alert(entry, event, artifact_label=f"folder: {entry.folder_name}")
+
+        return None
+
+
+# ------------------------------------------------------------------
+# Health check
+# ------------------------------------------------------------------
+
+
+def verify_preflight(record: DeploymentRecord) -> VerifyResult | None:
+    """Screen records that cannot be verified via Graph (no API call needed)."""
+    if record.delivery_mode == "send":
+        return VerifyResult(
+            canary_type="outlook",
+            template_name=record.template_name,
+            target=record.target_user,
+            status=VerifyStatus.ERROR,
+            detail="Verify only supports draft-mode outlook records",
+        )
+    if not record.target_user or not record.folder_id:
+        return VerifyResult(
+            canary_type="outlook",
+            template_name=record.template_name,
+            target=record.target_user,
+            status=VerifyStatus.ERROR,
+            detail="Record missing target_user or folder_id",
+        )
+    return None
+
+
+def verify_canary(graph: GraphClient, record: DeploymentRecord) -> VerifyResult:
+    """Check whether a deployed Outlook canary still exists (draft mode only)."""
+    preflight = verify_preflight(record)
+    if preflight is not None:
+        return preflight
+
+    template_name = record.template_name
+    target_user = record.target_user
+    folder_id = record.folder_id
+    graph.get(f"/users/{_path_segment(target_user)}/mailFolders/{_path_segment(folder_id)}")
+    # Also confirm the canary message itself: a surviving folder with a
+    # deleted message is a dead canary (the internetMessageId match — the
+    # primary detection path — no longer fires). Older records may lack
+    # message_id; for those the folder check is the best available signal.
+    if record.message_id:
+        graph.get(
+            f"/users/{_path_segment(target_user)}/mailFolders/{_path_segment(folder_id)}"
+            f"/messages/{_path_segment(record.message_id)}"
+        )
+    return VerifyResult(
+        canary_type="outlook",
+        template_name=template_name,
+        target=target_user,
+        status=VerifyStatus.OK,
+    )
+
+
+# ------------------------------------------------------------------
+# Lifecycle plugin
+# ------------------------------------------------------------------
+
+
+class OutlookCanaryType(CanaryType):
+    """Outlook draft/send canaries detected via Audit.Exchange."""
+
+    name = "outlook"
+    audit_content_types = ("Audit.Exchange",)
+
+    def create_deployer(self, graph: GraphClient, template: Any) -> BaseDeployer:
+        return OutlookDeployer(graph, template)
+
+    def remove(self, graph: GraphClient, record: DeploymentRecord) -> dict[str, str]:
+        return remove_canary(graph, record)
+
+    def trigger_access(self, graph: GraphClient, record: DeploymentRecord) -> dict[str, str]:
+        return trigger_canary_access(graph, record)
+
+    def verify(self, graph: GraphClient, record: DeploymentRecord) -> VerifyResult:
+        return verify_canary(graph, record)
+
+    def preflight_verify(self, record: DeploymentRecord) -> VerifyResult | None:
+        return verify_preflight(record)
+
+    def build_matcher(self, records: Sequence[tuple[str, DeploymentRecord]]) -> CanaryMatcher:
+        return OutlookMatcher(records)

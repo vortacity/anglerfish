@@ -11,12 +11,12 @@ from unittest.mock import MagicMock, patch
 from rich.console import Console
 
 from anglerfish.alerts import AlertDispatcher
+from anglerfish.deployers.outlook import _build_entry
 from anglerfish.inventory import DeploymentRecord
 from anglerfish.monitor import (
     CanaryAlert,
     CanaryIndex,
     _TokenManager,
-    _build_entry,
     _write_heartbeat,
     load_records,
     run_monitor,

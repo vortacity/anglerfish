@@ -6,7 +6,6 @@ import logging
 import os
 import signal
 import time
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Sequence
@@ -15,10 +14,12 @@ from rich.console import Console
 
 from ._io import as_utc, parse_utc_datetime, write_json_atomic
 from .alerts import AlertDispatcher
-from .audit import AuditClient, CONTENT_TYPES
+from .audit import AuditClient
 from .auth import authenticate_management_api_with_expiry
+from .deployers.registry import all_audit_content_types, find_canary_type
 from .exceptions import MonitorError
 from .inventory import DeploymentRecord, coerce_record, read_deployment_record
+from .models import CanaryAlert
 from .state import StateManager
 
 logger = logging.getLogger(__name__)
@@ -29,65 +30,35 @@ logger = logging.getLogger(__name__)
 # ------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
-class CanaryAlert:
-    """A confirmed canary access event."""
-
-    canary_type: str
-    template_name: str
-    artifact_label: str
-    accessed_by: str
-    source_ip: str
-    timestamp: str
-    operation: str
-    client_info: str
-    record_path: str
-
-
-@dataclass
-class _CanaryEntry:
-    """Internal index entry for a single deployed canary."""
-
-    canary_type: str
-    template_name: str
-    record_path: str
-    # Outlook
-    internet_message_id: str = ""
-    folder_name: str = ""
-    folder_id: str = ""
-    target_user: str = ""
-    subject: str = ""
-    canary_id: str = ""
-    expires_at: datetime | None = None
-
-
 # ------------------------------------------------------------------
 # CanaryIndex — artifact lookup for fast event matching
 # ------------------------------------------------------------------
 
 
 class CanaryIndex:
-    """Index of deployed canary artifact IDs for fast lookup."""
+    """Composite audit-event matcher over all registered canary types."""
 
     def __init__(self, records: Sequence[tuple[str, DeploymentRecord | dict]]):
-        """Build lookup structures from deployment records.
+        """Build per-type matchers from deployment records.
 
-        ``records`` is a list of ``(record_path, record)`` tuples.
+        ``records`` is a list of ``(record_path, record)`` tuples. Records
+        whose type has no registered :class:`~.deployers.base.CanaryType`
+        are ignored.
         """
-        self._entries: list[_CanaryEntry] = []
-        # Quick-lookup maps
-        self._by_internet_message_id: dict[str, _CanaryEntry] = {}
+        by_type: dict[str, list[tuple[str, DeploymentRecord]]] = {}
+        for path, raw in records:
+            rec = coerce_record(raw)
+            by_type.setdefault(rec.canary_type, []).append((path, rec))
 
-        for path, rec in records:
-            entry = _build_entry(path, coerce_record(rec))
-            self._entries.append(entry)
-
-            if entry.internet_message_id:
-                self._by_internet_message_id[entry.internet_message_id] = entry
+        self._matchers = []
+        for type_name, items in by_type.items():
+            canary_type = find_canary_type(type_name)
+            if canary_type is not None:
+                self._matchers.append(canary_type.build_matcher(items))
 
     @property
     def count(self) -> int:
-        return len(self._entries)
+        return sum(matcher.count for matcher in self._matchers)
 
     def match(
         self,
@@ -112,55 +83,10 @@ class CanaryIndex:
             if user_id and user_id in exclude_app_ids:
                 return None
 
-        operation = str(event.get("Operation", ""))
-
-        if operation == "MailItemsAccessed":
-            return self._match_mail_items_accessed(event, now=now)
-
-        return None
-
-    # ------------------------------------------------------------------
-    # Per-operation matchers
-    # ------------------------------------------------------------------
-
-    def _match_mail_items_accessed(self, event: dict, *, now: datetime | None = None) -> CanaryAlert | None:
-        # Check MailAccessType — "Bind" events carry FolderItems.
-        folders = event.get("Folders") or []
-        for folder in folders:
-            if not isinstance(folder, dict):
-                continue
-            folder_items = folder.get("FolderItems") or []
-            for item in folder_items:
-                if not isinstance(item, dict):
-                    continue
-                imid = str(item.get("InternetMessageId") or "").strip()
-                if imid and imid in self._by_internet_message_id:
-                    entry = self._by_internet_message_id[imid]
-                    if _entry_is_expired(entry, now):
-                        continue
-                    return _build_alert(entry, event, artifact_label=f"internet_message_id: {imid}")
-
-        # Secondary: match by folder name (Sync events lack FolderItems).
-        for folder in folders:
-            if not isinstance(folder, dict):
-                continue
-            event_folder_id = str(folder.get("Id") or "").strip()
-            folder_path = str(folder.get("Path") or "")
-            for entry in self._entries:
-                if _entry_is_expired(entry, now):
-                    continue
-                if entry.canary_type != "outlook":
-                    continue
-                if entry.folder_id and event_folder_id and entry.folder_id == event_folder_id:
-                    return _build_alert(entry, event, artifact_label=f"folder_id: {entry.folder_id}")
-                if entry.canary_id and entry.folder_name:
-                    folder_path_lower = folder_path.casefold()
-                    if (
-                        entry.canary_id.casefold() in folder_path_lower
-                        and entry.folder_name.casefold() in folder_path_lower
-                    ):
-                        return _build_alert(entry, event, artifact_label=f"folder: {entry.folder_name}")
-
+        for matcher in self._matchers:
+            alert = matcher.match(event, now=now)
+            if alert:
+                return alert
         return None
 
 
@@ -179,8 +105,7 @@ def load_records(
 
     Returns a list of ``(path_str, record)`` for records with
     ``status == 'active'`` (or no status field), plus recently cleaned records
-    when requested, that still belong to the supported Outlook monitoring
-    surface.
+    when requested, whose canary type has a registered lifecycle plugin.
     """
     records_path = Path(records_dir)
     if not records_path.is_dir():
@@ -209,7 +134,7 @@ def load_records(
             include = False
         if not include:
             continue
-        if rec.canary_type != "outlook":
+        if find_canary_type(rec.canary_type) is None:
             continue
         rec.monitor_expires_at = expires_at
         results.append((str(json_file), rec))
@@ -224,13 +149,6 @@ def _within_cleaned_up_lookback(rec: DeploymentRecord, now: datetime, lookback: 
         return False
     age = as_utc(now) - updated
     return timedelta(0) <= age <= lookback
-
-
-def _entry_is_expired(entry: _CanaryEntry, now: datetime | None) -> bool:
-    if entry.expires_at is None:
-        return False
-    current_time = as_utc(now or datetime.now(timezone.utc))
-    return current_time > entry.expires_at
 
 
 # ------------------------------------------------------------------
@@ -368,9 +286,10 @@ def run_monitor(
 
     try:
         # Ensure subscriptions.
+        content_types = all_audit_content_types()
         console.print("[bold]Ensuring audit log subscriptions...[/bold]")
         try:
-            audit_client.ensure_subscriptions(list(CONTENT_TYPES))
+            audit_client.ensure_subscriptions(list(content_types))
             console.print("[green]Subscriptions active.[/green]")
         except Exception as exc:
             console.print(f"[yellow]Warning: could not verify subscriptions: {exc}[/yellow]")
@@ -439,7 +358,7 @@ def run_monitor(
                 # must NOT advance the watermark, or those events are skipped
                 # forever.
                 window_complete = True
-                for content_type in CONTENT_TYPES:
+                for content_type in content_types:
                     if _interrupted:
                         window_complete = False
                         break
@@ -515,7 +434,7 @@ def run_monitor(
             next_time = (now + timedelta(seconds=interval)).strftime("%H:%M UTC")
             status = (
                 f"Monitoring {canary_index.count} canaries across "
-                f"{len(CONTENT_TYPES)} content types. "
+                f"{len(content_types)} content types. "
                 f"Last poll: {time_str} ({poll_alerts} alerts). "
             )
             if not once:
@@ -587,37 +506,3 @@ def render_demo_alert(console: Console, count: int = 1) -> None:
         if i < count - 1:
             time.sleep(2)
     console.print("[bold yellow]Demo mode — simulated alerts.[/bold yellow]")
-
-
-# ------------------------------------------------------------------
-# Internal helpers
-# ------------------------------------------------------------------
-
-
-def _build_entry(record_path: str, rec: DeploymentRecord) -> _CanaryEntry:
-    return _CanaryEntry(
-        canary_type=rec.canary_type or "unknown",
-        template_name=rec.template_name,
-        record_path=record_path,
-        internet_message_id=rec.internet_message_id,
-        folder_name=rec.folder_name,
-        folder_id=rec.folder_id,
-        target_user=rec.target_user,
-        subject=rec.subject,
-        canary_id=rec.canary_id,
-        expires_at=rec.monitor_expires_at,
-    )
-
-
-def _build_alert(entry: _CanaryEntry, event: dict, *, artifact_label: str) -> CanaryAlert:
-    return CanaryAlert(
-        canary_type=entry.canary_type,
-        template_name=entry.template_name or entry.subject or "(unnamed)",
-        artifact_label=artifact_label,
-        accessed_by=str(event.get("UserId") or event.get("UserKey") or "unknown"),
-        source_ip=str(event.get("ClientIP") or event.get("ClientIPAddress") or "unknown"),
-        timestamp=str(event.get("CreationTime") or event.get("Timestamp") or ""),
-        operation=str(event.get("Operation") or ""),
-        client_info=str(event.get("ClientInfoString") or event.get("ClientAppId") or ""),
-        record_path=entry.record_path,
-    )

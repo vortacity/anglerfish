@@ -16,7 +16,7 @@ from rich.markup import escape
 from rich.panel import Panel
 
 if TYPE_CHECKING:
-    from .monitor import CanaryAlert
+    from .models import CanaryAlert
 
 logger = logging.getLogger(__name__)
 

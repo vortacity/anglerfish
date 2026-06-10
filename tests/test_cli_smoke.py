@@ -8,6 +8,7 @@ import pytest
 import anglerfish.auth as auth_mod
 from anglerfish.inventory import DeploymentRecord
 from anglerfish.cli import deploy as deploy_mod
+from anglerfish.deployers import outlook as outlook_mod
 from anglerfish.cli import main
 import anglerfish.cli._main as main_mod
 import anglerfish.templates as templates_mod
@@ -191,7 +192,7 @@ def test_main_cleanup_outlook_happy_path(monkeypatch, tmp_path):
             assert token == "token-123"
 
     monkeypatch.setattr(deploy_mod, "GraphClient", FakeGraphClient)
-    monkeypatch.setattr(deploy_mod, "outlook_remove_canary", lambda graph, record: {"removed": "true"})
+    monkeypatch.setattr(outlook_mod, "remove_canary", lambda graph, record: {"removed": "true"})
 
     status_updates: list[tuple[str, str]] = []
     monkeypatch.setattr(
@@ -225,8 +226,8 @@ def test_main_cleanup_demo_skips_auth_and_api(monkeypatch, tmp_path):
         lambda *args, **kwargs: pytest.fail("cleanup --demo must not authenticate"),
     )
     monkeypatch.setattr(
-        deploy_mod,
-        "outlook_remove_canary",
+        outlook_mod,
+        "remove_canary",
         lambda *args, **kwargs: pytest.fail("cleanup --demo must not call Graph cleanup"),
     )
 
@@ -264,8 +265,8 @@ def test_main_demo_access_happy_path(monkeypatch, tmp_path):
 
     monkeypatch.setattr(deploy_mod, "GraphClient", FakeGraphClient)
     monkeypatch.setattr(
-        deploy_mod,
-        "outlook_trigger_canary_access",
+        outlook_mod,
+        "trigger_canary_access",
         lambda graph, record: {"triggered": "true", "delivery_mode": record.delivery_mode},
     )
 
@@ -730,7 +731,7 @@ def test_main_demo_access_decline_skips_graph(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(deploy_mod, "authenticate", lambda *a, **k: pytest.fail("must not authenticate when declined"))
     monkeypatch.setattr(
-        deploy_mod, "outlook_trigger_canary_access", lambda *a, **k: pytest.fail("must not read canary when declined")
+        outlook_mod, "trigger_canary_access", lambda *a, **k: pytest.fail("must not read canary when declined")
     )
     monkeypatch.setattr(deploy_mod.questionary, "confirm", lambda *a, **k: _Prompt(False))
 
