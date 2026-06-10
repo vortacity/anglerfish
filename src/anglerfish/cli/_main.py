@@ -167,7 +167,7 @@ def _apply_non_interactive_demo_defaults(args: argparse.Namespace) -> None:
 
 
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Deploy Microsoft 365 canary artifacts.")
+    parser = argparse.ArgumentParser(prog="anglerfish", description="Deploy Microsoft 365 canary artifacts.")
     parser.add_argument("--version", action="store_true", help="Print version and exit.")
     parser.add_argument(
         "--tenant-id",
