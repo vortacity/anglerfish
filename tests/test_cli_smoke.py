@@ -166,6 +166,26 @@ def test_main_list_returns_zero_when_records_dir_missing(tmp_path):
     assert main(["list", "--records-dir", str(missing)]) == 0
 
 
+def test_main_list_json_emits_records_only(tmp_path, capsys):
+    records_dir = tmp_path / "records"
+    records_dir.mkdir()
+    record = {
+        "canary_type": "outlook",
+        "delivery_mode": "draft",
+        "folder_id": "folder-1",
+        "target_user": "alice@contoso.com",
+        "template_name": "Fake Password Reset",
+        "timestamp": "2026-05-06T14:00:00+00:00",
+    }
+    (records_dir / "record-1.json").write_text(json.dumps(record), encoding="utf-8")
+
+    assert main(["list", "--format", "json", "--records-dir", str(records_dir)]) == 0
+
+    output = capsys.readouterr().out
+    assert json.loads(output) == [record]
+    assert "Deployed Outlook Canary Artifacts" not in output
+
+
 def test_main_cleanup_outlook_happy_path(monkeypatch, tmp_path):
     record_path = tmp_path / "record.json"
     record_path.write_text("{}", encoding="utf-8")
@@ -451,6 +471,14 @@ def test_parse_args_verify_subcommand():
     assert args.demo is True
 
 
+def test_parse_args_format_json():
+    list_args = main_mod._parse_args(["list", "--format", "json"])
+    verify_args = main_mod._parse_args(["verify", "--format", "json"])
+
+    assert list_args.format == "json"
+    assert verify_args.format == "json"
+
+
 def test_verify_demo_exits_one():
     import subprocess
 
@@ -527,6 +555,36 @@ def test_verify_send_record_returns_error_without_auth(monkeypatch):
     assert result == 1
     assert auth_setup_calls == []
     assert auth_calls == []
+
+
+def test_verify_json_send_record_is_machine_readable_without_auth(monkeypatch, capsys):
+    monkeypatch.setattr(
+        deploy_mod,
+        "read_deployment_record",
+        lambda _path: {
+            "canary_type": "outlook",
+            "delivery_mode": "send",
+            "target_user": "alice@contoso.com",
+            "inbox_message_id": "msg-123",
+            "template_name": "Fake Password Reset",
+        },
+    )
+    monkeypatch.setattr(deploy_mod, "authenticate", lambda *args, **kwargs: pytest.fail("must not authenticate"))
+
+    result = main(["verify", "--format", "json", "record.json"])
+
+    output = capsys.readouterr().out
+    assert result == 1
+    assert json.loads(output) == [
+        {
+            "canary_type": "outlook",
+            "detail": "Verify only supports draft-mode outlook records",
+            "status": "ERROR",
+            "target": "alice@contoso.com",
+            "template_name": "Fake Password Reset",
+        }
+    ]
+    assert "Canary Verification" not in output
 
 
 def test_verify_unsupported_record_returns_error_without_auth(monkeypatch):

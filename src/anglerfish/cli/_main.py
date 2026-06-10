@@ -290,6 +290,12 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         dest="records_dir",
         help=("Directory containing deployment record JSON files. Default: ~/.anglerfish/records/"),
     )
+    list_parser.add_argument(
+        "--format",
+        choices=("table", "json"),
+        default="table",
+        help="Output format (default: table).",
+    )
 
     monitor_parser = subparsers.add_parser("monitor", help="Monitor audit logs for canary access events.")
     monitor_parser.add_argument(
@@ -423,6 +429,12 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         choices=("auto", "secret", "certificate"),
         default=None,
         help="Credential type for application auth.",
+    )
+    verify_parser.add_argument(
+        "--format",
+        choices=("table", "json"),
+        default="table",
+        help="Output format (default: table).",
     )
 
     demo_access_parser = subparsers.add_parser(
