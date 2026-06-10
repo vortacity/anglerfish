@@ -40,6 +40,7 @@ the evidence without exposing tenant data:
 - [Threat model](docs/threat-model.md)
 - [Sentinel KQL validation snippet](docs/sentinel-kql.md)
 - [Roadmap](ROADMAP.md)
+- [Troubleshooting](docs/troubleshooting.md)
 
 > [!WARNING]
 > This tool is for authorized security testing and defensive canary deployments only. `Mail.ReadWrite` application permission grants tenant-wide mailbox write access by default. Production use requires formal approval and explicit scoping decisions.
