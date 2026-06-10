@@ -735,6 +735,24 @@ def _write_state(state_path, last_poll_end: datetime) -> None:
     )
 
 
+def test_run_monitor_skips_non_dict_blob_entries(tmp_path):
+    """Malformed blob entries from list_content must not crash the poll loop."""
+    event = _mail_items_accessed_event(Id="evt-blob-guard")
+    client = _mock_audit_client([event])
+    client.list_content.return_value = [
+        "garbage-string",
+        42,
+        {"contentUri": "https://example.com/content/1"},
+    ]
+    idx = CanaryIndex([("rec.json", _outlook_record())])
+    console = Console(file=None, force_terminal=False)
+
+    rc = run_monitor(client, idx, once=True, console=console, heartbeat_path=None)
+
+    assert rc == 0
+    assert client.fetch_content.call_count == 1
+
+
 def test_run_monitor_chunks_backlog_into_24h_windows(tmp_path):
     """A backlog longer than 24h is ingested as successive <=24h windows, not skipped."""
     state_path = tmp_path / "state.json"

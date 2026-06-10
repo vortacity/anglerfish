@@ -389,6 +389,13 @@ def test_parse_retry_after_parses_integer_string():
     assert _parse_retry_after("5") == 5
 
 
+def test_parse_retry_after_caps_excessive_delay():
+    from anglerfish.graph import _parse_retry_after
+
+    assert _parse_retry_after("86400") == 120
+    assert _parse_retry_after("Wed, 21 Oct 2099 07:28:00 GMT") == 120
+
+
 def test_parse_retry_after_parses_http_date():
     from anglerfish.graph import _parse_retry_after
     from datetime import datetime, timedelta, timezone

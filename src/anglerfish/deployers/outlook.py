@@ -245,15 +245,16 @@ class OutlookDeployer(BaseDeployer):
 
 def remove_canary(graph: GraphClient, record: dict[str, str]) -> dict[str, str]:
     """Remove a deployed Outlook canary artifact."""
-    delivery_mode = record.get("delivery_mode", "draft").strip().lower()
-    target_user = record.get("target_user", "").strip()
+    # `or` fallbacks: hand-edited records can carry JSON null for any field.
+    delivery_mode = str(record.get("delivery_mode") or "draft").strip().lower()
+    target_user = str(record.get("target_user") or "").strip()
     if not target_user:
         raise DeploymentError("Deployment record missing 'target_user'.")
 
     encoded_user = _path_segment(target_user)
 
     if delivery_mode == "draft":
-        folder_id = record.get("folder_id", "").strip()
+        folder_id = str(record.get("folder_id") or "").strip()
         if not folder_id:
             raise DeploymentError("Deployment record missing 'folder_id'.")
         encoded_folder_id = _path_segment(folder_id)
@@ -264,7 +265,7 @@ def remove_canary(graph: GraphClient, record: dict[str, str]) -> dict[str, str]:
         return {"type": "outlook", "delivery_mode": "draft", "folder_id": folder_id, "removed": "true"}
 
     # send mode: delete inbox message (moves to Deleted Items)
-    inbox_message_id = record.get("inbox_message_id", "").strip()
+    inbox_message_id = str(record.get("inbox_message_id") or "").strip()
     if not inbox_message_id:
         raise DeploymentError("Deployment record missing 'inbox_message_id'.")
     encoded_message_id = _path_segment(inbox_message_id)
@@ -287,16 +288,16 @@ def trigger_canary_access(graph: GraphClient, record: dict[str, str]) -> dict[st
     if canary_type != "outlook":
         raise DeploymentError("Only outlook canaries are supported in this release.")
 
-    target_user = str(record.get("target_user", "")).strip()
+    target_user = str(record.get("target_user") or "").strip()
     if not target_user:
         raise DeploymentError("Deployment record missing 'target_user'.")
     encoded_user = _path_segment(target_user)
 
-    delivery_mode = str(record.get("delivery_mode", "draft")).strip().lower()
+    delivery_mode = str(record.get("delivery_mode") or "draft").strip().lower()
     try:
         if delivery_mode == "draft":
-            folder_id = str(record.get("folder_id", "")).strip()
-            message_id = str(record.get("message_id", "")).strip()
+            folder_id = str(record.get("folder_id") or "").strip()
+            message_id = str(record.get("message_id") or "").strip()
             if not folder_id:
                 raise DeploymentError("Deployment record missing 'folder_id'.")
             if not message_id:
@@ -306,7 +307,7 @@ def trigger_canary_access(graph: GraphClient, record: dict[str, str]) -> dict[st
                 params={"$select": "id,subject,internetMessageId,receivedDateTime"},
             )
         elif delivery_mode == "send":
-            message_id = str(record.get("inbox_message_id", "")).strip()
+            message_id = str(record.get("inbox_message_id") or "").strip()
             if not message_id:
                 raise DeploymentError("Deployment record missing 'inbox_message_id'.")
             message = graph.get(

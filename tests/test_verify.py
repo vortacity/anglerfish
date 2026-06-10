@@ -53,6 +53,42 @@ def test_verify_outlook_gone():
     assert result.status == VerifyStatus.GONE
 
 
+def test_verify_outlook_checks_message_when_record_has_message_id():
+    """Verify must confirm the canary message itself, not just its folder —
+    a deleted message with a surviving folder is a dead canary."""
+    record = {
+        "canary_type": "outlook",
+        "target_user": "alice@contoso.com",
+        "folder_id": "folder-abc",
+        "message_id": "msg-123",
+        "template_name": "Fake Password Reset",
+    }
+    graph = _mock_graph()
+    result = verify_record(graph, record)
+
+    assert result.status == VerifyStatus.OK
+    called_paths = [call.args[0] for call in graph.get.call_args_list]
+    assert any("/messages/msg-123" in path for path in called_paths)
+
+
+def test_verify_outlook_gone_when_message_deleted_but_folder_remains():
+    record = {
+        "canary_type": "outlook",
+        "target_user": "alice@contoso.com",
+        "folder_id": "folder-abc",
+        "message_id": "msg-123",
+        "template_name": "Fake Password Reset",
+    }
+    graph = MagicMock()
+    graph.get.side_effect = [
+        {"id": "folder-abc"},  # folder still exists
+        GraphApiError("Not found", status_code=404),  # message is gone
+    ]
+    result = verify_record(graph, record)
+
+    assert result.status == VerifyStatus.GONE
+
+
 def test_verify_outlook_send_record_returns_error():
     record = {
         "canary_type": "outlook",

@@ -485,6 +485,44 @@ def test_outlook_deployer_send_missing_internet_message_id_returns_unverified(mo
     assert result["internet_message_id"] == ""
 
 
+def test_remove_canary_tolerates_null_delivery_mode_and_target(monkeypatch: pytest.MonkeyPatch):
+    """A hand-edited record with JSON null fields must produce a clean
+    DeploymentError, not an AttributeError traceback."""
+
+    class NoCallGraph:
+        def delete(self, path):
+            raise AssertionError("should not be called")
+
+    record = {"type": "outlook", "delivery_mode": None, "target_user": None}
+
+    with pytest.raises(DeploymentError, match="target_user"):
+        remove_canary(NoCallGraph(), record)
+
+
+def test_remove_canary_tolerates_null_folder_id():
+    class NoCallGraph:
+        def delete(self, path):
+            raise AssertionError("should not be called")
+
+    record = {"type": "outlook", "delivery_mode": "draft", "target_user": "a@b.com", "folder_id": None}
+
+    with pytest.raises(DeploymentError, match="folder_id"):
+        remove_canary(NoCallGraph(), record)
+
+
+def test_trigger_canary_access_tolerates_null_delivery_mode():
+    class NoCallGraph:
+        def get(self, path, params=None):
+            raise AssertionError("should not be called")
+
+    record = {"type": "outlook", "delivery_mode": None, "target_user": "a@b.com"}
+
+    # Null delivery_mode falls back to draft, which then reports the real
+    # missing field instead of crashing or claiming an invalid mode.
+    with pytest.raises(DeploymentError, match="folder_id"):
+        trigger_canary_access(NoCallGraph(), record)
+
+
 def test_parse_graph_datetime_empty_string_returns_none():
     assert _parse_graph_datetime("") is None
     assert _parse_graph_datetime("   ") is None

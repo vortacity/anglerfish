@@ -193,7 +193,7 @@ def load_records(
         # skip so an operator knows a deployed canary dropped out of monitoring.
         try:
             rec = read_deployment_record(json_file)
-        except Exception as exc:  # nosec B112
+        except Exception as exc:
             logger.warning("Skipping unreadable deployment record %s: %s", json_file, exc.__class__.__name__)
             continue
         status = rec.get("status", "active")

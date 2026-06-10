@@ -90,6 +90,16 @@ def _verify_outlook(graph: GraphClient, record: dict, template_name: str) -> Ver
             detail="Record missing target_user or folder_id",
         )
     graph.get(f"/users/{path_segment(target_user)}/mailFolders/{path_segment(folder_id)}")
+    # Also confirm the canary message itself: a surviving folder with a
+    # deleted message is a dead canary (the internetMessageId match — the
+    # primary detection path — no longer fires). Older records may lack
+    # message_id; for those the folder check is the best available signal.
+    message_id = str(record.get("message_id") or "").strip()
+    if message_id:
+        graph.get(
+            f"/users/{path_segment(target_user)}/mailFolders/{path_segment(folder_id)}"
+            f"/messages/{path_segment(message_id)}"
+        )
     return VerifyResult(
         canary_type="outlook",
         template_name=template_name,
