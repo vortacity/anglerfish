@@ -414,6 +414,13 @@ def _run_outlook_deploy(
         result = deployer.deploy(target_user, delivery_mode=delivery_mode)
 
     _print_success(console, result)
+    if str(result.get("verified", "true")).strip().lower() != "true":
+        note = str(result.get("verify_note", "")).strip()
+        console.print(
+            "[bold yellow]Warning:[/bold yellow] [yellow]the canary was deployed but could not be confirmed: "
+            f"{note or 'verification did not complete.'} "
+            "The record is saved with verified=false; check the target mailbox before relying on it.[/yellow]"
+        )
     if args.output_json:
         write_deployment_record(
             args.output_json,
