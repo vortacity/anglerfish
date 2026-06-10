@@ -17,7 +17,7 @@ from rich.console import Console
 
 from .alerts import AlertDispatcher
 from .audit import AuditClient, CONTENT_TYPES
-from .auth import authenticate_management_api
+from .auth import authenticate_management_api_with_expiry
 from .inventory import read_deployment_record
 from .state import StateManager
 
@@ -263,7 +263,7 @@ class _TokenManager:
     """Re-acquire the Management API token before it expires."""
 
     _REFRESH_MARGIN = timedelta(minutes=5)
-    _TOKEN_LIFETIME = timedelta(minutes=55)
+    _DEFAULT_LIFETIME = timedelta(minutes=55)
 
     def __init__(
         self,
@@ -271,20 +271,32 @@ class _TokenManager:
         credential_mode: str | None = None,
         *,
         prompted_env: dict[str, str] | None = None,
+        expires_in: int | None = None,
     ):
         self._token = initial_token
         self._credential_mode = credential_mode
-        self._expires_at = datetime.now(timezone.utc) + self._TOKEN_LIFETIME
+        self._lifetime = self._lifetime_from_expires_in(expires_in)
+        self._expires_at = datetime.now(timezone.utc) + self._lifetime
         self._prompted_env = dict(prompted_env or {})
 
+    @classmethod
+    def _lifetime_from_expires_in(cls, expires_in: int | None) -> timedelta:
+        if expires_in is None or expires_in <= 0:
+            return cls._DEFAULT_LIFETIME
+        return timedelta(seconds=expires_in)
+
     def get_token(self) -> str:
-        if datetime.now(timezone.utc) >= self._expires_at - self._REFRESH_MARGIN:
+        # Tenant policy can issue tokens shorter than the margin; never let the
+        # margin consume the whole lifetime or every call would re-authenticate.
+        margin = min(self._REFRESH_MARGIN, self._lifetime / 2)
+        if datetime.now(timezone.utc) >= self._expires_at - margin:
             previous_env = {name: os.environ.get(name) for name in self._prompted_env}
             try:
                 for name, value in self._prompted_env.items():
                     os.environ[name] = value
-                self._token = authenticate_management_api(self._credential_mode)
-                self._expires_at = datetime.now(timezone.utc) + self._TOKEN_LIFETIME
+                self._token, expires_in = authenticate_management_api_with_expiry(self._credential_mode)
+                self._lifetime = self._lifetime_from_expires_in(expires_in)
+                self._expires_at = datetime.now(timezone.utc) + self._lifetime
             finally:
                 for name, previous_value in previous_env.items():
                     if previous_value is None:
@@ -306,11 +318,12 @@ def _write_heartbeat(
     *,
     canary_count: int,
     session_alerts: int,
+    status: str = "healthy",
 ) -> None:
     """Write a heartbeat JSON file after each poll cycle."""
     payload = {
         "last_poll": datetime.now(timezone.utc).isoformat(),
-        "status": "healthy",
+        "status": status,
         "canaries": canary_count,
         "alerts_this_session": session_alerts,
     }
@@ -342,6 +355,11 @@ def _write_heartbeat(
 # ------------------------------------------------------------------
 # Poll loop
 # ------------------------------------------------------------------
+
+# The Management Activity API serves at most 24 hours per content listing and
+# retains content for roughly 7 days.
+_MAX_POLL_WINDOW = timedelta(hours=24)
+_CONTENT_RETENTION = timedelta(days=7)
 
 
 def run_monitor(
@@ -393,89 +411,125 @@ def run_monitor(
         except Exception as exc:
             console.print(f"[yellow]Warning: could not verify subscriptions: {exc}[/yellow]")
 
+        def _refresh_token(current: str | None) -> str | None:
+            """Refresh via the token manager, surviving transient auth failures.
+
+            A long-running monitor must not die because one ~hourly refresh hit
+            an AAD blip; keep the current token and retry next cycle.
+            """
+            if token_manager is None:
+                return current
+            try:
+                return token_manager.get_token()
+            except Exception as exc:
+                console.print(f"[yellow]Warning: token refresh failed: {exc}. Will retry next cycle.[/yellow]")
+                return current
+
         # Seed with the current token so we only rebuild the client (and discard
         # its connection pool) when the token actually rotates.
-        current_token = token_manager.get_token() if token_manager is not None else None
+        current_token = _refresh_token(None)
 
         while True:
             if _interrupted:
                 break
 
             # Rebuild the client only when the refreshed token differs.
-            if token_manager is not None:
-                fresh_token = token_manager.get_token()
-                if fresh_token != current_token:
-                    current_token = fresh_token
-                    audit_client = AuditClient(
-                        fresh_token,
-                        audit_client.tenant_id,
-                        base_url=audit_client.base_url,
-                        retries=audit_client.retries,
-                        timeout=audit_client.timeout,
-                    )
+            fresh_token = _refresh_token(current_token)
+            if fresh_token is not None and fresh_token != current_token:
+                current_token = fresh_token
+                audit_client = AuditClient(
+                    fresh_token,
+                    audit_client.tenant_id,
+                    base_url=audit_client.base_url,
+                    retries=audit_client.retries,
+                    timeout=audit_client.timeout,
+                )
 
             now = datetime.now(timezone.utc)
-            start_time = last_poll_end
-            end_time = now
 
-            # Clamp window to 24 hours max.
-            if (end_time - start_time).total_seconds() > 24 * 3600:
-                start_time = end_time - timedelta(hours=24)
+            # Content older than the retention window is gone; warn rather than
+            # request a range the API cannot serve.
+            retention_floor = now - _CONTENT_RETENTION
+            if last_poll_end < retention_floor:
+                console.print(
+                    "[yellow]Warning: monitor was down longer than the audit content retention window; "
+                    f"events between {last_poll_end:%Y-%m-%d %H:%M} and "
+                    f"{retention_floor:%Y-%m-%d %H:%M} UTC are no longer retrievable.[/yellow]"
+                )
+                last_poll_end = retention_floor
+
+            # Walk the backlog in <=24h windows (the API maximum) so downtime
+            # longer than a day cannot silently skip events.
+            windows: list[tuple[datetime, datetime]] = []
+            cursor = last_poll_end
+            while now - cursor > _MAX_POLL_WINDOW:
+                windows.append((cursor, cursor + _MAX_POLL_WINDOW))
+                cursor += _MAX_POLL_WINDOW
+            windows.append((cursor, now))
 
             poll_alerts = 0
-            # Track whether the entire window was ingested. If any content list
-            # or fetch failed (or we were interrupted mid-window), we must NOT
-            # advance the watermark, or those events are skipped forever.
-            window_complete = True
-            for content_type in CONTENT_TYPES:
-                if _interrupted:
-                    window_complete = False
-                    break
-                try:
-                    blobs = audit_client.list_content(content_type, start_time, end_time)
-                except Exception as exc:
-                    console.print(f"[yellow]Warning: list_content({content_type}) failed: {exc}[/yellow]")
-                    window_complete = False
-                    continue
-
-                for blob in blobs:
+            all_windows_complete = True
+            for start_time, end_time in windows:
+                # Track whether the entire window was ingested. If any content
+                # list or fetch failed (or we were interrupted mid-window), we
+                # must NOT advance the watermark, or those events are skipped
+                # forever.
+                window_complete = True
+                for content_type in CONTENT_TYPES:
                     if _interrupted:
                         window_complete = False
                         break
-                    content_uri = blob.get("contentUri") or ""
-                    if not content_uri:
-                        continue
                     try:
-                        events = audit_client.fetch_content(content_uri)
+                        blobs = audit_client.list_content(content_type, start_time, end_time)
                     except Exception as exc:
-                        console.print(f"[yellow]Warning: fetch_content failed: {exc}[/yellow]")
+                        console.print(f"[yellow]Warning: list_content({content_type}) failed: {exc}[/yellow]")
                         window_complete = False
                         continue
 
-                    for event in events:
-                        if not isinstance(event, dict):
+                    for blob in blobs:
+                        if _interrupted:
+                            window_complete = False
+                            break
+                        if not isinstance(blob, dict):
                             continue
-                        event_id = str(event.get("Id") or "")
-                        if event_id:
-                            if sm:
-                                if sm.is_seen(event_id):
-                                    continue
-                                sm.mark_seen(event_id)
-                            else:
-                                # No state manager — skip dedup (single-run mode).
-                                pass
+                        content_uri = blob.get("contentUri") or ""
+                        if not content_uri:
+                            continue
+                        try:
+                            events = audit_client.fetch_content(content_uri)
+                        except Exception as exc:
+                            console.print(f"[yellow]Warning: fetch_content failed: {exc}[/yellow]")
+                            window_complete = False
+                            continue
 
-                        alert = canary_index.match(event, exclude_app_ids=exclude_app_ids, now=now)
-                        if alert:
-                            disp.dispatch(alert)
-                            poll_alerts += 1
-                            session_alerts += 1
+                        for event in events:
+                            if not isinstance(event, dict):
+                                continue
+                            event_id = str(event.get("Id") or "")
+                            if event_id:
+                                if sm:
+                                    if sm.is_seen(event_id):
+                                        continue
+                                    sm.mark_seen(event_id)
+                                else:
+                                    # No state manager — skip dedup (single-run mode).
+                                    pass
 
-            # Only advance the watermark when the whole window was ingested.
-            # Re-polling an incomplete window is safe: seen-ID dedup suppresses
-            # any alerts that were already dispatched.
-            if window_complete:
-                last_poll_end = end_time
+                            alert = canary_index.match(event, exclude_app_ids=exclude_app_ids, now=now)
+                            if alert:
+                                disp.dispatch(alert)
+                                poll_alerts += 1
+                                session_alerts += 1
+
+                # Only advance the watermark when the whole window was ingested.
+                # Re-polling an incomplete window is safe: seen-ID dedup
+                # suppresses any alerts that were already dispatched. Stop at
+                # the first incomplete window so ingestion stays in order.
+                if window_complete:
+                    last_poll_end = end_time
+                else:
+                    all_windows_complete = False
+                    break
             session_polls += 1
 
             # Persist state.
@@ -489,6 +543,7 @@ def run_monitor(
                     heartbeat_path,
                     canary_count=canary_index.count,
                     session_alerts=session_alerts,
+                    status="healthy" if all_windows_complete else "degraded",
                 )
 
             # Status line.

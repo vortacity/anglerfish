@@ -63,7 +63,25 @@ def authenticate_management_api(app_credential_mode: str | None = None) -> str:
     return _acquire_app_token(scope=MANAGEMENT_API_SCOPE, app_credential_mode=app_credential_mode)
 
 
+def authenticate_management_api_with_expiry(app_credential_mode: str | None = None) -> tuple[str, int]:
+    """Like ``authenticate_management_api`` but also returns the token lifetime.
+
+    Returns ``(access_token, expires_in_seconds)``. The lifetime comes from the
+    MSAL response so callers can refresh on the tenant's actual token policy
+    rather than an assumed one; it defaults to 3600 when the response omits it.
+    """
+    auth_mode = _resolve_auth_mode(None)
+    if auth_mode != "application":
+        raise AuthenticationError("Only application auth is supported in this release.")
+    return _acquire_app_token_with_expiry(scope=MANAGEMENT_API_SCOPE, app_credential_mode=app_credential_mode)
+
+
 def _acquire_app_token(*, scope: str, app_credential_mode: str | None = None) -> str:
+    token, _expires_in = _acquire_app_token_with_expiry(scope=scope, app_credential_mode=app_credential_mode)
+    return token
+
+
+def _acquire_app_token_with_expiry(*, scope: str, app_credential_mode: str | None = None) -> tuple[str, int]:
     """Shared logic for acquiring an app-only token for a given scope."""
     client_id = _get_str_env("ANGLERFISH_CLIENT_ID", CLIENT_ID)
     tenant_id = _get_str_env("ANGLERFISH_TENANT_ID", TENANT_ID)
@@ -141,7 +159,11 @@ def _acquire_app_token(*, scope: str, app_credential_mode: str | None = None) ->
             details = str(raw) if raw is not None else details
         raise AuthenticationError(f"Application authentication failed: {details}")
 
-    return str(result["access_token"])
+    try:
+        expires_in = int(result.get("expires_in", 3600))
+    except (TypeError, ValueError):
+        expires_in = 3600
+    return str(result["access_token"]), expires_in
 
 
 def _authenticate_application(app_credential_mode: str | None = None) -> str:

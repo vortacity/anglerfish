@@ -150,7 +150,7 @@ def test_run_monitor_wires_dependencies_and_runs(tmp_path, monkeypatch):
         patch("anglerfish.monitor.load_records", return_value=records),
         patch("anglerfish.monitor.CanaryIndex") as mock_index,
         patch("anglerfish.cli.monitor._prompt_auth_setup", return_value=AuthPromptResult(credential_mode="secret")),
-        patch("anglerfish.cli.monitor.authenticate_management_api", return_value="tok"),
+        patch("anglerfish.cli.monitor.authenticate_management_api_with_expiry", return_value=("tok", 3600)),
         patch("anglerfish.monitor.run_monitor", side_effect=fake_run_monitor),
     ):
         mock_index.return_value.count = 1

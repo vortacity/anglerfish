@@ -140,6 +140,42 @@ def test_authenticate_management_api_requests_management_scope(monkeypatch: pyte
     assert called["mode"] == "certificate"
 
 
+def _configure_app_auth(monkeypatch: pytest.MonkeyPatch, app_class) -> None:
+    monkeypatch.setattr(auth, "AUTH_MODE", "application")
+    monkeypatch.setattr(auth, "CLIENT_ID", "client-id")
+    monkeypatch.setattr(auth, "TENANT_ID", "tenant-id")
+    monkeypatch.setattr(auth, "CLIENT_SECRET", "secret")
+    monkeypatch.setattr(auth, "CLIENT_CERT_PFX_PATH", "")
+    monkeypatch.setattr(auth, "CLIENT_CERT_PRIVATE_KEY_PATH", "")
+    monkeypatch.setattr(auth, "CLIENT_CERT_PUBLIC_CERT_PATH", "")
+    monkeypatch.setattr(auth, "CLIENT_CERT_THUMBPRINT", "")
+    monkeypatch.setattr(auth, "APP_CREDENTIAL_MODE", "auto")
+    monkeypatch.setattr(auth.msal, "ConfidentialClientApplication", app_class)
+
+
+class FakeConfidentialAppWithExpiry(FakeConfidentialAppSuccess):
+    def acquire_token_for_client(self, scopes):
+        return {"access_token": "app-token-123", "expires_in": 1234}
+
+
+def test_authenticate_management_api_with_expiry_returns_expiry(monkeypatch: pytest.MonkeyPatch):
+    _configure_app_auth(monkeypatch, FakeConfidentialAppWithExpiry)
+
+    token, expires_in = auth.authenticate_management_api_with_expiry()
+
+    assert token == "app-token-123"
+    assert expires_in == 1234
+
+
+def test_authenticate_management_api_with_expiry_defaults_missing_expires_in(monkeypatch: pytest.MonkeyPatch):
+    _configure_app_auth(monkeypatch, FakeConfidentialAppSuccess)
+
+    token, expires_in = auth.authenticate_management_api_with_expiry()
+
+    assert token == "app-token-123"
+    assert expires_in == 3600
+
+
 def test_authenticate_management_api_rejects_non_application_mode(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("ANGLERFISH_AUTH_MODE", "delegated")
     with pytest.raises(AuthenticationError, match="application auth"):

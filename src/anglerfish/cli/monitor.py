@@ -8,7 +8,7 @@ from datetime import timedelta
 
 from rich.console import Console
 
-from ..auth import authenticate_management_api
+from ..auth import authenticate_management_api_with_expiry
 from ..exceptions import AuthenticationError
 from ._main import _print_banner
 from .prompts import AuthPromptResult, _prompt_auth_setup
@@ -87,7 +87,7 @@ def _run_monitor(args: argparse.Namespace, console: Console) -> int:
         return 130
     prompted_env = _capture_prompted_env_values(auth_result)
     try:
-        token = authenticate_management_api(auth_result.credential_mode)
+        token, token_expires_in = authenticate_management_api_with_expiry(auth_result.credential_mode)
     finally:
         _clear_prompted_env_values(auth_result)
     audit_client = AuditClient(token, tenant_id)
@@ -109,7 +109,12 @@ def _run_monitor(args: argparse.Namespace, console: Console) -> int:
     )
 
     # Token manager for automatic refresh.
-    token_mgr = _TokenManager(token, auth_result.credential_mode, prompted_env=prompted_env)
+    token_mgr = _TokenManager(
+        token,
+        auth_result.credential_mode,
+        prompted_env=prompted_env,
+        expires_in=token_expires_in,
+    )
 
     return run_monitor(
         audit_client,
