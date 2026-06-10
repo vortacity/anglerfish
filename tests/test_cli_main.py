@@ -194,6 +194,30 @@ class TestParseArgs:
         args = _parse_args(["monitor", "--interval", "120"])
         assert args.interval == 120
 
+    def test_monitor_interval_rejects_zero(self):
+        with pytest.raises(SystemExit):
+            _parse_args(["monitor", "--interval", "0"])
+
+    def test_monitor_interval_rejects_negative(self):
+        with pytest.raises(SystemExit):
+            _parse_args(["monitor", "--interval", "-5"])
+
+    def test_top_level_demo_applies_to_monitor(self):
+        args = _parse_args(["--demo", "monitor"])
+        assert args.demo is True
+
+    def test_top_level_demo_applies_to_verify(self):
+        args = _parse_args(["--demo", "verify"])
+        assert args.demo is True
+
+    def test_monitor_without_demo_defaults_false(self):
+        args = _parse_args(["monitor"])
+        assert args.demo is False
+
+    def test_verify_without_demo_defaults_false(self):
+        args = _parse_args(["verify"])
+        assert args.demo is False
+
     def test_monitor_cleaned_up_lookback_hours_default(self):
         args = _parse_args(["monitor"])
         assert args.cleaned_up_lookback_hours == 24.0

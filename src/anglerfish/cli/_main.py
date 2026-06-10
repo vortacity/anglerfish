@@ -102,6 +102,16 @@ def _print_error(console: Console, message: str) -> None:
     )
 
 
+def _positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"invalid int value: {value!r}") from exc
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("value must be at least 1")
+    return parsed
+
+
 def _cleaned_up_lookback_hours(value: str) -> float:
     try:
         parsed = float(value)
@@ -307,7 +317,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     monitor_parser.add_argument(
         "--interval",
-        type=int,
+        type=_positive_int,
         default=300,
         metavar="SECONDS",
         help="Poll interval in seconds (default: 300).",
@@ -363,7 +373,8 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     monitor_parser.add_argument(
         "--demo",
         action="store_true",
-        default=False,
+        # SUPPRESS so this does not clobber a --demo given before the subcommand.
+        default=argparse.SUPPRESS,
         help="Print a simulated alert and exit (no auth required).",
     )
     monitor_parser.add_argument(
@@ -393,7 +404,8 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     verify_parser.add_argument(
         "--demo",
         action="store_true",
-        default=False,
+        # SUPPRESS so this does not clobber a --demo given before the subcommand.
+        default=argparse.SUPPRESS,
         help="Show simulated verify output (no auth required).",
     )
     verify_parser.add_argument(
