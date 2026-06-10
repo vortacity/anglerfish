@@ -9,7 +9,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 from rich.console import Console
 
@@ -18,7 +18,7 @@ from .alerts import AlertDispatcher
 from .audit import AuditClient, CONTENT_TYPES
 from .auth import authenticate_management_api_with_expiry
 from .exceptions import MonitorError
-from .inventory import read_deployment_record
+from .inventory import DeploymentRecord, coerce_record, read_deployment_record
 from .state import StateManager
 
 logger = logging.getLogger(__name__)
@@ -69,17 +69,17 @@ class _CanaryEntry:
 class CanaryIndex:
     """Index of deployed canary artifact IDs for fast lookup."""
 
-    def __init__(self, records: list[tuple[str, dict]]):
+    def __init__(self, records: Sequence[tuple[str, DeploymentRecord | dict]]):
         """Build lookup structures from deployment records.
 
-        ``records`` is a list of ``(record_path, record_dict)`` tuples.
+        ``records`` is a list of ``(record_path, record)`` tuples.
         """
         self._entries: list[_CanaryEntry] = []
         # Quick-lookup maps
         self._by_internet_message_id: dict[str, _CanaryEntry] = {}
 
         for path, rec in records:
-            entry = _build_entry(path, rec)
+            entry = _build_entry(path, coerce_record(rec))
             self._entries.append(entry)
 
             if entry.internet_message_id:
@@ -174,10 +174,10 @@ def load_records(
     *,
     cleaned_up_lookback: timedelta | None = None,
     now: datetime | None = None,
-) -> list[tuple[str, dict]]:
+) -> list[tuple[str, DeploymentRecord]]:
     """Load all valid deployment records from a directory.
 
-    Returns a list of ``(path_str, record_dict)`` for records with
+    Returns a list of ``(path_str, record)`` for records with
     ``status == 'active'`` (or no status field), plus recently cleaned records
     when requested, that still belong to the supported Outlook monitoring
     surface.
@@ -187,7 +187,7 @@ def load_records(
         return []
 
     current_time = now or datetime.now(timezone.utc)
-    results: list[tuple[str, dict]] = []
+    results: list[tuple[str, DeploymentRecord]] = []
     for json_file in sorted(records_path.glob("*.json")):
         # Skip records that are unreadable, corrupt, or incomplete, but log the
         # skip so an operator knows a deployed canary dropped out of monitoring.
@@ -196,32 +196,30 @@ def load_records(
         except Exception as exc:
             logger.warning("Skipping unreadable deployment record %s: %s", json_file, exc.__class__.__name__)
             continue
-        status = rec.get("status", "active")
         expires_at: datetime | None = None
-        if status == "active":
+        if rec.status == "active":
             include = True
-        elif status == "cleaned_up" and cleaned_up_lookback is not None:
+        elif rec.status == "cleaned_up" and cleaned_up_lookback is not None:
             include = _within_cleaned_up_lookback(rec, current_time, cleaned_up_lookback)
             if include:
-                updated = parse_utc_datetime(rec.get("status_updated_at"))
+                updated = parse_utc_datetime(rec.status_updated_at)
                 if updated is not None:
                     expires_at = updated + cleaned_up_lookback
         else:
             include = False
         if not include:
             continue
-        if str(rec.get("canary_type") or rec.get("type") or "").strip().lower() != "outlook":
+        if rec.canary_type != "outlook":
             continue
-        if expires_at is not None:
-            rec = {**rec, "_monitor_expires_at": expires_at.isoformat()}
+        rec.monitor_expires_at = expires_at
         results.append((str(json_file), rec))
     return results
 
 
-def _within_cleaned_up_lookback(rec: dict, now: datetime, lookback: timedelta) -> bool:
+def _within_cleaned_up_lookback(rec: DeploymentRecord, now: datetime, lookback: timedelta) -> bool:
     if lookback < timedelta(0):
         return False
-    updated = parse_utc_datetime(rec.get("status_updated_at"))
+    updated = parse_utc_datetime(rec.status_updated_at)
     if updated is None:
         return False
     age = as_utc(now) - updated
@@ -596,20 +594,18 @@ def render_demo_alert(console: Console, count: int = 1) -> None:
 # ------------------------------------------------------------------
 
 
-def _build_entry(record_path: str, rec: dict) -> _CanaryEntry:
-    canary_type = rec.get("canary_type") or rec.get("type", "unknown")
-
+def _build_entry(record_path: str, rec: DeploymentRecord) -> _CanaryEntry:
     return _CanaryEntry(
-        canary_type=canary_type,
-        template_name=rec.get("template_name", ""),
+        canary_type=rec.canary_type or "unknown",
+        template_name=rec.template_name,
         record_path=record_path,
-        internet_message_id=rec.get("internet_message_id", ""),
-        folder_name=rec.get("folder_name", ""),
-        folder_id=rec.get("folder_id", ""),
-        target_user=rec.get("target_user", ""),
-        subject=rec.get("subject", ""),
-        canary_id=rec.get("canary_id", ""),
-        expires_at=parse_utc_datetime(rec.get("_monitor_expires_at")),
+        internet_message_id=rec.internet_message_id,
+        folder_name=rec.folder_name,
+        folder_id=rec.folder_id,
+        target_user=rec.target_user,
+        subject=rec.subject,
+        canary_id=rec.canary_id,
+        expires_at=rec.monitor_expires_at,
     )
 
 

@@ -6,6 +6,7 @@ import sys
 import pytest
 
 import anglerfish.auth as auth_mod
+from anglerfish.inventory import DeploymentRecord
 from anglerfish.cli import deploy as deploy_mod
 from anglerfish.cli import main
 import anglerfish.cli._main as main_mod
@@ -173,11 +174,13 @@ def test_main_cleanup_outlook_happy_path(monkeypatch, tmp_path):
     monkeypatch.setattr(
         deploy_mod,
         "read_deployment_record",
-        lambda path: {
-            "type": "outlook",
-            "target_user": "user@contoso.com",
-            "message_id": "msg-1",
-        },
+        lambda path: DeploymentRecord.from_dict(
+            {
+                "type": "outlook",
+                "target_user": "user@contoso.com",
+                "message_id": "msg-1",
+            }
+        ),
     )
     monkeypatch.setattr(deploy_mod, "_prompt_auth_setup", lambda *args, **kwargs: "")
     monkeypatch.setattr(deploy_mod, "authenticate", lambda *args, **kwargs: "token-123")
@@ -239,13 +242,15 @@ def test_main_demo_access_happy_path(monkeypatch, tmp_path):
     monkeypatch.setattr(
         deploy_mod,
         "read_deployment_record",
-        lambda path: {
-            "canary_type": "outlook",
-            "delivery_mode": "draft",
-            "target_user": "user@contoso.com",
-            "folder_id": "folder-1",
-            "message_id": "msg-1",
-        },
+        lambda path: DeploymentRecord.from_dict(
+            {
+                "canary_type": "outlook",
+                "delivery_mode": "draft",
+                "target_user": "user@contoso.com",
+                "folder_id": "folder-1",
+                "message_id": "msg-1",
+            }
+        ),
     )
     monkeypatch.setattr(deploy_mod, "_prompt_auth_setup", lambda *args, **kwargs: "")
     monkeypatch.setattr(deploy_mod, "authenticate", lambda *args, **kwargs: "token-123")
@@ -261,7 +266,7 @@ def test_main_demo_access_happy_path(monkeypatch, tmp_path):
     monkeypatch.setattr(
         deploy_mod,
         "outlook_trigger_canary_access",
-        lambda graph, record: {"triggered": "true", "delivery_mode": record["delivery_mode"]},
+        lambda graph, record: {"triggered": "true", "delivery_mode": record.delivery_mode},
     )
 
     result = main(["demo-access", "--non-interactive", str(record_path)])
@@ -389,7 +394,7 @@ def test_main_outlook_send_unverified_still_writes_record_and_warns(monkeypatch,
 
     assert result == 0
     data = json.loads(output.read_text(encoding="utf-8"))
-    assert data["verified"] == "false"
+    assert data["verified"] is False
     assert data["status"] == "active"
     out = capsys.readouterr().out
     assert "could not be confirmed" in out
@@ -494,13 +499,15 @@ def test_verify_send_record_returns_error_without_auth(monkeypatch):
     monkeypatch.setattr(
         deploy_mod,
         "read_deployment_record",
-        lambda _path: {
-            "canary_type": "outlook",
-            "delivery_mode": "send",
-            "target_user": "alice@contoso.com",
-            "inbox_message_id": "msg-123",
-            "template_name": "Fake Password Reset",
-        },
+        lambda _path: DeploymentRecord.from_dict(
+            {
+                "canary_type": "outlook",
+                "delivery_mode": "send",
+                "target_user": "alice@contoso.com",
+                "inbox_message_id": "msg-123",
+                "template_name": "Fake Password Reset",
+            }
+        ),
     )
     auth_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
     auth_setup_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
@@ -533,11 +540,13 @@ def test_verify_unsupported_record_returns_error_without_auth(monkeypatch):
     monkeypatch.setattr(
         deploy_mod,
         "read_deployment_record",
-        lambda _path: {
-            "canary_type": "sharepoint",
-            "template_name": "Employee Salary Bands",
-            "site_name": "HR Site",
-        },
+        lambda _path: DeploymentRecord.from_dict(
+            {
+                "canary_type": "sharepoint",
+                "template_name": "Employee Salary Bands",
+                "site_name": "HR Site",
+            }
+        ),
     )
     auth_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
     auth_setup_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
@@ -570,13 +579,15 @@ def test_verify_malformed_draft_record_returns_error_without_auth(monkeypatch):
     monkeypatch.setattr(
         deploy_mod,
         "read_deployment_record",
-        lambda _path: {
-            "canary_type": "outlook",
-            "delivery_mode": "draft",
-            "target_user": "alice@contoso.com",
-            "template_name": "Fake Password Reset",
-            # Missing folder_id
-        },
+        lambda _path: DeploymentRecord.from_dict(
+            {
+                "canary_type": "outlook",
+                "delivery_mode": "draft",
+                "target_user": "alice@contoso.com",
+                "template_name": "Fake Password Reset",
+                # Missing folder_id
+            }
+        ),
     )
     auth_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
     auth_setup_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
@@ -707,13 +718,15 @@ def test_main_demo_access_decline_skips_graph(monkeypatch, tmp_path):
     monkeypatch.setattr(
         deploy_mod,
         "read_deployment_record",
-        lambda path: {
-            "canary_type": "outlook",
-            "delivery_mode": "draft",
-            "target_user": "u@c.com",
-            "folder_id": "f",
-            "message_id": "m",
-        },
+        lambda path: DeploymentRecord.from_dict(
+            {
+                "canary_type": "outlook",
+                "delivery_mode": "draft",
+                "target_user": "u@c.com",
+                "folder_id": "f",
+                "message_id": "m",
+            }
+        ),
     )
     monkeypatch.setattr(deploy_mod, "authenticate", lambda *a, **k: pytest.fail("must not authenticate when declined"))
     monkeypatch.setattr(

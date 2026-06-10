@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 from rich.console import Console
 
 from anglerfish.alerts import AlertDispatcher
+from anglerfish.inventory import DeploymentRecord
 from anglerfish.monitor import (
     CanaryAlert,
     CanaryIndex,
@@ -270,7 +271,7 @@ def test_build_entry_sets_outlook_fields():
         "folder_name": "Inbox/IT Notifications",
         "canary_id": "af-test-001",
     }
-    entry = _build_entry("rec.json", rec)
+    entry = _build_entry("rec.json", DeploymentRecord.from_dict(rec))
 
     assert entry.internet_message_id == "<m1@contoso.com>"
     assert entry.folder_name == "Inbox/IT Notifications"
@@ -279,7 +280,7 @@ def test_build_entry_sets_outlook_fields():
 
 def test_build_entry_defaults_missing_outlook_fields_to_empty_strings():
     rec = {"timestamp": "t", "canary_type": "outlook"}
-    entry = _build_entry("rec.json", rec)
+    entry = _build_entry("rec.json", DeploymentRecord.from_dict(rec))
 
     assert entry.internet_message_id == ""
     assert entry.folder_name == ""
@@ -309,7 +310,7 @@ def test_load_records_from_directory(tmp_path):
     results = load_records(tmp_path)
 
     assert len(results) == 1
-    assert results[0][1]["canary_type"] == "outlook"
+    assert results[0][1].canary_type == "outlook"
 
 
 def test_load_records_includes_recently_cleaned_outlook_records(tmp_path):
@@ -426,7 +427,7 @@ def test_load_records_adds_internal_expiry_to_cleaned_record(tmp_path):
 
     results = load_records(tmp_path, cleaned_up_lookback=timedelta(hours=24), now=now)
 
-    assert results[0][1]["_monitor_expires_at"] == (now + timedelta(hours=22)).isoformat()
+    assert results[0][1].monitor_expires_at == now + timedelta(hours=22)
     assert "_monitor_expires_at" not in json.loads((tmp_path / "rec.json").read_text(encoding="utf-8"))
 
 

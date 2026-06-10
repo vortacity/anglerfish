@@ -9,6 +9,7 @@ from typing import Any, TYPE_CHECKING
 
 from .._io import parse_utc_datetime
 from ..exceptions import DeploymentError, GraphApiError
+from ..inventory import DeploymentRecord, coerce_record
 from ..models import OutlookTemplate
 from .base import BaseDeployer
 from ._paths import path_segment as _path_segment
@@ -244,18 +245,17 @@ class OutlookDeployer(BaseDeployer):
         return None
 
 
-def remove_canary(graph: GraphClient, record: dict[str, str]) -> dict[str, str]:
+def remove_canary(graph: GraphClient, record: DeploymentRecord | dict) -> dict[str, str]:
     """Remove a deployed Outlook canary artifact."""
-    # `or` fallbacks: hand-edited records can carry JSON null for any field.
-    delivery_mode = str(record.get("delivery_mode") or "draft").strip().lower()
-    target_user = str(record.get("target_user") or "").strip()
+    record = coerce_record(record)
+    target_user = record.target_user
     if not target_user:
         raise DeploymentError("Deployment record missing 'target_user'.")
 
     encoded_user = _path_segment(target_user)
 
-    if delivery_mode == "draft":
-        folder_id = str(record.get("folder_id") or "").strip()
+    if record.delivery_mode == "draft":
+        folder_id = record.folder_id
         if not folder_id:
             raise DeploymentError("Deployment record missing 'folder_id'.")
         encoded_folder_id = _path_segment(folder_id)
@@ -266,7 +266,7 @@ def remove_canary(graph: GraphClient, record: dict[str, str]) -> dict[str, str]:
         return {"type": "outlook", "delivery_mode": "draft", "folder_id": folder_id, "removed": "true"}
 
     # send mode: delete inbox message (moves to Deleted Items)
-    inbox_message_id = str(record.get("inbox_message_id") or "").strip()
+    inbox_message_id = record.inbox_message_id
     if not inbox_message_id:
         raise DeploymentError("Deployment record missing 'inbox_message_id'.")
     encoded_message_id = _path_segment(inbox_message_id)
@@ -283,22 +283,22 @@ def remove_canary(graph: GraphClient, record: dict[str, str]) -> dict[str, str]:
     }
 
 
-def trigger_canary_access(graph: GraphClient, record: dict[str, str]) -> dict[str, str]:
+def trigger_canary_access(graph: GraphClient, record: DeploymentRecord | dict) -> dict[str, str]:
     """Read a deployed Outlook canary through Graph to generate authorized audit evidence."""
-    canary_type = str(record.get("canary_type") or record.get("type") or "").strip().lower()
-    if canary_type != "outlook":
+    record = coerce_record(record)
+    if record.canary_type != "outlook":
         raise DeploymentError("Only outlook canaries are supported in this release.")
 
-    target_user = str(record.get("target_user") or "").strip()
+    target_user = record.target_user
     if not target_user:
         raise DeploymentError("Deployment record missing 'target_user'.")
     encoded_user = _path_segment(target_user)
 
-    delivery_mode = str(record.get("delivery_mode") or "draft").strip().lower()
+    delivery_mode = record.delivery_mode
     try:
         if delivery_mode == "draft":
-            folder_id = str(record.get("folder_id") or "").strip()
-            message_id = str(record.get("message_id") or "").strip()
+            folder_id = record.folder_id
+            message_id = record.message_id
             if not folder_id:
                 raise DeploymentError("Deployment record missing 'folder_id'.")
             if not message_id:
@@ -308,7 +308,7 @@ def trigger_canary_access(graph: GraphClient, record: dict[str, str]) -> dict[st
                 params={"$select": "id,subject,internetMessageId,receivedDateTime"},
             )
         elif delivery_mode == "send":
-            message_id = str(record.get("inbox_message_id") or "").strip()
+            message_id = record.inbox_message_id
             if not message_id:
                 raise DeploymentError("Deployment record missing 'inbox_message_id'.")
             message = graph.get(
@@ -324,9 +324,9 @@ def trigger_canary_access(graph: GraphClient, record: dict[str, str]) -> dict[st
         "type": "outlook",
         "delivery_mode": delivery_mode,
         "target_user": target_user,
-        "message_id": str(message.get("id") or record.get("message_id") or record.get("inbox_message_id") or ""),
+        "message_id": str(message.get("id") or record.message_id or record.inbox_message_id or ""),
         "internet_message_id": str(message.get("internetMessageId", "")),
-        "subject": str(message.get("subject", record.get("subject", ""))),
+        "subject": str(message.get("subject") or record.subject),
         "triggered": "true",
     }
 

@@ -10,6 +10,7 @@ import questionary
 from rich.console import Console
 
 import anglerfish.templates as templates_mod
+from anglerfish.inventory import DeploymentRecord
 from anglerfish.cli import deploy as deploy_mod
 from anglerfish.templates import find_template_by_name as _find_template_by_name
 from anglerfish.cli.prompts import (
@@ -350,13 +351,15 @@ def test_verify_prompted_secret_is_cleared_after_auth(monkeypatch):
     monkeypatch.setattr(
         deploy_mod,
         "read_deployment_record",
-        lambda _path: {
-            "canary_type": "outlook",
-            "delivery_mode": "draft",
-            "template_name": "Fake Password Reset",
-            "target_user": "alice@contoso.com",
-            "folder_id": "folder-123",
-        },
+        lambda _path: DeploymentRecord.from_dict(
+            {
+                "canary_type": "outlook",
+                "delivery_mode": "draft",
+                "template_name": "Fake Password Reset",
+                "target_user": "alice@contoso.com",
+                "folder_id": "folder-123",
+            }
+        ),
     )
     monkeypatch.setattr(deploy_mod, "GraphClient", lambda _token: object())
 
@@ -405,13 +408,15 @@ def test_verify_prompted_passphrase_restores_previous_env_value(monkeypatch):
     monkeypatch.setattr(
         deploy_mod,
         "read_deployment_record",
-        lambda _path: {
-            "canary_type": "outlook",
-            "delivery_mode": "draft",
-            "template_name": "Fake Password Reset",
-            "target_user": "alice@contoso.com",
-            "folder_id": "folder-123",
-        },
+        lambda _path: DeploymentRecord.from_dict(
+            {
+                "canary_type": "outlook",
+                "delivery_mode": "draft",
+                "template_name": "Fake Password Reset",
+                "target_user": "alice@contoso.com",
+                "folder_id": "folder-123",
+            }
+        ),
     )
     monkeypatch.setattr(deploy_mod, "GraphClient", lambda _token: object())
 

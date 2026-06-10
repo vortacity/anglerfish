@@ -6,6 +6,7 @@ import pytest
 
 from anglerfish.exceptions import DeploymentError
 from anglerfish.inventory import (
+    DeploymentRecord,
     read_deployment_record,
     update_deployment_status,
     write_deployment_record,
@@ -143,4 +144,67 @@ def test_write_deployment_record_without_fchmod(tmp_path, monkeypatch):
     write_deployment_record(record_file, {"canary_type": "outlook", "status": "active"})
 
     assert record_file.is_file()
-    assert read_deployment_record(record_file)["canary_type"] == "outlook"
+    assert read_deployment_record(record_file).canary_type == "outlook"
+
+
+# ------------------------------------------------------------------
+# DeploymentRecord normalization (schema v2)
+# ------------------------------------------------------------------
+
+
+def test_record_canary_type_wins_over_legacy_type_alias():
+    # Historically cleanup used type-wins while monitor/verify used
+    # canary_type-wins; the normalizer resolves this in exactly one place.
+    record = DeploymentRecord.from_dict({"canary_type": "outlook", "type": "sharepoint"})
+    assert record.canary_type == "outlook"
+
+
+def test_record_legacy_type_alias_accepted():
+    record = DeploymentRecord.from_dict({"type": "Outlook"})
+    assert record.canary_type == "outlook"
+
+
+def test_record_verified_accepts_v1_strings_and_booleans():
+    assert DeploymentRecord.from_dict({"canary_type": "outlook", "verified": "false"}).verified is False
+    assert DeploymentRecord.from_dict({"canary_type": "outlook", "verified": "true"}).verified is True
+    assert DeploymentRecord.from_dict({"canary_type": "outlook", "verified": False}).verified is False
+    assert DeploymentRecord.from_dict({"canary_type": "outlook"}).verified is True
+
+
+def test_record_tolerates_json_nulls():
+    record = DeploymentRecord.from_dict(
+        {"canary_type": "outlook", "delivery_mode": None, "target_user": None, "folder_id": None}
+    )
+    assert record.delivery_mode == "draft"
+    assert record.target_user == ""
+    assert record.folder_id == ""
+
+
+def test_record_preserves_unknown_keys_round_trip(tmp_path):
+    raw = {
+        "timestamp": "2026-06-01T00:00:00+00:00",
+        "type": "outlook",
+        "verified": "false",
+        "operator_note": "hand-added field",
+    }
+    path = tmp_path / "rec.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+
+    update_deployment_status(path, "cleaned_up")
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["schema_version"] == 2
+    assert data["canary_type"] == "outlook"  # canonical key only
+    assert "type" not in data
+    assert data["verified"] is False  # real boolean after rewrite
+    assert data["operator_note"] == "hand-added field"
+    assert data["status"] == "cleaned_up"
+
+
+def test_write_deployment_record_emits_schema_v2(tmp_path):
+    path = tmp_path / "rec.json"
+    write_deployment_record(path, {"canary_type": "outlook", "status": "active", "verified": "true"})
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["schema_version"] == 2
+    assert data["verified"] is True
+    assert data["timestamp"]

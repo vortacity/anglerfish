@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from .deployers._paths import path_segment
 from .exceptions import GraphApiError
 from .graph import GraphClient
+from .inventory import DeploymentRecord, coerce_record
 
 logger = logging.getLogger(__name__)
 
@@ -30,14 +31,15 @@ class VerifyResult:
     detail: str = ""
 
 
-def verify_record(graph: GraphClient, record: dict) -> VerifyResult:
+def verify_record(graph: GraphClient, record: DeploymentRecord | dict) -> VerifyResult:
     """Check whether a deployed canary artifact still exists.
 
     Makes a single GET call to Graph API. Returns a VerifyResult with
     status OK (200), GONE (404), or ERROR (other failures).
     """
-    canary_type = record.get("canary_type") or record.get("type", "")
-    template_name = record.get("template_name", "")
+    record = coerce_record(record)
+    canary_type = record.canary_type
+    template_name = record.template_name
 
     try:
         if canary_type == "outlook":
@@ -68,10 +70,9 @@ def verify_record(graph: GraphClient, record: dict) -> VerifyResult:
         )
 
 
-def _verify_outlook(graph: GraphClient, record: dict, template_name: str) -> VerifyResult:
-    target_user = record.get("target_user", "")
-    delivery_mode = str(record.get("delivery_mode", "draft")).strip().lower()
-    if delivery_mode == "send":
+def _verify_outlook(graph: GraphClient, record: DeploymentRecord, template_name: str) -> VerifyResult:
+    target_user = record.target_user
+    if record.delivery_mode == "send":
         return VerifyResult(
             canary_type="outlook",
             template_name=template_name,
@@ -80,7 +81,7 @@ def _verify_outlook(graph: GraphClient, record: dict, template_name: str) -> Ver
             detail="Verify only supports draft-mode outlook records",
         )
 
-    folder_id = record.get("folder_id", "")
+    folder_id = record.folder_id
     if not target_user or not folder_id:
         return VerifyResult(
             canary_type="outlook",
@@ -94,7 +95,7 @@ def _verify_outlook(graph: GraphClient, record: dict, template_name: str) -> Ver
     # deleted message is a dead canary (the internetMessageId match — the
     # primary detection path — no longer fires). Older records may lack
     # message_id; for those the folder check is the best available signal.
-    message_id = str(record.get("message_id") or "").strip()
+    message_id = record.message_id
     if message_id:
         graph.get(
             f"/users/{path_segment(target_user)}/mailFolders/{path_segment(folder_id)}"
@@ -109,7 +110,7 @@ def _verify_outlook(graph: GraphClient, record: dict, template_name: str) -> Ver
 
 
 def run_verify(
-    records: list[tuple[str, dict]],
+    records: list[tuple[str, DeploymentRecord | dict]],
     graph: GraphClient,
 ) -> list[VerifyResult]:
     """Check all deployment records and return results."""
@@ -120,7 +121,7 @@ def run_verify(
     return results
 
 
-def _get_target(record: dict, canary_type: str) -> str:
+def _get_target(record: DeploymentRecord, canary_type: str) -> str:
     if canary_type == "outlook":
-        return str(record.get("target_user", ""))
+        return record.target_user
     return ""

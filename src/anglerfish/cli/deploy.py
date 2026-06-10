@@ -25,7 +25,7 @@ from ..exceptions import (
     GraphApiError,
 )
 from ..graph import GraphClient
-from ..inventory import read_deployment_record, update_deployment_status, write_deployment_record
+from ..inventory import DeploymentRecord, read_deployment_record, update_deployment_status, write_deployment_record
 from ..models import OutlookTemplate
 from ._main import (
     _cancel_no_tty,
@@ -63,17 +63,15 @@ def _clear_prompted_env_values(auth_result: AuthPromptResult) -> None:
         os.environ.pop(name, None)
 
 
-def _print_cleanup_summary(console: Console, record: dict) -> None:
-    canary_type = str(record.get("type", record.get("canary_type", ""))).strip().lower()
-    rows: list[tuple[str, str]] = [("Canary type", canary_type)]
-    if canary_type == "outlook":
-        delivery_mode = str(record.get("delivery_mode", "draft")).strip()
-        rows.append(("Delivery mode", delivery_mode))
-        rows.append(("Target user", str(record.get("target_user", ""))))
-        if delivery_mode == "draft":
-            rows.append(("Folder ID", str(record.get("folder_id", ""))))
+def _print_cleanup_summary(console: Console, record: DeploymentRecord) -> None:
+    rows: list[tuple[str, str]] = [("Canary type", record.canary_type)]
+    if record.canary_type == "outlook":
+        rows.append(("Delivery mode", record.delivery_mode))
+        rows.append(("Target user", record.target_user))
+        if record.delivery_mode == "draft":
+            rows.append(("Folder ID", record.folder_id))
         else:
-            rows.append(("Inbox message ID", str(record.get("inbox_message_id", ""))))
+            rows.append(("Inbox message ID", record.inbox_message_id))
     _print_summary_table(console, rows)
 
 
@@ -151,12 +149,12 @@ def _run_list(args: argparse.Namespace, console: Console) -> int:
             continue  # Skip malformed records silently
 
         record_id = record_file.stem[:12]
-        canary_type = str(record.get("canary_type", record.get("type", "unknown"))).strip().lower()
+        canary_type = record.canary_type or "unknown"
         if canary_type != "outlook":
             continue
-        template_name = str(record.get("template_name", "\u2014"))
-        target = str(record.get("target_user") or "\u2014")
-        timestamp = str(record.get("timestamp", "\u2014"))
+        template_name = record.template_name or "\u2014"
+        target = record.target_user or "\u2014"
+        timestamp = record.timestamp or "\u2014"
 
         try:
             dt = datetime.datetime.fromisoformat(timestamp)
@@ -164,7 +162,7 @@ def _run_list(args: argparse.Namespace, console: Console) -> int:
         except (ValueError, TypeError):
             deployed_str = timestamp
 
-        status = str(record.get("status", "active"))
+        status = record.status
         if status == "active":
             status_markup = "[green]active[/green]"
         elif status == "cleaned_up":
@@ -192,14 +190,13 @@ def _run_cleanup(args: argparse.Namespace, console: Console) -> int:
         # Step 1: Read Record
         _step_rule(console, 1, total_steps, "Read Record")
         record = read_deployment_record(args.record)
-        canary_type = str(record.get("type", record.get("canary_type", ""))).strip().lower()
-        if canary_type != "outlook":
+        if record.canary_type != "outlook":
             raise DeploymentError("Only outlook canaries are supported in this release.")
         _print_cleanup_summary(console, record)
 
         if demo:
             _step_rule(console, 2, total_steps, "Remove (simulated)")
-            _print_cleanup_success(console, {"status": "removed (demo)", "canary_type": canary_type})
+            _print_cleanup_success(console, {"status": "removed (demo)", "canary_type": record.canary_type})
             console.print("[bold yellow]Demo mode \u2014 no API calls were made.[/bold yellow]")
             return 0
 
@@ -252,8 +249,7 @@ def _run_demo_access(args: argparse.Namespace, console: Console) -> int:
     try:
         _step_rule(console, 1, 3, "Read Record")
         record = read_deployment_record(args.record)
-        canary_type = str(record.get("type", record.get("canary_type", ""))).strip().lower()
-        if canary_type != "outlook":
+        if record.canary_type != "outlook":
             raise DeploymentError("Only outlook canaries are supported in this release.")
         _print_cleanup_summary(console, record)
 
@@ -495,7 +491,7 @@ def _run_verify(args: argparse.Namespace, console: Console) -> int:
         ]
     else:
         # Collect records.
-        records: list[tuple[str, dict]] = []
+        records: list[tuple[str, DeploymentRecord]] = []
         if args.record:
             rec = read_deployment_record(args.record)
             records.append((args.record, rec))
@@ -510,13 +506,13 @@ def _run_verify(args: argparse.Namespace, console: Console) -> int:
             return 1
 
         console.print(f"Verifying [bold]{len(records)}[/bold] deployment record(s)...\n")
-        pending_graph_checks: list[tuple[int, tuple[str, dict]]] = []
+        pending_graph_checks: list[tuple[int, tuple[str, DeploymentRecord]]] = []
         ordered_results: list[VerifyResult | None] = [None] * len(records)
 
         for index, record_item in enumerate(records):
             _record_path, record = record_item
-            canary_type = str(record.get("canary_type") or record.get("type", ""))
-            template_name = str(record.get("template_name", ""))
+            canary_type = record.canary_type
+            template_name = record.template_name
 
             if canary_type != "outlook":
                 ordered_results[index] = VerifyResult(
@@ -528,9 +524,8 @@ def _run_verify(args: argparse.Namespace, console: Console) -> int:
                 )
                 continue
 
-            delivery_mode = str(record.get("delivery_mode", "draft")).strip().lower()
-            target_user = str(record.get("target_user", ""))
-            if delivery_mode == "send":
+            target_user = record.target_user
+            if record.delivery_mode == "send":
                 ordered_results[index] = VerifyResult(
                     canary_type="outlook",
                     template_name=template_name,
@@ -540,7 +535,7 @@ def _run_verify(args: argparse.Namespace, console: Console) -> int:
                 )
                 continue
 
-            folder_id = str(record.get("folder_id", ""))
+            folder_id = record.folder_id
             if not target_user or not folder_id:
                 ordered_results[index] = VerifyResult(
                     canary_type="outlook",
