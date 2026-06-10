@@ -96,17 +96,17 @@ def test_read_deployment_record_requires_object(tmp_path):
 
 
 def test_write_deployment_record_uses_atomic_replace(monkeypatch, tmp_path):
-    from anglerfish import inventory
+    from anglerfish import _io
 
     record_file = tmp_path / "record.json"
     replace_calls: list[tuple[Path, Path]] = []
-    original_replace = inventory.os.replace
+    original_replace = _io.os.replace
 
     def tracked_replace(src, dst):
         replace_calls.append((Path(src), Path(dst)))
         return original_replace(src, dst)
 
-    monkeypatch.setattr(inventory.os, "replace", tracked_replace)
+    monkeypatch.setattr(_io.os, "replace", tracked_replace)
     write_deployment_record(record_file, {"canary_type": "outlook", "status": "active"})
 
     assert len(replace_calls) == 1
@@ -117,11 +117,11 @@ def test_write_deployment_record_uses_atomic_replace(monkeypatch, tmp_path):
 
 
 def test_write_deployment_record_fsyncs_before_replace(monkeypatch, tmp_path):
-    from anglerfish import inventory
+    from anglerfish import _io
 
     record_file = tmp_path / "record.json"
     fsync_calls: list[int] = []
-    monkeypatch.setattr(inventory.os, "fsync", lambda fd: fsync_calls.append(fd))
+    monkeypatch.setattr(_io.os, "fsync", lambda fd: fsync_calls.append(fd))
 
     write_deployment_record(record_file, {"canary_type": "outlook", "status": "active"})
 
@@ -136,9 +136,9 @@ def test_write_deployment_record_uses_0600_permissions(tmp_path):
 
 def test_write_deployment_record_without_fchmod(tmp_path, monkeypatch):
     """On platforms without os.fchmod (e.g. Windows) writing must still succeed."""
-    from anglerfish import inventory
+    from anglerfish import _io
 
-    monkeypatch.delattr(inventory.os, "fchmod", raising=False)
+    monkeypatch.delattr(_io.os, "fchmod", raising=False)
     record_file = tmp_path / "record.json"
     write_deployment_record(record_file, {"canary_type": "outlook", "status": "active"})
 

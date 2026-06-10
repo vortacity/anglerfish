@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 import secrets
 from typing import Any, TYPE_CHECKING
 
+from .._io import parse_utc_datetime
 from ..exceptions import DeploymentError, GraphApiError
 from ..models import OutlookTemplate
 from .base import BaseDeployer
@@ -232,7 +233,7 @@ class OutlookDeployer(BaseDeployer):
                     # later delete someone else's mail.
                     if not _from_matches_target(message, target_user):
                         continue
-                    received = _parse_graph_datetime(str(message.get("receivedDateTime", "")))
+                    received = parse_utc_datetime(message.get("receivedDateTime", ""))
                     if received and received >= started_at - _SEND_VERIFY_WINDOW:
                         if str(message.get("id", "")).strip():
                             return message
@@ -348,18 +349,3 @@ def _from_matches_target(message: dict, target_user: str) -> bool:
     if not address:
         return True
     return address.casefold() == target_user.casefold()
-
-
-def _parse_graph_datetime(raw: str) -> datetime | None:
-    value = raw.strip()
-    if not value:
-        return None
-    if value.endswith("Z"):
-        value = f"{value[:-1]}+00:00"
-    try:
-        parsed = datetime.fromisoformat(value)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)

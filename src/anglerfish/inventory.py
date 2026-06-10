@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import datetime
 import json
-import os
-import tempfile
 from pathlib import Path
 
+from ._io import write_json_atomic
 from .exceptions import DeploymentError
 
 
@@ -43,7 +42,7 @@ def write_deployment_record(path: str | Path, record: dict) -> None:
         "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         **record,
     }
-    _write_record_atomically(output_path, record_with_meta)
+    write_json_atomic(output_path, record_with_meta, error_cls=DeploymentError, label="deployment record")
 
 
 def update_deployment_status(
@@ -63,29 +62,4 @@ def update_deployment_status(
     if previous_status != status or not record.get("status_updated_at"):
         record["status_updated_at"] = (updated_at or datetime.datetime.now(datetime.timezone.utc)).isoformat()
     output_path = Path(path)
-    _write_record_atomically(output_path, record)
-
-
-def _write_record_atomically(path: Path, payload: dict) -> None:
-    temp_path: Path | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=path.parent,
-            prefix=f".{path.name}.",
-            suffix=".tmp",
-            delete=False,
-        ) as fh:
-            temp_path = Path(fh.name)
-            if hasattr(os, "fchmod"):  # POSIX only; no-op on platforms without fchmod
-                os.fchmod(fh.fileno(), 0o600)
-            json.dump(payload, fh, indent=2)
-            fh.flush()
-            os.fsync(fh.fileno())
-        os.replace(temp_path, path)
-    except OSError as exc:
-        raise DeploymentError(f"Failed to write deployment record '{path}': {exc}") from exc
-    finally:
-        if temp_path is not None and temp_path.exists():
-            temp_path.unlink(missing_ok=True)
+    write_json_atomic(output_path, record, error_cls=DeploymentError, label="deployment record")

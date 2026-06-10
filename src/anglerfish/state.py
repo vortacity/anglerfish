@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+from ._io import parse_utc_datetime, write_json_atomic
 from .exceptions import MonitorError
 
 _DEFAULT_STATE_PATH = Path.home() / ".anglerfish" / "monitor-state.json"
@@ -70,17 +69,8 @@ class StateManager:
                 )
             except (TypeError, ValueError) as exc:
                 raise MonitorError(f"Monitor state '{self.path}' contains invalid field values: {exc}") from exc
-            if state.last_poll_end:
-                # Python 3.10's fromisoformat rejects the 'Z' suffix; normalize first.
-                raw_ts = state.last_poll_end
-                if raw_ts.endswith("Z"):
-                    raw_ts = f"{raw_ts[:-1]}+00:00"
-                try:
-                    datetime.fromisoformat(raw_ts)
-                except ValueError as exc:
-                    raise MonitorError(
-                        f"Monitor state '{self.path}' has an invalid 'last_poll_end' timestamp."
-                    ) from exc
+            if state.last_poll_end and parse_utc_datetime(state.last_poll_end) is None:
+                raise MonitorError(f"Monitor state '{self.path}' has an invalid 'last_poll_end' timestamp.")
             # Rebuild lookup structures from persisted IDs.
             for eid in state.seen_ids[-_MAX_SEEN_IDS:]:
                 self._seen_deque.append(eid)
@@ -125,30 +115,4 @@ class StateManager:
             "total_polls": s.total_polls,
             "started_at": s.started_at,
         }
-        _write_atomically(self.path, payload)
-
-
-def _write_atomically(path: Path, payload: dict) -> None:
-    """Write JSON to *path* via temp file + os.replace + fsync."""
-    temp_path: Path | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=path.parent,
-            prefix=f".{path.name}.",
-            suffix=".tmp",
-            delete=False,
-        ) as fh:
-            temp_path = Path(fh.name)
-            if hasattr(os, "fchmod"):  # POSIX only; no-op on platforms without fchmod
-                os.fchmod(fh.fileno(), 0o600)
-            json.dump(payload, fh, indent=2)
-            fh.flush()
-            os.fsync(fh.fileno())
-        os.replace(temp_path, path)
-    except OSError as exc:
-        raise MonitorError(f"Failed to write monitor state '{path}': {exc}") from exc
-    finally:
-        if temp_path is not None and temp_path.exists():
-            temp_path.unlink(missing_ok=True)
+        write_json_atomic(self.path, payload, error_cls=MonitorError, label="monitor state")

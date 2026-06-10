@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import signal
-import tempfile
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -15,9 +13,11 @@ from typing import Any
 
 from rich.console import Console
 
+from ._io import as_utc, parse_utc_datetime, write_json_atomic
 from .alerts import AlertDispatcher
 from .audit import AuditClient, CONTENT_TYPES
 from .auth import authenticate_management_api_with_expiry
+from .exceptions import MonitorError
 from .inventory import read_deployment_record
 from .state import StateManager
 
@@ -203,7 +203,7 @@ def load_records(
         elif status == "cleaned_up" and cleaned_up_lookback is not None:
             include = _within_cleaned_up_lookback(rec, current_time, cleaned_up_lookback)
             if include:
-                updated = _parse_record_datetime(rec.get("status_updated_at"))
+                updated = parse_utc_datetime(rec.get("status_updated_at"))
                 if updated is not None:
                     expires_at = updated + cleaned_up_lookback
         else:
@@ -221,36 +221,17 @@ def load_records(
 def _within_cleaned_up_lookback(rec: dict, now: datetime, lookback: timedelta) -> bool:
     if lookback < timedelta(0):
         return False
-    updated = _parse_record_datetime(rec.get("status_updated_at"))
+    updated = parse_utc_datetime(rec.get("status_updated_at"))
     if updated is None:
         return False
-    age = _as_utc(now) - updated
+    age = as_utc(now) - updated
     return timedelta(0) <= age <= lookback
-
-
-def _parse_record_datetime(value: object) -> datetime | None:
-    raw = str(value or "").strip()
-    if not raw:
-        return None
-    if raw.endswith("Z"):
-        raw = f"{raw[:-1]}+00:00"
-    try:
-        parsed = datetime.fromisoformat(raw)
-    except ValueError:
-        return None
-    return _as_utc(parsed)
-
-
-def _as_utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
 
 
 def _entry_is_expired(entry: _CanaryEntry, now: datetime | None) -> bool:
     if entry.expires_at is None:
         return False
-    current_time = _as_utc(now or datetime.now(timezone.utc))
+    current_time = as_utc(now or datetime.now(timezone.utc))
     return current_time > entry.expires_at
 
 
@@ -327,29 +308,11 @@ def _write_heartbeat(
         "canaries": canary_count,
         "alerts_this_session": session_alerts,
     }
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path: Path | None = None
     try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=path.parent,
-            prefix=f".{path.name}.",
-            suffix=".tmp",
-            delete=False,
-        ) as fh:
-            temp_path = Path(fh.name)
-            if hasattr(os, "fchmod"):  # POSIX only; tempfile already restricts mode elsewhere
-                os.fchmod(fh.fileno(), 0o600)
-            json.dump(payload, fh)
-            fh.flush()
-            os.fsync(fh.fileno())
-        os.replace(temp_path, path)
-    except OSError:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        write_json_atomic(path, payload, error_cls=MonitorError, label="monitor heartbeat", indent=None)
+    except (MonitorError, OSError):
         pass  # heartbeat is best-effort
-    finally:
-        if temp_path is not None and temp_path.exists():
-            temp_path.unlink(missing_ok=True)
 
 
 # ------------------------------------------------------------------
@@ -396,7 +359,7 @@ def run_monitor(
     # Determine start time from persisted state or 1-hour lookback.
     # _parse_record_datetime tolerates the 'Z' suffix (rejected by Python 3.10's
     # fromisoformat) and normalizes naive timestamps to aware UTC.
-    persisted = _parse_record_datetime(sm.state.last_poll_end) if sm else None
+    persisted = parse_utc_datetime(sm.state.last_poll_end) if sm else None
     if persisted is not None:
         last_poll_end = persisted
     else:
@@ -646,7 +609,7 @@ def _build_entry(record_path: str, rec: dict) -> _CanaryEntry:
         target_user=rec.get("target_user", ""),
         subject=rec.get("subject", ""),
         canary_id=rec.get("canary_id", ""),
-        expires_at=_parse_record_datetime(rec.get("_monitor_expires_at")),
+        expires_at=parse_utc_datetime(rec.get("_monitor_expires_at")),
     )
 
 
