@@ -350,6 +350,13 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Persistent state file (default: ~/.anglerfish/monitor-state.json).",
     )
     monitor_parser.add_argument(
+        "--heartbeat-file",
+        default=None,
+        metavar="PATH",
+        dest="heartbeat_file",
+        help="Monitor heartbeat JSON file (default: ~/.anglerfish/monitor-heartbeat.json).",
+    )
+    monitor_parser.add_argument(
         "--alert-log",
         default=None,
         metavar="PATH",
@@ -369,6 +376,13 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         default=False,
         dest="no_console",
         help="Suppress Rich console alert output (daemon mode).",
+    )
+    monitor_parser.add_argument(
+        "--no-heartbeat",
+        action="store_true",
+        default=False,
+        dest="no_heartbeat",
+        help="Disable monitor heartbeat file writes.",
     )
     monitor_parser.add_argument(
         "--demo",

@@ -29,6 +29,8 @@ def _make_args(**overrides):
         "exclude_app_ids": [],
         "cleaned_up_lookback_hours": 24.0,
         "state_file": None,
+        "heartbeat_file": None,
+        "no_heartbeat": False,
         "no_console": False,
         "alert_log": None,
         "slack_webhook_url": None,
@@ -137,6 +139,7 @@ def test_run_monitor_wires_dependencies_and_runs(tmp_path, monkeypatch):
         slack_webhook_url="https://hooks.slack.com/services/x",
         alert_log=str(tmp_path / "alerts.jsonl"),
         state_file=str(tmp_path / "state.json"),
+        heartbeat_file=str(tmp_path / "heartbeat.json"),
         exclude_app_ids=["AbC", "   "],
     )
 
@@ -166,6 +169,33 @@ def test_run_monitor_wires_dependencies_and_runs(tmp_path, monkeypatch):
     assert captured["dispatcher"]._slack_webhook_url == "https://hooks.slack.com/services/x"
     assert captured["state_manager"] is not None
     assert captured["token_manager"] is not None
+    assert captured["heartbeat_path"] == tmp_path / "heartbeat.json"
+
+
+def test_run_monitor_can_disable_heartbeat(tmp_path, monkeypatch):
+    monkeypatch.setenv("ANGLERFISH_TENANT_ID", "tenant-1")
+    console = MagicMock()
+    records = [("rec.json", {"canary_type": "outlook", "target_user": "a@b.com"})]
+    args = _make_args(records_dir=str(tmp_path), no_heartbeat=True, heartbeat_file=str(tmp_path / "heartbeat.json"))
+
+    captured: dict[str, object] = {}
+
+    def fake_run_monitor(audit_client, canary_index, **kwargs):
+        captured.update(kwargs)
+        return 0
+
+    with (
+        patch("anglerfish.monitor.load_records", return_value=records),
+        patch("anglerfish.monitor.CanaryIndex") as mock_index,
+        patch("anglerfish.cli.monitor._prompt_auth_setup", return_value=AuthPromptResult(credential_mode="secret")),
+        patch("anglerfish.cli.monitor.authenticate_management_api_with_expiry", return_value=("tok", 3600)),
+        patch("anglerfish.monitor.run_monitor", side_effect=fake_run_monitor),
+    ):
+        mock_index.return_value.count = 1
+        rc = _run_monitor(args, console)
+
+    assert rc == 0
+    assert captured["heartbeat_path"] is None
 
 
 def test_run_monitor_returns_130_when_auth_prompt_cancelled(tmp_path, monkeypatch):

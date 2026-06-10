@@ -246,6 +246,14 @@ class TestParseArgs:
         with pytest.raises(SystemExit):
             _parse_args(["monitor", "--cleaned-up-lookback-hours", "inf"])
 
+    def test_monitor_heartbeat_file(self):
+        args = _parse_args(["monitor", "--heartbeat-file", "/tmp/anglerfish-heartbeat.json"])
+        assert args.heartbeat_file == "/tmp/anglerfish-heartbeat.json"
+
+    def test_monitor_no_heartbeat(self):
+        args = _parse_args(["monitor", "--no-heartbeat"])
+        assert args.no_heartbeat is True
+
     def test_output_json(self):
         args = _parse_args(["--output-json", "/tmp/out.json"])
         assert args.output_json == "/tmp/out.json"

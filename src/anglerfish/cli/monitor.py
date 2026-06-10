@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import os
 from datetime import timedelta
+from pathlib import Path
 
 from rich.console import Console
 
@@ -41,12 +42,21 @@ def _run_monitor(args: argparse.Namespace, console: Console) -> int:
     from ..audit import AuditClient
     from ..config import (
         MONITOR_ALERT_LOG,
+        MONITOR_HEARTBEAT_FILE,
         MONITOR_NO_CONSOLE,
+        MONITOR_NO_HEARTBEAT,
         MONITOR_SLACK_WEBHOOK,
         MONITOR_STATE_FILE,
         TENANT_ID,
     )
-    from ..monitor import CanaryIndex, _TokenManager, load_records, render_demo_alert, run_monitor
+    from ..monitor import (
+        _DEFAULT_HEARTBEAT_PATH,
+        CanaryIndex,
+        _TokenManager,
+        load_records,
+        render_demo_alert,
+        run_monitor,
+    )
     from ..state import StateManager
 
     _print_banner(console)
@@ -100,6 +110,14 @@ def _run_monitor(args: argparse.Namespace, console: Console) -> int:
 
     # Alert dispatcher.
     no_console = args.no_console or MONITOR_NO_CONSOLE
+    heartbeat_file = getattr(args, "heartbeat_file", None) or MONITOR_HEARTBEAT_FILE or None
+    heartbeat_path = (
+        None
+        if args.no_heartbeat or MONITOR_NO_HEARTBEAT
+        else Path(heartbeat_file)
+        if heartbeat_file
+        else _DEFAULT_HEARTBEAT_PATH
+    )
     alert_log = args.alert_log or MONITOR_ALERT_LOG or None
     slack_webhook = getattr(args, "slack_webhook_url", None) or MONITOR_SLACK_WEBHOOK or None
     dispatcher = AlertDispatcher(
@@ -126,4 +144,5 @@ def _run_monitor(args: argparse.Namespace, console: Console) -> int:
         state_manager=state_manager,
         dispatcher=dispatcher,
         token_manager=token_mgr,
+        heartbeat_path=heartbeat_path,
     )
