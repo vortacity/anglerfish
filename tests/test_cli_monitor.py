@@ -26,6 +26,7 @@ def _make_args(**overrides):
         "credential_mode": "secret",
         "interval": 300,
         "once": False,
+        "fail_on_alert": False,
         "exclude_app_ids": [],
         "cleaned_up_lookback_hours": 24.0,
         "state_file": None,
@@ -158,6 +159,7 @@ def test_run_monitor_wires_dependencies_and_runs(tmp_path, monkeypatch):
 
     assert rc == 0
     assert captured["once"] is False
+    assert captured["fail_on_alert"] is False
     assert captured["interval"] == 300
     # Blank/dup IDs normalized and lower-cased.
     assert captured["exclude_app_ids"] == {"abc"}
@@ -183,3 +185,29 @@ def test_run_monitor_returns_130_when_auth_prompt_cancelled(tmp_path, monkeypatc
         rc = _run_monitor(args, console)
 
     assert rc == 130
+
+
+def test_run_monitor_passes_fail_on_alert(tmp_path, monkeypatch):
+    monkeypatch.setenv("ANGLERFISH_TENANT_ID", "tenant-1")
+    console = MagicMock()
+    records = [("rec.json", {"canary_type": "outlook", "target_user": "a@b.com"})]
+    args = _make_args(records_dir=str(tmp_path), fail_on_alert=True)
+
+    captured: dict[str, object] = {}
+
+    def fake_run_monitor(audit_client, canary_index, **kwargs):
+        captured.update(kwargs)
+        return 2
+
+    with (
+        patch("anglerfish.monitor.load_records", return_value=records),
+        patch("anglerfish.monitor.CanaryIndex") as mock_index,
+        patch("anglerfish.cli.monitor._prompt_auth_setup", return_value=AuthPromptResult(credential_mode="secret")),
+        patch("anglerfish.cli.monitor.authenticate_management_api_with_expiry", return_value=("tok", 3600)),
+        patch("anglerfish.monitor.run_monitor", side_effect=fake_run_monitor),
+    ):
+        mock_index.return_value.count = 1
+        rc = _run_monitor(args, console)
+
+    assert rc == 2
+    assert captured["fail_on_alert"] is True

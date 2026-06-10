@@ -283,10 +283,15 @@ Monitor for access:
 ```bash
 anglerfish monitor --records-dir ~/.anglerfish/records
 anglerfish monitor --once --records-dir ~/.anglerfish/records
+anglerfish monitor --once --fail-on-alert --records-dir ~/.anglerfish/records
 anglerfish monitor --records-dir ~/.anglerfish/records \
   --alert-log ~/.anglerfish/alerts.jsonl \
   --slack-webhook-url https://hooks.slack.com/services/...
 ```
+
+Use `--fail-on-alert` when a one-shot monitor run should return exit code 2 after
+detecting one or more canary alerts, such as in a scheduled health check or CI
+gate.
 
 The monitor flags can also be set via environment variables
 (`ANGLERFISH_MONITOR_STATE_FILE`, `ANGLERFISH_MONITOR_ALERT_LOG`,

@@ -121,6 +121,7 @@ def _run_monitor(args: argparse.Namespace, console: Console) -> int:
         canary_index,
         interval=args.interval,
         once=args.once,
+        fail_on_alert=args.fail_on_alert,
         exclude_app_ids=exclude_ids or None,
         console=console,
         state_manager=state_manager,

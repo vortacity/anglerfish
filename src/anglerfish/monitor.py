@@ -368,6 +368,7 @@ def run_monitor(
     *,
     interval: int = 300,
     once: bool = False,
+    fail_on_alert: bool = False,
     exclude_app_ids: set[str] | None = None,
     console: Console,
     state_manager: StateManager | None = None,
@@ -377,7 +378,8 @@ def run_monitor(
 ) -> int:
     """Main monitoring loop.
 
-    Returns exit code: 0 for clean shutdown.
+    Returns exit code: 0 for clean shutdown, or 2 when ``fail_on_alert`` is
+    enabled and at least one alert was detected.
     """
     _interrupted = False
 
@@ -577,6 +579,8 @@ def run_monitor(
     total_polls = sm.state.total_polls if sm else session_polls
     if _interrupted:
         console.print(f"\n[bold]Monitoring stopped.[/bold] {total_alerts} alert(s) across {total_polls} poll(s).")
+    if fail_on_alert and session_alerts:
+        return 2
     return 0
 
 

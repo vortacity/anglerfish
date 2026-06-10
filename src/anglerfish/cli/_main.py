@@ -335,6 +335,13 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Poll once and exit instead of running a continuous loop.",
     )
     monitor_parser.add_argument(
+        "--fail-on-alert",
+        action="store_true",
+        default=False,
+        dest="fail_on_alert",
+        help="Return exit code 2 if a poll detects one or more alerts.",
+    )
+    monitor_parser.add_argument(
         "--exclude-app-id",
         action="append",
         default=[],

@@ -549,6 +549,43 @@ def test_run_monitor_once_with_state_and_dispatcher(tmp_path):
     assert hb["status"] == "healthy"
 
 
+def test_run_monitor_fail_on_alert_returns_two(tmp_path):
+    event = _mail_items_accessed_event(Id="evt-fail-on-alert")
+    client = _mock_audit_client([event])
+    idx = CanaryIndex([("rec.json", _outlook_record())])
+    dispatcher = AlertDispatcher(alert_log=tmp_path / "alerts.jsonl")
+    console = Console(file=None, force_terminal=False)
+
+    rc = run_monitor(
+        client,
+        idx,
+        once=True,
+        fail_on_alert=True,
+        console=console,
+        dispatcher=dispatcher,
+        heartbeat_path=None,
+    )
+
+    assert rc == 2
+
+
+def test_run_monitor_fail_on_alert_returns_zero_without_alerts():
+    client = _mock_audit_client([])
+    idx = CanaryIndex([("rec.json", _outlook_record())])
+    console = Console(file=None, force_terminal=False)
+
+    rc = run_monitor(
+        client,
+        idx,
+        once=True,
+        fail_on_alert=True,
+        console=console,
+        heartbeat_path=None,
+    )
+
+    assert rc == 0
+
+
 def test_run_monitor_deduplicates_across_runs(tmp_path):
     """Running --once twice with the same event should only alert once."""
     state_path = tmp_path / "state.json"
