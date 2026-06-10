@@ -140,6 +140,26 @@ def test_dispatch_slack_posts_block_kit():
         assert call_kwargs[1]["timeout"] == 10
 
 
+def test_dispatch_slack_uses_configured_webhook_timeout(monkeypatch):
+    monkeypatch.setenv("ANGLERFISH_ALERT_WEBHOOK_TIMEOUT", "2.5")
+    with patch("anglerfish.alerts.requests.post") as mock_post:
+        mock_post.return_value.ok = True
+        dispatcher = AlertDispatcher(slack_webhook_url="https://hooks.slack.com/services/T/B/xxx")
+        dispatcher.dispatch(_sample_alert())
+
+        assert mock_post.call_args[1]["timeout"] == 2.5
+
+
+def test_dispatch_slack_invalid_webhook_timeout_uses_default(monkeypatch):
+    monkeypatch.setenv("ANGLERFISH_ALERT_WEBHOOK_TIMEOUT", "0")
+    with patch("anglerfish.alerts.requests.post") as mock_post:
+        mock_post.return_value.ok = True
+        dispatcher = AlertDispatcher(slack_webhook_url="https://hooks.slack.com/services/T/B/xxx")
+        dispatcher.dispatch(_sample_alert())
+
+        assert mock_post.call_args[1]["timeout"] == 10
+
+
 def test_dispatch_slack_failure_does_not_raise():
     with patch("anglerfish.alerts.requests.post") as mock_post:
         mock_post.side_effect = ConnectionError("network down")

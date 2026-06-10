@@ -291,7 +291,9 @@ anglerfish monitor --records-dir ~/.anglerfish/records \
 The monitor flags can also be set via environment variables
 (`ANGLERFISH_MONITOR_STATE_FILE`, `ANGLERFISH_MONITOR_ALERT_LOG`,
 `ANGLERFISH_SLACK_WEBHOOK_URL`, `ANGLERFISH_MONITOR_NO_CONSOLE`); CLI flags
-take precedence. See `.env.example` for the full variable set.
+take precedence. Slack webhook POSTs time out after 10 seconds by default; set
+`ANGLERFISH_ALERT_WEBHOOK_TIMEOUT` to tune that for unattended monitors. See
+`.env.example` for the full variable set.
 
 Unified Audit Log polling is delayed, not an immediate stream. Microsoft does not guarantee a return time for audit records; core service records are typically available after 60 to 90 minutes. See [Microsoft audit search guidance](https://learn.microsoft.com/en-us/purview/audit-search).
 

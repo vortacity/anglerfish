@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 from dataclasses import asdict
 from pathlib import Path
@@ -19,6 +20,8 @@ if TYPE_CHECKING:
     from .monitor import CanaryAlert
 
 logger = logging.getLogger(__name__)
+_DEFAULT_WEBHOOK_TIMEOUT_SECONDS = 10.0
+_WEBHOOK_TIMEOUT_ENV = "ANGLERFISH_ALERT_WEBHOOK_TIMEOUT"
 
 
 class AlertDispatcher:
@@ -156,7 +159,23 @@ def _post_slack(url: str, alert: CanaryAlert) -> None:
         },
     ]
     payload = {"text": f"Canary Alert: {alert.template_name} accessed by {alert.accessed_by}", "blocks": blocks}
-    resp = requests.post(url, json=payload, timeout=10, allow_redirects=False)
+    resp = requests.post(url, json=payload, timeout=_webhook_timeout(), allow_redirects=False)
     if not resp.ok:
         # Do not log the webhook URL itself; it is a bearer secret.
         logger.warning("Slack POST returned HTTP %d", resp.status_code)
+
+
+def _webhook_timeout() -> float:
+    """Return the configured webhook timeout, falling back to the default."""
+    raw = os.environ.get(_WEBHOOK_TIMEOUT_ENV, "").strip()
+    if not raw:
+        return _DEFAULT_WEBHOOK_TIMEOUT_SECONDS
+    try:
+        timeout = float(raw)
+    except ValueError:
+        logger.warning("%s must be a positive number; using default timeout", _WEBHOOK_TIMEOUT_ENV)
+        return _DEFAULT_WEBHOOK_TIMEOUT_SECONDS
+    if not math.isfinite(timeout) or timeout <= 0:
+        logger.warning("%s must be a positive number; using default timeout", _WEBHOOK_TIMEOUT_ENV)
+        return _DEFAULT_WEBHOOK_TIMEOUT_SECONDS
+    return timeout
