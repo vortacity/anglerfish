@@ -99,11 +99,12 @@ def test_dispatch_all_channels(tmp_path):
             console=console,
             alert_log=log_path,
             slack_webhook_url="https://hooks.slack.com/services/T/B/xxx",
+            teams_webhook_url="https://outlook.office.com/webhook/xxx",
         )
         dispatcher.dispatch(_sample_alert())
 
     assert log_path.is_file()
-    mock_post.assert_called_once()
+    assert mock_post.call_count == 2
 
 
 def test_console_failure_does_not_block_jsonl(tmp_path):
@@ -174,3 +175,46 @@ def test_dispatch_slack_non_ok_response_does_not_block_other_channels(tmp_path):
         dispatcher = AlertDispatcher(alert_log=log_path, slack_webhook_url="https://hooks.slack.com/services/x")
         dispatcher.dispatch(_sample_alert())  # must not raise on a non-2xx Slack response
     assert log_path.is_file()  # JSONL channel still wrote
+
+
+# ------------------------------------------------------------------
+# Microsoft Teams channel
+# ------------------------------------------------------------------
+
+
+def test_dispatch_teams_posts_message_card():
+    with patch("anglerfish.alerts.requests.post") as mock_post:
+        mock_post.return_value.ok = True
+        dispatcher = AlertDispatcher(teams_webhook_url="https://outlook.office.com/webhook/xxx")
+        dispatcher.dispatch(_sample_alert())
+
+        mock_post.assert_called_once()
+        call_kwargs = mock_post.call_args
+        payload = call_kwargs[1]["json"]
+        assert payload["@type"] == "MessageCard"
+        assert payload["title"] == "Canary access detected"
+        assert call_kwargs[1]["timeout"] == 10
+
+
+def test_dispatch_teams_failure_does_not_raise():
+    with patch("anglerfish.alerts.requests.post") as mock_post:
+        mock_post.side_effect = ConnectionError("network down")
+        dispatcher = AlertDispatcher(teams_webhook_url="https://outlook.office.com/webhook/xxx")
+        dispatcher.dispatch(_sample_alert())
+
+
+def test_dispatch_teams_skips_non_https_url():
+    with patch("anglerfish.alerts.requests.post") as mock_post:
+        dispatcher = AlertDispatcher(teams_webhook_url="http://insecure.example/webhook")
+        dispatcher.dispatch(_sample_alert())
+        mock_post.assert_not_called()
+
+
+def test_dispatch_teams_non_ok_response_does_not_block_other_channels(tmp_path):
+    log_path = tmp_path / "alerts.jsonl"
+    with patch("anglerfish.alerts.requests.post") as mock_post:
+        mock_post.return_value.ok = False
+        mock_post.return_value.status_code = 404
+        dispatcher = AlertDispatcher(alert_log=log_path, teams_webhook_url="https://outlook.office.com/webhook/xxx")
+        dispatcher.dispatch(_sample_alert())
+    assert log_path.is_file()

@@ -34,10 +34,12 @@ class AlertDispatcher:
         console: Console | None = None,
         alert_log: str | Path | None = None,
         slack_webhook_url: str | None = None,
+        teams_webhook_url: str | None = None,
     ):
         self._console = console
         self._alert_log = Path(alert_log) if alert_log else None
         self._slack_webhook_url = slack_webhook_url
+        self._teams_webhook_url = teams_webhook_url
 
     def dispatch(self, alert: CanaryAlert) -> None:
         """Send an alert to all configured channels."""
@@ -58,6 +60,12 @@ class AlertDispatcher:
                 _post_slack(self._slack_webhook_url, alert)
             except Exception:
                 logger.warning("Slack alert POST failed", exc_info=True)
+
+        if self._teams_webhook_url is not None:
+            try:
+                _post_teams(self._teams_webhook_url, alert)
+            except Exception:
+                logger.warning("Teams alert POST failed", exc_info=True)
 
 
 # ------------------------------------------------------------------
@@ -160,3 +168,44 @@ def _post_slack(url: str, alert: CanaryAlert) -> None:
     if not resp.ok:
         # Do not log the webhook URL itself; it is a bearer secret.
         logger.warning("Slack POST returned HTTP %d", resp.status_code)
+
+
+# ------------------------------------------------------------------
+# Microsoft Teams channel
+# ------------------------------------------------------------------
+
+
+def _post_teams(url: str, alert: CanaryAlert) -> None:
+    """POST a MessageCard alert to a Microsoft Teams incoming webhook."""
+    if urlsplit(url).scheme != "https":
+        logger.warning("Teams webhook URL is not https; skipping Teams alert")
+        return
+    facts = [
+        {"name": "Type", "value": alert.canary_type},
+        {"name": "Canary", "value": alert.template_name},
+        {"name": "Operation", "value": alert.operation},
+        {"name": "Accessed by", "value": alert.accessed_by},
+        {"name": "Source IP", "value": alert.source_ip},
+        {"name": "Timestamp", "value": alert.timestamp},
+        {"name": "Artifact", "value": alert.artifact_label},
+        {"name": "Record", "value": alert.record_path},
+    ]
+    if alert.client_info:
+        facts.append({"name": "Client", "value": alert.client_info})
+    payload = {
+        "@type": "MessageCard",
+        "@context": "https://schema.org/extensions",
+        "summary": f"Canary Alert: {alert.canary_type} canary accessed",
+        "themeColor": "C4314B",
+        "title": "Canary access detected",
+        "sections": [
+            {
+                "activityTitle": f"{alert.template_name} accessed by {alert.accessed_by}",
+                "facts": facts,
+                "markdown": True,
+            }
+        ],
+    }
+    resp = requests.post(url, json=payload, timeout=10, allow_redirects=False)
+    if not resp.ok:
+        logger.warning("Teams POST returned HTTP %d", resp.status_code)

@@ -194,6 +194,10 @@ class TestParseArgs:
         args = _parse_args(["monitor", "--interval", "120"])
         assert args.interval == 120
 
+    def test_monitor_teams_webhook_url(self):
+        args = _parse_args(["monitor", "--teams-webhook-url", "https://outlook.office.com/webhook/x"])
+        assert args.teams_webhook_url == "https://outlook.office.com/webhook/x"
+
     def test_monitor_interval_rejects_zero(self):
         with pytest.raises(SystemExit):
             _parse_args(["monitor", "--interval", "0"])

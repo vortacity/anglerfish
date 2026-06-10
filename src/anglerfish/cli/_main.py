@@ -364,6 +364,13 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Slack incoming webhook URL for alert notifications.",
     )
     monitor_parser.add_argument(
+        "--teams-webhook-url",
+        default=None,
+        metavar="URL",
+        dest="teams_webhook_url",
+        help="Microsoft Teams incoming webhook URL for alert notifications.",
+    )
+    monitor_parser.add_argument(
         "--no-console",
         action="store_true",
         default=False,

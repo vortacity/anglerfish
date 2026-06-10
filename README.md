@@ -285,19 +285,21 @@ anglerfish monitor --records-dir ~/.anglerfish/records
 anglerfish monitor --once --records-dir ~/.anglerfish/records
 anglerfish monitor --records-dir ~/.anglerfish/records \
   --alert-log ~/.anglerfish/alerts.jsonl \
-  --slack-webhook-url https://hooks.slack.com/services/...
+  --slack-webhook-url https://hooks.slack.com/services/... \
+  --teams-webhook-url https://outlook.office.com/webhook/...
 ```
 
 The monitor flags can also be set via environment variables
 (`ANGLERFISH_MONITOR_STATE_FILE`, `ANGLERFISH_MONITOR_ALERT_LOG`,
-`ANGLERFISH_SLACK_WEBHOOK_URL`, `ANGLERFISH_MONITOR_NO_CONSOLE`); CLI flags
-take precedence. See `.env.example` for the full variable set.
+`ANGLERFISH_SLACK_WEBHOOK_URL`, `ANGLERFISH_TEAMS_WEBHOOK_URL`,
+`ANGLERFISH_MONITOR_NO_CONSOLE`); CLI flags take precedence. See
+`.env.example` for the full variable set.
 
 Unified Audit Log polling is delayed, not an immediate stream. Microsoft does not guarantee a return time for audit records; core service records are typically available after 60 to 90 minutes. See [Microsoft audit search guidance](https://learn.microsoft.com/en-us/purview/audit-search).
 
 To keep the poll loop running unattended, [`examples/anglerfish-monitor.service`](examples/anglerfish-monitor.service) is an optional sample systemd unit that supervises `anglerfish monitor --no-console`. It is a convenience example for operators, not a built-in daemon mode.
 
-The no third-party data plane claim applies to detection. Optional Slack alerting sends post-detection notifications to the configured webhook.
+The no third-party data plane claim applies to detection. Optional Slack and Teams alerting send post-detection notifications to the configured webhooks.
 
 Suppress known-good actors:
 

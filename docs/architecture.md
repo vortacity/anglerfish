@@ -74,7 +74,7 @@ Outlook draft records store a per-deployment `canary_id`, hidden-folder metadata
 - `cleanup <record>`
 - `demo-access <record>`
 - `list [--records-dir DIR]`
-- `monitor [--once] [--interval N] [--exclude-app-id ID] [--alert-log PATH] [--slack-webhook-url URL]`
+- `monitor [--once] [--interval N] [--exclude-app-id ID] [--alert-log PATH] [--slack-webhook-url URL] [--teams-webhook-url URL]`
 - `verify [RECORD] [--records-dir DIR]`
 
 Operational note:

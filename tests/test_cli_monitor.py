@@ -32,6 +32,7 @@ def _make_args(**overrides):
         "no_console": False,
         "alert_log": None,
         "slack_webhook_url": None,
+        "teams_webhook_url": None,
     }
     defaults.update(overrides)
     return argparse.Namespace(**defaults)
@@ -135,6 +136,7 @@ def test_run_monitor_wires_dependencies_and_runs(tmp_path, monkeypatch):
         records_dir=str(tmp_path),
         no_console=True,
         slack_webhook_url="https://hooks.slack.com/services/x",
+        teams_webhook_url="https://outlook.office.com/webhook/x",
         alert_log=str(tmp_path / "alerts.jsonl"),
         state_file=str(tmp_path / "state.json"),
         exclude_app_ids=["AbC", "   "],
@@ -164,6 +166,7 @@ def test_run_monitor_wires_dependencies_and_runs(tmp_path, monkeypatch):
     # no_console -> dispatcher suppresses console; Slack + state wired through.
     assert captured["dispatcher"]._console is None
     assert captured["dispatcher"]._slack_webhook_url == "https://hooks.slack.com/services/x"
+    assert captured["dispatcher"]._teams_webhook_url == "https://outlook.office.com/webhook/x"
     assert captured["state_manager"] is not None
     assert captured["token_manager"] is not None
 
