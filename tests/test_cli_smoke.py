@@ -321,6 +321,73 @@ def test_main_outlook_writes_output_json(monkeypatch, tmp_path):
     assert data["auth_mode"] == "application"
 
 
+def test_main_outlook_send_unverified_still_writes_record_and_warns(monkeypatch, tmp_path, capsys):
+    """An unverified send deploy must still write the record (the mail is live)."""
+    monkeypatch.setenv("ANGLERFISH_CLIENT_ID", "client-id")
+    monkeypatch.setattr(deploy_mod, "_prompt_auth_setup", lambda *args, **kwargs: "")
+    monkeypatch.setattr(deploy_mod, "_print_auth_success", lambda *args, **kwargs: None)
+    monkeypatch.setattr(deploy_mod, "authenticate", lambda *args, **kwargs: "token-123")
+
+    template = OutlookTemplate(
+        name="Outlook Template",
+        description="desc",
+        folder_name="IT Notifications",
+        subject="Subject",
+        body_html="<p>Hello</p>",
+        sender_name="IT",
+        sender_email="it@contoso.com",
+        variables=[],
+    )
+    monkeypatch.setattr(
+        main_mod,
+        "list_templates",
+        lambda canary_type: [{"name": "Outlook Template", "description": "desc", "path": "pkg://outlook/test.yaml"}],
+    )
+    monkeypatch.setattr(main_mod, "load_template", lambda path: template)
+    monkeypatch.setattr(main_mod, "_find_template_by_name", lambda canary_type, name: "pkg://outlook/test.yaml")
+    monkeypatch.setattr(deploy_mod, "GraphClient", lambda token: object())
+
+    class FakeOutlookDeployer:
+        def __init__(self, graph, template_obj):
+            pass
+
+        def deploy(self, target_user: str, **kwargs):
+            return {
+                "delivery_mode": "send",
+                "target_user": target_user,
+                "inbox_message_id": "",
+                "internet_message_id": "",
+                "verified": "false",
+                "verify_note": "sent message could not be confirmed in the Inbox",
+            }
+
+    monkeypatch.setattr(deploy_mod, "OutlookDeployer", FakeOutlookDeployer)
+
+    output = tmp_path / "record.json"
+    result = main(
+        [
+            "--non-interactive",
+            "--canary-type",
+            "outlook",
+            "--template",
+            "Outlook Template",
+            "--target",
+            "victim@contoso.com",
+            "--delivery-mode",
+            "send",
+            "--output-json",
+            str(output),
+        ]
+    )
+
+    assert result == 0
+    data = json.loads(output.read_text(encoding="utf-8"))
+    assert data["verified"] == "false"
+    assert data["status"] == "active"
+    out = capsys.readouterr().out
+    assert "could not be confirmed" in out
+
+
 def test_main_delegates_to_outlook_handler(monkeypatch):
     monkeypatch.setattr(main_mod, "_print_banner", lambda *_: None)
 

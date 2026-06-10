@@ -148,3 +148,41 @@ def test_non_dict_json_raises_monitor_error(tmp_path):
 
     with pytest.raises(MonitorError):
         StateManager(path).state
+
+
+def test_corrupt_counter_raises_monitor_error(tmp_path):
+    """Valid JSON with a non-numeric counter must give a clean MonitorError,
+    not a raw ValueError traceback."""
+    import pytest
+
+    from anglerfish.exceptions import MonitorError
+
+    path = tmp_path / "state.json"
+    path.write_text(json.dumps({"last_poll_end": "", "seen_ids": [], "total_alerts": "abc"}))
+
+    with pytest.raises(MonitorError):
+        StateManager(path).state
+
+
+def test_corrupt_last_poll_end_raises_monitor_error(tmp_path):
+    import pytest
+
+    from anglerfish.exceptions import MonitorError
+
+    path = tmp_path / "state.json"
+    path.write_text(json.dumps({"last_poll_end": "not-a-timestamp", "seen_ids": []}))
+
+    with pytest.raises(MonitorError, match="last_poll_end"):
+        StateManager(path).state
+
+
+def test_non_list_seen_ids_raises_monitor_error(tmp_path):
+    import pytest
+
+    from anglerfish.exceptions import MonitorError
+
+    path = tmp_path / "state.json"
+    path.write_text(json.dumps({"last_poll_end": "", "seen_ids": "evt-1"}))
+
+    with pytest.raises(MonitorError, match="seen_ids"):
+        StateManager(path).state

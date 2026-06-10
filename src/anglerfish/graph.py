@@ -131,6 +131,10 @@ class GraphClient:
         raise GraphApiError("Request failed after retries.", status_code=0, method=normalized_method, path=request_path)
 
 
+# A misbehaving server or proxy must not be able to park the client for hours.
+_MAX_RETRY_AFTER_SECONDS = 120
+
+
 def _parse_retry_after(value: str | None) -> int:
     if not value:
         return 1
@@ -142,11 +146,11 @@ def _parse_retry_after(value: str | None) -> int:
             retry_at = parsedate_to_datetime(value)
             now = datetime.now(timezone.utc)
             delay = int((retry_at - now).total_seconds())
-            return max(delay, 1)
+            return min(max(delay, 1), _MAX_RETRY_AFTER_SECONDS)
         except (TypeError, ValueError):
             return 1
 
-    return max(parsed, 1)
+    return min(max(parsed, 1), _MAX_RETRY_AFTER_SECONDS)
 
 
 def _compute_backoff(attempt: int, *, max_seconds: int = 8) -> int:

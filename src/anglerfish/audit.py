@@ -22,6 +22,13 @@ _TIME_FORMAT = "%Y-%m-%dT%H:%M:%S"
 # Outlook-only content feed for canary monitoring.
 CONTENT_TYPES = ("Audit.Exchange",)
 
+# Upper bound on a server-supplied Retry-After: a misbehaving server or proxy
+# must not be able to park the client for hours.
+_MAX_RETRY_AFTER_SECONDS = 120
+# Hard cap on pagination depth; a stale or self-referencing NextPageUri must
+# not loop or accumulate forever.
+_MAX_CONTENT_PAGES = 1000
+
 
 class AuditClient:
     """Thin REST client wrapping the Office 365 Management Activity API."""
@@ -109,6 +116,7 @@ class AuditClient:
             "endTime": end_str,
         }
 
+        pages = 0
         while True:
             if url:
                 # Pagination: follow NextPageUri (absolute URL).
@@ -116,6 +124,7 @@ class AuditClient:
                 result, headers = self._get_with_headers(url, absolute=True)
             else:
                 result, headers = self._get_with_headers(path, params=params)
+            pages += 1
 
             if isinstance(result, list):
                 blobs.extend(result)
@@ -125,6 +134,10 @@ class AuditClient:
             next_page = CaseInsensitiveDict(headers).get("NextPageUri")
             if not next_page:
                 break
+            if next_page == url:
+                raise AuditApiError("Content pagination returned a self-referencing NextPageUri")
+            if pages >= _MAX_CONTENT_PAGES:
+                raise AuditApiError(f"Content pagination exceeded {_MAX_CONTENT_PAGES} pages")
             _validate_management_api_url(next_page, base_url=self.base_url)
             url = next_page
 
@@ -293,13 +306,13 @@ def _parse_retry_after(value: str | None) -> int:
     if not value:
         return 1
     try:
-        return max(int(value), 1)
+        return min(max(int(value), 1), _MAX_RETRY_AFTER_SECONDS)
     except ValueError:
         # RFC 7231 also permits an HTTP-date; Microsoft throttling may use either.
         try:
             retry_at = parsedate_to_datetime(value)
             delay = int((retry_at - datetime.now(timezone.utc)).total_seconds())
-            return max(delay, 1)
+            return min(max(delay, 1), _MAX_RETRY_AFTER_SECONDS)
         except (TypeError, ValueError):
             return 1
 

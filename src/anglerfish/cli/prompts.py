@@ -352,6 +352,16 @@ def _render_deploy_template(
     non_interactive: bool,
     cli_var_values: dict[str, str],
 ) -> OutlookTemplate | None:
+    declared_names = {str(var.get("name", "")).strip() for var in template.variables}
+    unknown_keys = sorted(set(cli_var_values) - declared_names)
+    if unknown_keys:
+        keys = ", ".join(repr(key) for key in unknown_keys)
+        declared = ", ".join(sorted(name for name in declared_names if name)) or "(none)"
+        console.print(
+            f"[yellow]Warning: Unknown --var key(s) ignored: {keys}. "
+            f"Template '{template.name}' declares: {declared}.[/yellow]"
+        )
+
     if not template.variables:
         return template
 

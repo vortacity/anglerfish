@@ -140,6 +140,52 @@ def test_list_content_rejects_non_manage_office_next_page_url():
         )
 
 
+def test_list_content_stops_on_self_referencing_next_page():
+    """A NextPageUri that repeats itself must not loop forever."""
+    page = [{"contentUri": "https://manage.office.com/api/v1.0/tenant-123/content/blob1"}]
+    looping = _response(json_data=page, headers={"NextPageUri": "https://manage.office.com/api/v1.0/page2"})
+    sess = MagicMock(spec=requests.Session)
+    sess.headers = {}
+    sess.request = MagicMock(return_value=looping)  # every page points at page2
+    client = _client(sess)
+
+    with pytest.raises(AuditApiError, match="[Pp]agination"):
+        client.list_content(
+            "Audit.Exchange",
+            datetime(2026, 3, 1, tzinfo=timezone.utc),
+            datetime(2026, 3, 2, tzinfo=timezone.utc),
+        )
+
+
+def test_list_content_caps_page_count(monkeypatch):
+    """Unbounded pagination must hit a hard cap rather than grow forever."""
+    import anglerfish.audit as audit_mod
+
+    monkeypatch.setattr(audit_mod, "_MAX_CONTENT_PAGES", 3)
+
+    calls = {"n": 0}
+
+    def _next_response(*args, **kwargs):
+        calls["n"] += 1
+        return _response(
+            json_data=[{"contentUri": f"https://manage.office.com/api/v1.0/tenant-123/content/blob{calls['n']}"}],
+            headers={"NextPageUri": f"https://manage.office.com/api/v1.0/page{calls['n'] + 1}"},
+        )
+
+    sess = MagicMock(spec=requests.Session)
+    sess.headers = {}
+    sess.request = MagicMock(side_effect=_next_response)
+    client = _client(sess)
+
+    with pytest.raises(AuditApiError, match="[Pp]agination"):
+        client.list_content(
+            "Audit.Exchange",
+            datetime(2026, 3, 1, tzinfo=timezone.utc),
+            datetime(2026, 3, 2, tzinfo=timezone.utc),
+        )
+    assert calls["n"] <= 4
+
+
 def test_list_content_handles_dict_response_with_value_key():
     body = {"value": [{"contentUri": "https://manage.office.com/api/v1.0/tenant-123/content/blob1"}]}
     sess = _session(_response(json_data=body))
@@ -336,6 +382,12 @@ def test_parse_retry_after():
     assert _parse_retry_after("5") == 5
     assert _parse_retry_after("0") == 1
     assert _parse_retry_after("not-a-number") == 1
+
+
+def test_parse_retry_after_caps_excessive_delay():
+    """A server-controlled Retry-After must not block the client for hours."""
+    assert _parse_retry_after("86400") == 120
+    assert _parse_retry_after("Wed, 21 Oct 2099 07:28:00 GMT") == 120
 
 
 def test_parse_retry_after_accepts_http_date():

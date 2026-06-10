@@ -6,14 +6,14 @@ Operating contract for coding agents working in this repo.
 
 Anglerfish is an Outlook-only Microsoft 365 canary CLI. It deploys canary email artifacts via Microsoft Graph, keeps local deployment records, and detects mailbox access by correlating `MailItemsAccessed` events from the M365 Unified Audit Log against those records. No callbacks, no DNS, no external SIEM — detection runs against the tenant's own audit telemetry.
 
-This is a security tool used by defenders. It is production-stable (v2.0.0) and ships to real users. Treat changes accordingly.
+This is a security tool used by defenders. It is production-stable (v2.x; see `CHANGELOG.md`) and ships to real users. Treat changes accordingly.
 
 ## Stack
 
-- Python 3.10+ (CI targets 3.10/3.11/3.12)
+- Python 3.10+ (CI targets 3.10–3.13)
 - Build: `hatchling`
 - Runtime deps: `msal`, `requests`, `pyyaml`, `questionary`, `rich`
-- Dev: `pytest`, `pytest-asyncio`, `pytest-mock`, `responses`, `ruff`, `mypy` (strict), `bandit`, `pip-audit`
+- Dev: `pytest`, `pytest-cov`, `pytest-mock`, `responses`, `ruff`, `mypy` (strict), `types-requests`, `bandit`, `pip-audit`
 - Entry point: `anglerfish = "anglerfish.cli:main"`
 
 ## Layout
@@ -34,7 +34,7 @@ src/anglerfish/
   models.py       # dataclasses (OutlookTemplate, records)
   templates.py    # template loader + schema
 tests/            # pytest suite, one file per module
-docs/             # architecture.md, threat-model.md, demo scripts, sentinel KQL
+docs/             # architecture.md, threat-model.md, demo-tenant-setup.md, sentinel-kql.md, recordings/
 ```
 
 ## Dev workflow
@@ -46,14 +46,15 @@ pip install -e ".[dev]"
 
 pytest                       # full suite
 pytest -k <pattern>          # focused
+pytest --cov=anglerfish --cov-fail-under=85   # the coverage gate CI enforces
 ruff check src tests         # must be clean before merge
-ruff format src tests        # apply formatting
+ruff format --check src tests  # formatting gate (use `ruff format` to apply)
 mypy                         # strict; uses pyproject config
-bandit -r src                # optional security scan
-pip-audit                    # optional dep CVE scan
+bandit -r src -ll            # security scan (CI gate)
+pip-audit                    # dep CVE scan (separate CI job)
 ```
 
-All tests must pass and `ruff check` must be clean before a PR can be merged. CI runs the same commands.
+All of the above are required CI gates (plus a CLI smoke step that runs `python -m anglerfish list`). A PR must pass them all to merge.
 
 ## Conventions
 

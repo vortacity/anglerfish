@@ -1,0 +1,42 @@
+name: Bug report
+description: Something is broken or behaves incorrectly
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do **not** report security vulnerabilities here — use a
+        [private security advisory](https://github.com/vortacity/anglerfish/security/advisories/new) instead.
+        Never include tenant IDs, mailbox addresses, message IDs, tokens, or audit log captures from live tenants.
+  - type: input
+    id: version
+    attributes:
+      label: Anglerfish version
+      description: Output of `anglerfish --version`
+      placeholder: "2.1.0"
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version and OS
+      placeholder: "Python 3.12 on Ubuntu 24.04"
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you run, what did you expect, and what did you get? Sanitize all output.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. export ANGLERFISH_...
+        2. anglerfish monitor --once ...
+        3. ...
+    validations:
+      required: true

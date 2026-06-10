@@ -121,21 +121,42 @@ class OutlookDeployer(BaseDeployer):
                     "saveToSentItems": False,
                 },
             )
+            # From here on the mail is live in the target mailbox. Verification
+            # problems must degrade to an unverified record, never to a raised
+            # error: a raise would leave a deployed canary with no record at
+            # all (untracked, unmonitorable, and impossible to clean up).
             inbox_message = self._verify_sent_message(
+                target_user=target_user,
                 encoded_user=encoded_user,
                 started_at=started_at,
             )
-            internet_message_id = str(inbox_message.get("internetMessageId", "")).strip()
-            if not internet_message_id:
-                raise DeploymentError("Outlook verification failed: sent message response missing internetMessageId.")
-            return {
+            result = {
                 "delivery_mode": "send",
                 "subject": self.template.subject,
                 "target_user": target_user,
-                "inbox_message_id": str(inbox_message.get("id", "")),
-                "internet_message_id": internet_message_id,
-                "verified": "true",
+                "inbox_message_id": "",
+                "internet_message_id": "",
+                "verified": "false",
             }
+            if inbox_message is None:
+                result["verify_note"] = (
+                    "Mail was accepted by Graph sendMail but could not be confirmed in the "
+                    "Inbox within the verification window."
+                )
+                return result
+
+            result["inbox_message_id"] = str(inbox_message.get("id", ""))
+            internet_message_id = str(inbox_message.get("internetMessageId", "")).strip()
+            if not internet_message_id:
+                result["verify_note"] = (
+                    "Sent message was found but its internetMessageId could not be confirmed; "
+                    "monitor correlation will rely on re-deployment or manual record repair."
+                )
+                return result
+
+            result["internet_message_id"] = internet_message_id
+            result["verified"] = "true"
+            return result
         except GraphApiError as exc:
             raise DeploymentError(f"Outlook deployment failed: {exc}") from exc
 
@@ -178,16 +199,18 @@ class OutlookDeployer(BaseDeployer):
     def _verify_sent_message(
         self,
         *,
+        target_user: str,
         encoded_user: str,
         started_at: datetime,
-    ) -> dict:
+    ) -> dict | None:
+        """Find the just-sent canary in the Inbox; ``None`` if not confirmable."""
         for attempt in range(_SEND_VERIFY_ATTEMPTS):
             try:
                 inbox = self.graph.get(
                     f"/users/{encoded_user}/mailFolders/inbox/messages",
                     params={
                         "$top": 25,
-                        "$select": "id,subject,internetMessageId,receivedDateTime",
+                        "$select": "id,subject,internetMessageId,receivedDateTime,from",
                         "$orderby": "receivedDateTime desc",
                     },
                 )
@@ -204,6 +227,11 @@ class OutlookDeployer(BaseDeployer):
                         continue
                     if str(message.get("subject", "")) != self.template.subject:
                         continue
+                    # sendMail to self arrives from the mailbox owner. Reject a
+                    # same-subject message from another sender, or cleanup would
+                    # later delete someone else's mail.
+                    if not _from_matches_target(message, target_user):
+                        continue
                     received = _parse_graph_datetime(str(message.get("receivedDateTime", "")))
                     if received and received >= started_at - _SEND_VERIFY_WINDOW:
                         if str(message.get("id", "")).strip():
@@ -212,20 +240,21 @@ class OutlookDeployer(BaseDeployer):
             if attempt < _SEND_VERIFY_ATTEMPTS - 1:
                 time.sleep(attempt + 1)
 
-        raise DeploymentError("Outlook verification failed: sent message was not found in the Inbox.")
+        return None
 
 
 def remove_canary(graph: GraphClient, record: dict[str, str]) -> dict[str, str]:
     """Remove a deployed Outlook canary artifact."""
-    delivery_mode = record.get("delivery_mode", "draft").strip().lower()
-    target_user = record.get("target_user", "").strip()
+    # `or` fallbacks: hand-edited records can carry JSON null for any field.
+    delivery_mode = str(record.get("delivery_mode") or "draft").strip().lower()
+    target_user = str(record.get("target_user") or "").strip()
     if not target_user:
         raise DeploymentError("Deployment record missing 'target_user'.")
 
     encoded_user = _path_segment(target_user)
 
     if delivery_mode == "draft":
-        folder_id = record.get("folder_id", "").strip()
+        folder_id = str(record.get("folder_id") or "").strip()
         if not folder_id:
             raise DeploymentError("Deployment record missing 'folder_id'.")
         encoded_folder_id = _path_segment(folder_id)
@@ -236,7 +265,7 @@ def remove_canary(graph: GraphClient, record: dict[str, str]) -> dict[str, str]:
         return {"type": "outlook", "delivery_mode": "draft", "folder_id": folder_id, "removed": "true"}
 
     # send mode: delete inbox message (moves to Deleted Items)
-    inbox_message_id = record.get("inbox_message_id", "").strip()
+    inbox_message_id = str(record.get("inbox_message_id") or "").strip()
     if not inbox_message_id:
         raise DeploymentError("Deployment record missing 'inbox_message_id'.")
     encoded_message_id = _path_segment(inbox_message_id)
@@ -259,16 +288,16 @@ def trigger_canary_access(graph: GraphClient, record: dict[str, str]) -> dict[st
     if canary_type != "outlook":
         raise DeploymentError("Only outlook canaries are supported in this release.")
 
-    target_user = str(record.get("target_user", "")).strip()
+    target_user = str(record.get("target_user") or "").strip()
     if not target_user:
         raise DeploymentError("Deployment record missing 'target_user'.")
     encoded_user = _path_segment(target_user)
 
-    delivery_mode = str(record.get("delivery_mode", "draft")).strip().lower()
+    delivery_mode = str(record.get("delivery_mode") or "draft").strip().lower()
     try:
         if delivery_mode == "draft":
-            folder_id = str(record.get("folder_id", "")).strip()
-            message_id = str(record.get("message_id", "")).strip()
+            folder_id = str(record.get("folder_id") or "").strip()
+            message_id = str(record.get("message_id") or "").strip()
             if not folder_id:
                 raise DeploymentError("Deployment record missing 'folder_id'.")
             if not message_id:
@@ -278,7 +307,7 @@ def trigger_canary_access(graph: GraphClient, record: dict[str, str]) -> dict[st
                 params={"$select": "id,subject,internetMessageId,receivedDateTime"},
             )
         elif delivery_mode == "send":
-            message_id = str(record.get("inbox_message_id", "")).strip()
+            message_id = str(record.get("inbox_message_id") or "").strip()
             if not message_id:
                 raise DeploymentError("Deployment record missing 'inbox_message_id'.")
             message = graph.get(
@@ -308,6 +337,17 @@ def _new_canary_id() -> str:
 def _deployment_folder_name(base_name: str, canary_id: str) -> str:
     clean_base = str(base_name or "Anglerfish Canary").strip() or "Anglerfish Canary"
     return f"{clean_base} - {canary_id}"
+
+
+def _from_matches_target(message: dict, target_user: str) -> bool:
+    sender = message.get("from")
+    if not isinstance(sender, dict):
+        # Defensive: tolerate responses that omit the selected "from" field.
+        return True
+    address = str((sender.get("emailAddress") or {}).get("address") or "").strip()
+    if not address:
+        return True
+    return address.casefold() == target_user.casefold()
 
 
 def _parse_graph_datetime(raw: str) -> datetime | None:

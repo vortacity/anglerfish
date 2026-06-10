@@ -1,0 +1,29 @@
+name: Feature request
+description: Suggest an improvement or new capability
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Note the intentional scope limits before filing: Anglerfish is Outlook-only,
+        application-auth-only, and uses no callback infrastructure in the detection path
+        (see `AGENTS.md` "Out of scope"). Requests that change those need a strong case.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What operator problem does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false

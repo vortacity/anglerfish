@@ -611,7 +611,7 @@ def test_token_manager_refreshes_when_near_expiry():
     # Simulate token near expiry.
     mgr._expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
 
-    with patch("anglerfish.monitor.authenticate_management_api", return_value="new-token"):
+    with patch("anglerfish.monitor.authenticate_management_api_with_expiry", return_value=("new-token", 3600)):
         token = mgr.get_token()
 
     assert token == "new-token"
@@ -634,9 +634,9 @@ def test_token_manager_temporarily_restores_prompted_env(monkeypatch):
     def _fake_authenticate(mode):
         assert mode == "secret"
         assert os.environ.get("ANGLERFISH_CLIENT_SECRET") == "prompted-secret"
-        return "new-token"
+        return ("new-token", 3600)
 
-    with patch("anglerfish.monitor.authenticate_management_api", side_effect=_fake_authenticate):
+    with patch("anglerfish.monitor.authenticate_management_api_with_expiry", side_effect=_fake_authenticate):
         assert mgr.get_token() == "new-token"
 
     assert "ANGLERFISH_CLIENT_SECRET" not in os.environ
@@ -667,7 +667,7 @@ def test_write_heartbeat(tmp_path):
 def test_run_monitor_does_not_advance_watermark_on_fetch_failure(tmp_path):
     """A failed audit fetch must NOT advance the poll watermark, or events are lost."""
     state_path = tmp_path / "state.json"
-    fixed = "2026-03-01T00:00:00+00:00"
+    fixed = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
     state_path.write_text(
         json.dumps(
             {
@@ -696,7 +696,7 @@ def test_run_monitor_does_not_advance_watermark_on_fetch_failure(tmp_path):
 def test_run_monitor_advances_watermark_on_success(tmp_path):
     """A clean poll advances the watermark past the previous value."""
     state_path = tmp_path / "state.json"
-    fixed = "2026-03-01T00:00:00+00:00"
+    fixed = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
     state_path.write_text(
         json.dumps(
             {
@@ -719,6 +719,180 @@ def test_run_monitor_advances_watermark_on_success(tmp_path):
     assert rc == 0
     data = json.loads(state_path.read_text())
     assert data["last_poll_end"] != fixed  # advanced after a complete window
+
+
+def _write_state(state_path, last_poll_end: datetime) -> None:
+    state_path.write_text(
+        json.dumps(
+            {
+                "last_poll_end": last_poll_end.isoformat(),
+                "seen_ids": [],
+                "total_alerts": 0,
+                "total_polls": 0,
+                "started_at": last_poll_end.isoformat(),
+            }
+        )
+    )
+
+
+def test_run_monitor_skips_non_dict_blob_entries(tmp_path):
+    """Malformed blob entries from list_content must not crash the poll loop."""
+    event = _mail_items_accessed_event(Id="evt-blob-guard")
+    client = _mock_audit_client([event])
+    client.list_content.return_value = [
+        "garbage-string",
+        42,
+        {"contentUri": "https://example.com/content/1"},
+    ]
+    idx = CanaryIndex([("rec.json", _outlook_record())])
+    console = Console(file=None, force_terminal=False)
+
+    rc = run_monitor(client, idx, once=True, console=console, heartbeat_path=None)
+
+    assert rc == 0
+    assert client.fetch_content.call_count == 1
+
+
+def test_run_monitor_chunks_backlog_into_24h_windows(tmp_path):
+    """A backlog longer than 24h is ingested as successive <=24h windows, not skipped."""
+    state_path = tmp_path / "state.json"
+    backlog_start = datetime.now(timezone.utc) - timedelta(hours=60)
+    _write_state(state_path, backlog_start)
+
+    client = _mock_audit_client([])
+    idx = CanaryIndex([("rec.json", _outlook_record())])
+    sm = StateManager(state_path)
+    console = Console(file=None, force_terminal=False)
+
+    rc = run_monitor(client, idx, once=True, console=console, state_manager=sm, heartbeat_path=None)
+
+    assert rc == 0
+    calls = client.list_content.call_args_list
+    assert len(calls) == 3  # 60h backlog -> 24h + 24h + 12h
+    assert calls[0].args[1] == backlog_start
+    assert calls[0].args[2] == backlog_start + timedelta(hours=24)
+    assert calls[1].args[1] == backlog_start + timedelta(hours=24)
+    assert calls[1].args[2] == backlog_start + timedelta(hours=48)
+    assert calls[2].args[1] == backlog_start + timedelta(hours=48)
+    # Last window ends at "now"; no gap between windows.
+    assert (datetime.now(timezone.utc) - calls[2].args[2]).total_seconds() < 60
+
+    data = json.loads(state_path.read_text())
+    assert data["last_poll_end"] == calls[2].args[2].isoformat()
+
+
+def test_run_monitor_backlog_stops_advancing_at_failed_window(tmp_path):
+    """If a backlog window fails, the watermark stops at the last complete window."""
+    state_path = tmp_path / "state.json"
+    backlog_start = datetime.now(timezone.utc) - timedelta(hours=60)
+    _write_state(state_path, backlog_start)
+
+    client = _mock_audit_client([])
+    client.list_content.side_effect = [[], RuntimeError("audit API unavailable")]
+    idx = CanaryIndex([("rec.json", _outlook_record())])
+    sm = StateManager(state_path)
+    console = Console(file=None, force_terminal=False)
+
+    rc = run_monitor(client, idx, once=True, console=console, state_manager=sm, heartbeat_path=None)
+
+    assert rc == 0
+    # Third window is not attempted once the second fails (ordering preserved).
+    assert client.list_content.call_count == 2
+    data = json.loads(state_path.read_text())
+    assert data["last_poll_end"] == (backlog_start + timedelta(hours=24)).isoformat()
+
+
+def test_run_monitor_clamps_backlog_to_retention_window(tmp_path):
+    """A watermark older than the 7-day content retention is clamped, not requested."""
+    state_path = tmp_path / "state.json"
+    backlog_start = datetime.now(timezone.utc) - timedelta(days=10)
+    _write_state(state_path, backlog_start)
+
+    client = _mock_audit_client([])
+    idx = CanaryIndex([("rec.json", _outlook_record())])
+    sm = StateManager(state_path)
+    console = Console(file=None, force_terminal=False)
+
+    rc = run_monitor(client, idx, once=True, console=console, state_manager=sm, heartbeat_path=None)
+
+    assert rc == 0
+    calls = client.list_content.call_args_list
+    first_start = calls[0].args[1]
+    # Clamped to retention, but the whole retained range is still covered.
+    assert first_start >= datetime.now(timezone.utc) - timedelta(days=7, minutes=1)
+    assert first_start <= datetime.now(timezone.utc) - timedelta(days=7) + timedelta(minutes=1)
+    assert len(calls) == 7  # 7 retained days in 24h windows
+
+
+def test_heartbeat_reports_degraded_when_poll_fails(tmp_path):
+    """A poll cycle that could not ingest its window must not report healthy."""
+    state_path = tmp_path / "state.json"
+    heartbeat_path = tmp_path / "heartbeat.json"
+    _write_state(state_path, datetime.now(timezone.utc) - timedelta(hours=1))
+
+    client = _mock_audit_client([])
+    client.list_content.side_effect = RuntimeError("audit API unavailable")
+    idx = CanaryIndex([("rec.json", _outlook_record())])
+    sm = StateManager(state_path)
+    console = Console(file=None, force_terminal=False)
+
+    rc = run_monitor(client, idx, once=True, console=console, state_manager=sm, heartbeat_path=heartbeat_path)
+
+    assert rc == 0
+    hb = json.loads(heartbeat_path.read_text())
+    assert hb["status"] == "degraded"
+
+
+def test_run_monitor_survives_token_refresh_failure(tmp_path):
+    """A transient token refresh failure must not kill the monitor loop."""
+    from anglerfish.exceptions import AuthenticationError
+
+    token_manager = MagicMock()
+    token_manager.get_token.side_effect = AuthenticationError("AAD temporarily unavailable")
+
+    client = _mock_audit_client([])
+    idx = CanaryIndex([("rec.json", _outlook_record())])
+    console = Console(file=None, force_terminal=False)
+
+    rc = run_monitor(
+        client,
+        idx,
+        once=True,
+        console=console,
+        token_manager=token_manager,
+        heartbeat_path=None,
+    )
+
+    assert rc == 0
+    # The poll still ran with the existing client/token.
+    assert client.list_content.called
+
+
+def test_token_manager_uses_provided_expires_in():
+    mgr = _TokenManager("token", expires_in=7200)
+    expected = datetime.now(timezone.utc) + timedelta(seconds=7200)
+    assert abs((mgr._expires_at - expected).total_seconds()) < 5
+
+
+def test_token_manager_short_lifetime_does_not_refresh_immediately():
+    # With a lifetime shorter than the refresh margin, the margin must shrink
+    # rather than trigger a refresh on every call.
+    mgr = _TokenManager("short-lived", expires_in=120)
+    assert mgr.get_token() == "short-lived"
+
+
+def test_token_manager_refresh_uses_expires_in_from_auth():
+    mgr = _TokenManager("old-token")
+    mgr._expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+
+    with patch(
+        "anglerfish.monitor.authenticate_management_api_with_expiry",
+        return_value=("new-token", 1800),
+    ):
+        assert mgr.get_token() == "new-token"
+
+    expected = datetime.now(timezone.utc) + timedelta(seconds=1800)
+    assert abs((mgr._expires_at - expected).total_seconds()) < 5
 
 
 def test_load_records_logs_warning_for_malformed_record(tmp_path, caplog):

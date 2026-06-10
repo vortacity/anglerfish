@@ -57,13 +57,26 @@ class StateManager:
             if not isinstance(raw, dict):
                 raise MonitorError(f"Monitor state '{self.path}' is not a valid JSON object.")
 
-            state = MonitorState(
-                last_poll_end=str(raw.get("last_poll_end", "")),
-                seen_ids=list(raw.get("seen_ids", [])),
-                total_alerts=int(raw.get("total_alerts", 0)),
-                total_polls=int(raw.get("total_polls", 0)),
-                started_at=str(raw.get("started_at", "")),
-            )
+            seen_ids = raw.get("seen_ids") or []
+            if not isinstance(seen_ids, list):
+                raise MonitorError(f"Monitor state '{self.path}' has a non-list 'seen_ids' field.")
+            try:
+                state = MonitorState(
+                    last_poll_end=str(raw.get("last_poll_end") or ""),
+                    seen_ids=[str(eid) for eid in seen_ids],
+                    total_alerts=int(raw.get("total_alerts") or 0),
+                    total_polls=int(raw.get("total_polls") or 0),
+                    started_at=str(raw.get("started_at") or ""),
+                )
+            except (TypeError, ValueError) as exc:
+                raise MonitorError(f"Monitor state '{self.path}' contains invalid field values: {exc}") from exc
+            if state.last_poll_end:
+                try:
+                    datetime.fromisoformat(state.last_poll_end)
+                except ValueError as exc:
+                    raise MonitorError(
+                        f"Monitor state '{self.path}' has an invalid 'last_poll_end' timestamp."
+                    ) from exc
             # Rebuild lookup structures from persisted IDs.
             for eid in state.seen_ids[-_MAX_SEEN_IDS:]:
                 self._seen_deque.append(eid)

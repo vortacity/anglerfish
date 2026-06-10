@@ -471,6 +471,21 @@ def test_render_deploy_template_non_interactive_uses_cli_vars_and_defaults():
     assert "$100" in rendered.body_html
 
 
+def test_render_deploy_template_warns_on_unknown_var_keys(capsys):
+    """A typo'd --var key must be surfaced, not silently dropped."""
+    rendered = _render_deploy_template(
+        _template_with_vars(),
+        canary_type="outlook",
+        console=Console(force_terminal=False),
+        non_interactive=True,
+        cli_var_values={"amount": "$100", "whoo": "typo"},
+    )
+    assert rendered is not None
+    out = capsys.readouterr().out
+    assert "whoo" in out
+    assert "Unknown" in out or "unknown" in out
+
+
 def test_render_deploy_template_non_interactive_missing_required_var_raises():
     with pytest.raises(DeploymentError, match="amount"):
         _render_deploy_template(

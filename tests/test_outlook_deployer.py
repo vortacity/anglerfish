@@ -183,7 +183,10 @@ def test_outlook_deployer_send_mode_happy_path():
     assert result["verified"] == "true"
 
 
-def test_outlook_deployer_send_mode_raises_when_message_not_found(monkeypatch: pytest.MonkeyPatch):
+def test_outlook_deployer_send_mode_returns_unverified_when_message_not_found(monkeypatch: pytest.MonkeyPatch):
+    """sendMail succeeded, so the canary is live: deploy must NOT raise (which
+    would leave an untracked message in the target mailbox with no record)."""
+
     class SendGraph:
         def post(self, path, json=None):
             return {}
@@ -195,8 +198,75 @@ def test_outlook_deployer_send_mode_raises_when_message_not_found(monkeypatch: p
 
     deployer = OutlookDeployer(SendGraph(), _template())
 
-    with pytest.raises(DeploymentError, match="sent message was not found"):
-        deployer.deploy("user@contoso.com", delivery_mode="send")
+    result = deployer.deploy("user@contoso.com", delivery_mode="send")
+
+    assert result["verified"] == "false"
+    assert result["inbox_message_id"] == ""
+    assert result["internet_message_id"] == ""
+    assert result["target_user"] == "user@contoso.com"
+    assert "could not be confirmed" in result["verify_note"]
+
+
+def test_outlook_deployer_send_verify_skips_same_subject_from_other_sender(monkeypatch: pytest.MonkeyPatch):
+    """A pre-existing same-subject message from another sender must not be
+    recorded as the canary (cleanup would delete the wrong message)."""
+    observed_params: dict = {}
+
+    class SendGraph:
+        def post(self, path, json=None):
+            return {}
+
+        def get(self, path, params=None):
+            observed_params.update(params or {})
+            timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            return {
+                "value": [
+                    {
+                        "id": "someone-elses-message",
+                        "subject": "Subject",
+                        "internetMessageId": "<other@external.example>",
+                        "receivedDateTime": timestamp,
+                        "from": {"emailAddress": {"address": "phisher@external.example"}},
+                    }
+                ]
+            }
+
+    monkeypatch.setattr("anglerfish.deployers.outlook.time.sleep", lambda *_: None)
+
+    deployer = OutlookDeployer(SendGraph(), _template())
+
+    result = deployer.deploy("user@contoso.com", delivery_mode="send")
+
+    assert "from" in str(observed_params.get("$select", ""))
+    assert result["verified"] == "false"
+    assert result["inbox_message_id"] == ""
+
+
+def test_outlook_deployer_send_verify_accepts_message_from_target_mailbox(monkeypatch: pytest.MonkeyPatch):
+    class SendGraph:
+        def post(self, path, json=None):
+            return {}
+
+        def get(self, path, params=None):
+            timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            return {
+                "value": [
+                    {
+                        "id": "inbox-message-123",
+                        "subject": "Subject",
+                        "internetMessageId": "<abc@contoso.com>",
+                        "receivedDateTime": timestamp,
+                        "from": {"emailAddress": {"address": "User@Contoso.com"}},
+                    }
+                ]
+            }
+
+    deployer = OutlookDeployer(SendGraph(), _template())
+
+    result = deployer.deploy("user@contoso.com", delivery_mode="send")
+
+    assert result["verified"] == "true"
+    assert result["inbox_message_id"] == "inbox-message-123"
 
 
 def test_outlook_deployer_rejects_invalid_delivery_mode():
@@ -393,7 +463,10 @@ def test_outlook_deployer_send_verify_skips_wrong_subject(monkeypatch: pytest.Mo
     assert result["inbox_message_id"] == "msg-ok"
 
 
-def test_outlook_deployer_send_requires_internet_message_id(monkeypatch: pytest.MonkeyPatch):
+def test_outlook_deployer_send_missing_internet_message_id_returns_unverified(monkeypatch: pytest.MonkeyPatch):
+    """The mail is delivered, so keep the record (with the inbox id for
+    cleanup) but mark it unverified instead of reporting a failed deploy."""
+
     class MissingInternetMessageGraph:
         def post(self, path, json=None):
             return {}
@@ -405,8 +478,49 @@ def test_outlook_deployer_send_requires_internet_message_id(monkeypatch: pytest.
     monkeypatch.setattr("anglerfish.deployers.outlook.time.sleep", lambda *_: None)
     deployer = OutlookDeployer(MissingInternetMessageGraph(), _template())
 
-    with pytest.raises(DeploymentError, match="internetMessageId"):
-        deployer.deploy("user@contoso.com", delivery_mode="send")
+    result = deployer.deploy("user@contoso.com", delivery_mode="send")
+
+    assert result["verified"] == "false"
+    assert result["inbox_message_id"] == "msg-no-imid"
+    assert result["internet_message_id"] == ""
+
+
+def test_remove_canary_tolerates_null_delivery_mode_and_target(monkeypatch: pytest.MonkeyPatch):
+    """A hand-edited record with JSON null fields must produce a clean
+    DeploymentError, not an AttributeError traceback."""
+
+    class NoCallGraph:
+        def delete(self, path):
+            raise AssertionError("should not be called")
+
+    record = {"type": "outlook", "delivery_mode": None, "target_user": None}
+
+    with pytest.raises(DeploymentError, match="target_user"):
+        remove_canary(NoCallGraph(), record)
+
+
+def test_remove_canary_tolerates_null_folder_id():
+    class NoCallGraph:
+        def delete(self, path):
+            raise AssertionError("should not be called")
+
+    record = {"type": "outlook", "delivery_mode": "draft", "target_user": "a@b.com", "folder_id": None}
+
+    with pytest.raises(DeploymentError, match="folder_id"):
+        remove_canary(NoCallGraph(), record)
+
+
+def test_trigger_canary_access_tolerates_null_delivery_mode():
+    class NoCallGraph:
+        def get(self, path, params=None):
+            raise AssertionError("should not be called")
+
+    record = {"type": "outlook", "delivery_mode": None, "target_user": "a@b.com"}
+
+    # Null delivery_mode falls back to draft, which then reports the real
+    # missing field instead of crashing or claiming an invalid mode.
+    with pytest.raises(DeploymentError, match="folder_id"):
+        trigger_canary_access(NoCallGraph(), record)
 
 
 def test_parse_graph_datetime_empty_string_returns_none():

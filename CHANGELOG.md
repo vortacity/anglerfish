@@ -9,7 +9,105 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+_Nothing yet._
+
+---
+
+## [2.1.0] — 2026-06-09
+
+### Fixed
+
+- A global `--demo` placed before the `monitor` or `verify` subcommand was
+  silently ignored and the command ran in real mode (live auth and API calls).
+  All subcommands now respect `--demo` regardless of flag position.
+- `monitor --interval` rejects values below 1; `0` or a negative value
+  previously produced a sleep-free hot loop against the Management API.
+- Monitor downtime longer than 24 hours no longer silently skips audit events.
+  The backlog is now ingested in successive ≤24-hour windows (the API maximum
+  per request) up to the ~7-day content retention floor, and any range past
+  retention is reported as unrecoverable instead of being dropped quietly.
+- The monitor heartbeat reports `"degraded"` when a poll cycle could not ingest
+  its full window, instead of always claiming `"healthy"` — external watchdogs
+  can now detect a blind monitor.
+- A transient token-refresh failure (AAD blip, network error) no longer
+  terminates the long-running monitor; the loop keeps the current token and
+  retries on the next cycle. Token refresh also honors the tenant's actual
+  token lifetime (`expires_in` from MSAL) instead of assuming 55 minutes.
+- Send-mode deploy: a verification timeout after a successful `sendMail` no
+  longer raises and discards the deployment record — which left a live,
+  untracked canary in the target mailbox. The record is now written with
+  `verified=false` and a `verify_note`, and the CLI prints a warning.
+- Send-mode inbox verification requires the candidate message's from-address to
+  be the target mailbox, so a same-subject message from another sender can no
+  longer be recorded as the canary (and later deleted by cleanup).
+- `verify` now confirms the canary message itself in addition to its hidden
+  folder; a deleted message inside a surviving folder is reported `GONE`.
+- `cleanup` and `demo-access` on records with JSON `null` fields raise clean
+  errors instead of `AttributeError` tracebacks, and corrupt monitor state
+  files (bad counters, non-list `seen_ids`, invalid `last_poll_end`) produce a
+  clean `MonitorError` instead of a raw traceback.
+- Unknown `--var` keys are reported with the template's declared variable names
+  instead of being silently dropped.
+- Monitor no longer advances its poll watermark when an audit-log list or fetch
+  fails mid-window, so transient API errors can no longer skip canary access
+  events permanently. Re-polling is safe because seen-ID dedup suppresses
+  already-dispatched alerts.
+- Interactive prompts on a non-interactive stdin (CI, pipe, daemon) now exit
+  cleanly with guidance instead of raising an uncaught `EOFError` traceback.
+- `monitor` retry/backoff now honors `Retry-After` headers expressed as an
+  HTTP-date, matching the Graph client (previously collapsed to 1 second).
+- A single malformed YAML file in a custom `ANGLERFISH_TEMPLATES_DIR` no longer
+  hides every other template from listing.
+- Malformed deployment records skipped during monitoring are now logged so an
+  operator can see when a canary drops out of monitoring.
+- Templates that reference an undeclared `${placeholder}` are now rejected at
+  load time instead of silently leaking the literal text into a deployed canary.
+- Record, state, alert-log, and heartbeat writes no longer require `os.fchmod`,
+  so they work on platforms (e.g. Windows) that lack it.
+- Management Activity API error messages of the `{"Message": "..."}` shape are
+  now surfaced verbatim instead of as a generic `Unknown:` string.
+
+### Security
+
+- Server-supplied `Retry-After` throttle delays are capped at 120 seconds in
+  both the Graph and Management API clients; a misbehaving server or proxy
+  could previously park the CLI (or block monitor shutdown) for an arbitrary
+  duration.
+- Management API content pagination is guarded against self-referencing
+  `NextPageUri` loops and unbounded page counts.
+- Alert fields derived from audit events (which an accessing actor can influence,
+  e.g. `ClientInfoString`) are now escaped before console rendering, preventing
+  Rich console-markup injection / alert spoofing.
+- HTTP clients no longer follow redirects; an unexpected 3xx from Graph or the
+  Management Activity API is treated as an error instead of being followed to a
+  potentially unvalidated host.
+- The Slack webhook sink rejects non-`https` URLs and no longer logs the webhook
+  URL (a bearer secret) on failure.
+- The `pkg://` template loader rejects `.`/`..`/separator path segments,
+  closing in-package path traversal.
+- The Management Activity API subscription-start `POST` no longer auto-retries,
+  so a transient failure cannot double-execute the write.
+
+### Added
+
+- GitHub issue forms, a pull-request checklist template, and Dependabot
+  configuration for pip and GitHub Actions.
+- Python 3.13 added to the CI matrix and package classifiers.
+
 ### Documentation
+
+- `.env.example` now documents the monitor variables
+  (`ANGLERFISH_MONITOR_STATE_FILE`, `ANGLERFISH_MONITOR_ALERT_LOG`,
+  `ANGLERFISH_SLACK_WEBHOOK_URL`, `ANGLERFISH_MONITOR_NO_CONSOLE`) and
+  `ANGLERFISH_TEMPLATES_DIR`.
+- CONTRIBUTING.md and AGENTS.md list every CI gate (coverage floor, format
+  check, mypy, bandit, CLI smoke) instead of only pytest and ruff, and the
+  AGENTS.md dependency list matches `pyproject.toml`.
+- README demo caption matches what the recording shows, the Quickstart
+  references `scripts/quickstart.sh`, and the draft demo record fixture uses
+  the v2 record shape (`canary_id`, ID-suffixed folder name).
+
+### Documentation (pre-release polish)
 
 - Reframed the project as a general open-source tool: removed Black Hat /
   Arsenal / reviewer / booth framing from the README, docs, AUTHORS, and
@@ -39,42 +137,6 @@ This project uses [Semantic Versioning](https://semver.org/).
   setting, the always-`True` `_TokenManager.refreshed` property, an unused
   `cli_var_values` parameter, and the unused `pytest-asyncio` dependency and
   `asyncio_mode` pytest config (the project has no async code).
-
-### Security
-
-- Alert fields derived from audit events (which an accessing actor can influence,
-  e.g. `ClientInfoString`) are now escaped before console rendering, preventing
-  Rich console-markup injection / alert spoofing.
-- HTTP clients no longer follow redirects; an unexpected 3xx from Graph or the
-  Management Activity API is treated as an error instead of being followed to a
-  potentially unvalidated host.
-- The Slack webhook sink rejects non-`https` URLs and no longer logs the webhook
-  URL (a bearer secret) on failure.
-- The `pkg://` template loader rejects `.`/`..`/separator path segments,
-  closing in-package path traversal.
-- The Management Activity API subscription-start `POST` no longer auto-retries,
-  so a transient failure cannot double-execute the write.
-
-### Fixed
-
-- Monitor no longer advances its poll watermark when an audit-log list or fetch
-  fails mid-window, so transient API errors can no longer skip canary access
-  events permanently. Re-polling is safe because seen-ID dedup suppresses
-  already-dispatched alerts.
-- Interactive prompts on a non-interactive stdin (CI, pipe, daemon) now exit
-  cleanly with guidance instead of raising an uncaught `EOFError` traceback.
-- `monitor` retry/backoff now honors `Retry-After` headers expressed as an
-  HTTP-date, matching the Graph client (previously collapsed to 1 second).
-- A single malformed YAML file in a custom `ANGLERFISH_TEMPLATES_DIR` no longer
-  hides every other template from listing.
-- Malformed deployment records skipped during monitoring are now logged so an
-  operator can see when a canary drops out of monitoring.
-- Templates that reference an undeclared `${placeholder}` are now rejected at
-  load time instead of silently leaking the literal text into a deployed canary.
-- Record, state, alert-log, and heartbeat writes no longer require `os.fchmod`,
-  so they work on platforms (e.g. Windows) that lack it.
-- Management Activity API error messages of the `{"Message": "..."}` shape are
-  now surfaced verbatim instead of as a generic `Unknown:` string.
 
 ---
 
