@@ -38,6 +38,13 @@ def test_main_version_flag():
     assert main(["--version"]) == 0
 
 
+def test_help_usage_is_branded_regardless_of_invocation(capsys):
+    # `python -m anglerfish --help` must say "usage: anglerfish", not "usage: __main__.py".
+    with pytest.raises(SystemExit):
+        main_mod._parse_args(["--help"])
+    assert "usage: anglerfish" in capsys.readouterr().out
+
+
 def test_parse_args_rejects_removed_simulate_flag():
     with pytest.raises(SystemExit):
         main_mod._parse_args(["--simulate"])
