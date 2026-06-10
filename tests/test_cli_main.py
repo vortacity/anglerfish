@@ -250,6 +250,16 @@ class TestParseArgs:
         args = _parse_args(["--output-json", "/tmp/out.json"])
         assert args.output_json == "/tmp/out.json"
 
+    def test_list_format_json(self):
+        args = _parse_args(["list", "--format", "json"])
+        assert args.subcommand == "list"
+        assert args.output_format == "json"
+
+    def test_verify_format_json(self):
+        args = _parse_args(["verify", "--format", "json"])
+        assert args.subcommand == "verify"
+        assert args.output_format == "json"
+
 
 class TestPrintAuthSuccess:
     def test_application_mode_prints_application_success(self):

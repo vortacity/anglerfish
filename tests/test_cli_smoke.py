@@ -166,6 +166,54 @@ def test_main_list_returns_zero_when_records_dir_missing(tmp_path):
     assert main(["list", "--records-dir", str(missing)]) == 0
 
 
+def test_main_list_format_json_outputs_records(tmp_path, capsys):
+    (tmp_path / "outlook.json").write_text(
+        json.dumps(
+            {
+                "timestamp": "2026-05-06T18:00:00+00:00",
+                "canary_type": "outlook",
+                "template_name": "Outlook",
+                "target_user": "adele.vance@contoso.com",
+                "status": "active",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "sharepoint.json").write_text(
+        json.dumps(
+            {
+                "timestamp": "2026-05-06T18:00:00+00:00",
+                "canary_type": "sharepoint",
+                "template_name": "Legacy",
+                "status": "active",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert main(["list", "--format", "json", "--records-dir", str(tmp_path)]) == 0
+
+    records = json.loads(capsys.readouterr().out)
+    assert records == [
+        {
+            "timestamp": "2026-05-06T18:00:00+00:00",
+            "canary_type": "outlook",
+            "template_name": "Outlook",
+            "target_user": "adele.vance@contoso.com",
+            "status": "active",
+        }
+    ]
+
+
+def test_main_verify_format_json_demo_outputs_results(capsys):
+    assert main(["verify", "--demo", "--format", "json"]) == 1
+
+    results = json.loads(capsys.readouterr().out)
+    assert [result["status"] for result in results] == ["OK", "GONE", "ERROR"]
+    assert results[0]["target"] == "cfo@contoso.com"
+    assert all(set(result) == {"canary_type", "template_name", "target", "status", "detail"} for result in results)
+
+
 def test_main_cleanup_outlook_happy_path(monkeypatch, tmp_path):
     record_path = tmp_path / "record.json"
     record_path.write_text("{}", encoding="utf-8")
