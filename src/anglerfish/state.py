@@ -71,8 +71,12 @@ class StateManager:
             except (TypeError, ValueError) as exc:
                 raise MonitorError(f"Monitor state '{self.path}' contains invalid field values: {exc}") from exc
             if state.last_poll_end:
+                # Python 3.10's fromisoformat rejects the 'Z' suffix; normalize first.
+                raw_ts = state.last_poll_end
+                if raw_ts.endswith("Z"):
+                    raw_ts = f"{raw_ts[:-1]}+00:00"
                 try:
-                    datetime.fromisoformat(state.last_poll_end)
+                    datetime.fromisoformat(raw_ts)
                 except ValueError as exc:
                     raise MonitorError(
                         f"Monitor state '{self.path}' has an invalid 'last_poll_end' timestamp."

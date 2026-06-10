@@ -721,6 +721,36 @@ def test_run_monitor_advances_watermark_on_success(tmp_path):
     assert data["last_poll_end"] != fixed  # advanced after a complete window
 
 
+def test_run_monitor_resumes_from_z_suffix_watermark(tmp_path):
+    """A 'Z'-suffixed persisted watermark must resume correctly, including on
+    Python 3.10 where datetime.fromisoformat rejects the 'Z' form."""
+    state_path = tmp_path / "state.json"
+    fixed_dt = datetime.now(timezone.utc) - timedelta(hours=1)
+    fixed = fixed_dt.isoformat().replace("+00:00", "Z")
+    state_path.write_text(
+        json.dumps(
+            {
+                "last_poll_end": fixed,
+                "seen_ids": [],
+                "total_alerts": 0,
+                "total_polls": 0,
+                "started_at": fixed,
+            }
+        )
+    )
+
+    client = _mock_audit_client([])
+    idx = CanaryIndex([("rec.json", _outlook_record())])
+    sm = StateManager(state_path)
+    console = Console(file=None, force_terminal=False)
+
+    rc = run_monitor(client, idx, once=True, console=console, state_manager=sm, heartbeat_path=None)
+
+    assert rc == 0
+    # The poll window starts at the persisted watermark, not the 1h fallback.
+    assert client.list_content.call_args_list[0].args[1] == fixed_dt
+
+
 def _write_state(state_path, last_poll_end: datetime) -> None:
     state_path.write_text(
         json.dumps(
