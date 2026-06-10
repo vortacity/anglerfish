@@ -114,6 +114,8 @@ export ANGLERFISH_APP_CREDENTIAL_MODE="secret"
 export ANGLERFISH_CLIENT_SECRET="..."
 ```
 
+For file-based secret delivery, set `ANGLERFISH_CLIENT_SECRET_FILE` instead.
+
 Dry-run the default Outlook workflow:
 
 ```bash
@@ -171,6 +173,9 @@ export ANGLERFISH_APP_CREDENTIAL_MODE="secret"
 export ANGLERFISH_CLIENT_SECRET="<client-secret>"
 ```
 
+Use `ANGLERFISH_CLIENT_SECRET_FILE` instead of `ANGLERFISH_CLIENT_SECRET` when the
+secret is mounted as a file. Set only one of the two variables.
+
 Certificate mode:
 
 ```bash
@@ -180,6 +185,9 @@ export ANGLERFISH_APP_CREDENTIAL_MODE="certificate"
 export ANGLERFISH_CLIENT_CERT_PFX_PATH="/path/to/app-cert.pfx"
 export ANGLERFISH_CLIENT_CERT_PASSPHRASE="<optional-passphrase>"
 ```
+
+Certificate passphrases can also be read from
+`ANGLERFISH_CLIENT_CERT_PASSPHRASE_FILE`.
 
 PEM certificate configuration is also supported. See `.env.example` for the full variable set.
 

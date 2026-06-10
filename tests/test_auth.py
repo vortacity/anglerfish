@@ -15,12 +15,14 @@ def clear_anglerfish_env(monkeypatch: pytest.MonkeyPatch):
         "ANGLERFISH_TENANT_ID",
         "ANGLERFISH_AUTH_MODE",
         "ANGLERFISH_CLIENT_SECRET",
+        "ANGLERFISH_CLIENT_SECRET_FILE",
         "ANGLERFISH_APP_CREDENTIAL_MODE",
         "ANGLERFISH_CLIENT_CERT_PFX_PATH",
         "ANGLERFISH_CLIENT_CERT_PRIVATE_KEY_PATH",
         "ANGLERFISH_CLIENT_CERT_PUBLIC_CERT_PATH",
         "ANGLERFISH_CLIENT_CERT_THUMBPRINT",
         "ANGLERFISH_CLIENT_CERT_PASSPHRASE",
+        "ANGLERFISH_CLIENT_CERT_PASSPHRASE_FILE",
         "ANGLERFISH_CLIENT_CERT_SEND_X5C",
     ):
         monkeypatch.delenv(name, raising=False)
@@ -77,6 +79,69 @@ def test_authenticate_application_success(monkeypatch: pytest.MonkeyPatch):
     token = auth.authenticate()
 
     assert token == "app-token-123"
+
+
+def test_authenticate_application_reads_client_secret_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    secret_file = tmp_path / "client-secret"
+    secret_file.write_text("file-secret\n", encoding="utf-8")
+
+    monkeypatch.setattr(auth, "AUTH_MODE", "application")
+    monkeypatch.setattr(auth, "CLIENT_ID", "client-id")
+    monkeypatch.setattr(auth, "TENANT_ID", "tenant-id")
+    monkeypatch.setattr(auth, "CLIENT_SECRET", "")
+    monkeypatch.setattr(auth, "CLIENT_SECRET_FILE", str(secret_file))
+    monkeypatch.setattr(auth, "CLIENT_CERT_PFX_PATH", "")
+    monkeypatch.setattr(auth, "CLIENT_CERT_PRIVATE_KEY_PATH", "")
+    monkeypatch.setattr(auth, "CLIENT_CERT_PUBLIC_CERT_PATH", "")
+    monkeypatch.setattr(auth, "CLIENT_CERT_THUMBPRINT", "")
+    monkeypatch.setattr(auth, "APP_CREDENTIAL_MODE", "secret")
+    monkeypatch.setattr(auth.msal, "ConfidentialClientApplication", FakeConfidentialAppSuccess)
+
+    token = auth.authenticate()
+
+    assert token == "app-token-123"
+    assert FakeConfidentialAppSuccess.last_client_credential == "file-secret"
+
+
+def test_authenticate_application_client_secret_file_missing_raises(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(auth, "AUTH_MODE", "application")
+    monkeypatch.setattr(auth, "CLIENT_ID", "client-id")
+    monkeypatch.setattr(auth, "TENANT_ID", "tenant-id")
+    monkeypatch.setattr(auth, "CLIENT_SECRET", "")
+    monkeypatch.setattr(auth, "CLIENT_SECRET_FILE", "/nonexistent/client-secret")
+    monkeypatch.setattr(auth, "CLIENT_CERT_PFX_PATH", "")
+    monkeypatch.setattr(auth, "CLIENT_CERT_PRIVATE_KEY_PATH", "")
+    monkeypatch.setattr(auth, "CLIENT_CERT_PUBLIC_CERT_PATH", "")
+    monkeypatch.setattr(auth, "CLIENT_CERT_THUMBPRINT", "")
+    monkeypatch.setattr(auth, "APP_CREDENTIAL_MODE", "secret")
+
+    with pytest.raises(AuthenticationError, match="ANGLERFISH_CLIENT_SECRET_FILE"):
+        auth.authenticate()
+
+
+def test_authenticate_application_client_secret_file_rejects_ambiguous_config(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    secret_file = tmp_path / "client-secret"
+    secret_file.write_text("file-secret\n", encoding="utf-8")
+
+    monkeypatch.setattr(auth, "AUTH_MODE", "application")
+    monkeypatch.setattr(auth, "CLIENT_ID", "client-id")
+    monkeypatch.setattr(auth, "TENANT_ID", "tenant-id")
+    monkeypatch.setattr(auth, "CLIENT_SECRET", "env-secret")
+    monkeypatch.setattr(auth, "CLIENT_SECRET_FILE", str(secret_file))
+    monkeypatch.setattr(auth, "CLIENT_CERT_PFX_PATH", "")
+    monkeypatch.setattr(auth, "CLIENT_CERT_PRIVATE_KEY_PATH", "")
+    monkeypatch.setattr(auth, "CLIENT_CERT_PUBLIC_CERT_PATH", "")
+    monkeypatch.setattr(auth, "CLIENT_CERT_THUMBPRINT", "")
+    monkeypatch.setattr(auth, "APP_CREDENTIAL_MODE", "secret")
+
+    with pytest.raises(AuthenticationError, match="Set either ANGLERFISH_CLIENT_SECRET"):
+        auth.authenticate()
 
 
 def test_authenticate_application_missing_secret_raises(monkeypatch: pytest.MonkeyPatch):
@@ -206,6 +271,37 @@ def test_authenticate_application_with_pfx_certificate(monkeypatch: pytest.Monke
         "private_key_pfx_path": str(pfx_file),
         "passphrase": "passphrase",
         "public_certificate": True,
+    }
+
+
+def test_authenticate_application_reads_cert_passphrase_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    pfx_file = tmp_path / "client-cert.pfx"
+    pfx_file.write_bytes(b"fake-pfx-content")
+    passphrase_file = tmp_path / "passphrase"
+    passphrase_file.write_text("file-passphrase\n", encoding="utf-8")
+
+    monkeypatch.setattr(auth, "AUTH_MODE", "application")
+    monkeypatch.setattr(auth, "CLIENT_ID", "client-id")
+    monkeypatch.setattr(auth, "TENANT_ID", "tenant-id")
+    monkeypatch.setattr(auth, "CLIENT_SECRET", "")
+    monkeypatch.setattr(auth, "CLIENT_CERT_PFX_PATH", str(pfx_file))
+    monkeypatch.setattr(auth, "CLIENT_CERT_PRIVATE_KEY_PATH", "")
+    monkeypatch.setattr(auth, "CLIENT_CERT_PUBLIC_CERT_PATH", "")
+    monkeypatch.setattr(auth, "CLIENT_CERT_THUMBPRINT", "")
+    monkeypatch.setattr(auth, "CLIENT_CERT_PASSPHRASE", "")
+    monkeypatch.setattr(auth, "CLIENT_CERT_PASSPHRASE_FILE", str(passphrase_file))
+    monkeypatch.setattr(auth, "CLIENT_CERT_SEND_X5C", "")
+    monkeypatch.setattr(auth, "APP_CREDENTIAL_MODE", "certificate")
+    monkeypatch.setattr(auth.msal, "ConfidentialClientApplication", FakeConfidentialAppSuccess)
+
+    token = auth.authenticate()
+
+    assert token == "app-token-123"
+    assert FakeConfidentialAppSuccess.last_client_credential == {
+        "private_key_pfx_path": str(pfx_file),
+        "passphrase": "file-passphrase",
     }
 
 

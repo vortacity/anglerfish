@@ -12,6 +12,7 @@ from .config import (
     APP_CREDENTIAL_MODE,
     AUTH_MODE,
     CLIENT_CERT_PASSPHRASE,
+    CLIENT_CERT_PASSPHRASE_FILE,
     CLIENT_CERT_PFX_PATH,
     CLIENT_CERT_PRIVATE_KEY_PATH,
     CLIENT_CERT_PUBLIC_CERT_PATH,
@@ -19,6 +20,7 @@ from .config import (
     CLIENT_CERT_THUMBPRINT,
     CLIENT_ID,
     CLIENT_SECRET,
+    CLIENT_SECRET_FILE,
     GRAPH_APP_SCOPE,
     MANAGEMENT_API_SCOPE,
     TENANT_ID,
@@ -85,12 +87,23 @@ def _acquire_app_token_with_expiry(*, scope: str, app_credential_mode: str | Non
     """Shared logic for acquiring an app-only token for a given scope."""
     client_id = _get_str_env("ANGLERFISH_CLIENT_ID", CLIENT_ID)
     tenant_id = _get_str_env("ANGLERFISH_TENANT_ID", TENANT_ID)
-    client_secret = _get_str_env("ANGLERFISH_CLIENT_SECRET", CLIENT_SECRET)
+    client_secret = _resolve_secret_value(
+        value_name="ANGLERFISH_CLIENT_SECRET",
+        value_fallback=CLIENT_SECRET,
+        file_name="ANGLERFISH_CLIENT_SECRET_FILE",
+        file_fallback=CLIENT_SECRET_FILE,
+    )
     cert_pfx_path = _get_str_env("ANGLERFISH_CLIENT_CERT_PFX_PATH", CLIENT_CERT_PFX_PATH)
     cert_private_key_path = _get_str_env("ANGLERFISH_CLIENT_CERT_PRIVATE_KEY_PATH", CLIENT_CERT_PRIVATE_KEY_PATH)
     cert_public_cert_path = _get_str_env("ANGLERFISH_CLIENT_CERT_PUBLIC_CERT_PATH", CLIENT_CERT_PUBLIC_CERT_PATH)
     cert_thumbprint = _get_str_env("ANGLERFISH_CLIENT_CERT_THUMBPRINT", CLIENT_CERT_THUMBPRINT)
-    cert_passphrase = os.environ.get("ANGLERFISH_CLIENT_CERT_PASSPHRASE", CLIENT_CERT_PASSPHRASE)
+    cert_passphrase = _resolve_secret_value(
+        value_name="ANGLERFISH_CLIENT_CERT_PASSPHRASE",
+        value_fallback=CLIENT_CERT_PASSPHRASE,
+        file_name="ANGLERFISH_CLIENT_CERT_PASSPHRASE_FILE",
+        file_fallback=CLIENT_CERT_PASSPHRASE_FILE,
+        strip_value=False,
+    )
     cert_send_x5c = _get_str_env("ANGLERFISH_CLIENT_CERT_SEND_X5C", CLIENT_CERT_SEND_X5C)
     configured_app_credential_mode = _get_str_env("ANGLERFISH_APP_CREDENTIAL_MODE", APP_CREDENTIAL_MODE)
 
@@ -243,6 +256,26 @@ def _read_text_file(path_value: str, variable_name: str) -> str:
         return path.read_text(encoding="utf-8")
     except OSError as exc:
         raise AuthenticationError(f"Failed to read {variable_name} at {path_value}: {exc}") from exc
+
+
+def _resolve_secret_value(
+    *,
+    value_name: str,
+    value_fallback: str,
+    file_name: str,
+    file_fallback: str,
+    strip_value: bool = True,
+) -> str:
+    raw_value = os.environ.get(value_name, value_fallback)
+    value = raw_value.strip() if strip_value else raw_value
+    file_path = _get_str_env(file_name, file_fallback)
+
+    if value and file_path:
+        raise AuthenticationError(f"Set either {value_name} or {file_name}, not both.")
+    if not file_path:
+        return value
+
+    return _read_text_file(file_path, file_name).rstrip("\r\n")
 
 
 def _parse_bool(raw: str) -> bool:
