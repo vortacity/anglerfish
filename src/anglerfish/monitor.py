@@ -394,8 +394,11 @@ def run_monitor(
     disp = dispatcher or AlertDispatcher(console=console)
 
     # Determine start time from persisted state or 1-hour lookback.
-    if sm and sm.state.last_poll_end:
-        last_poll_end = datetime.fromisoformat(sm.state.last_poll_end)
+    # _parse_record_datetime tolerates the 'Z' suffix (rejected by Python 3.10's
+    # fromisoformat) and normalizes naive timestamps to aware UTC.
+    persisted = _parse_record_datetime(sm.state.last_poll_end) if sm else None
+    if persisted is not None:
+        last_poll_end = persisted
     else:
         last_poll_end = datetime.now(timezone.utc) - timedelta(hours=1)
 
