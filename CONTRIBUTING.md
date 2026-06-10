@@ -21,9 +21,16 @@ source .venv/bin/activate   # Windows: .venv\Scripts\activate
 # 3. Install the package in editable mode with dev dependencies
 pip install -e ".[dev]"
 
-# 4. Verify the CLI is available
+# 4. Install the local pre-commit hooks
+pip install pre-commit
+pre-commit install
+
+# 5. Verify the CLI is available
 anglerfish --version
 ```
+
+The pre-commit hooks run `ruff check --fix` and `ruff-format`, mirroring the
+style gates enforced in CI.
 
 ---
 
