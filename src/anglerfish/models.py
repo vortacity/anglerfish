@@ -20,7 +20,7 @@ class OutlookTemplate:
 
 @dataclass(frozen=True)
 class CanaryAlert:
-    """A confirmed canary access event."""
+    """A confirmed canary access or tamper event."""
 
     canary_type: str
     template_name: str
@@ -31,6 +31,9 @@ class CanaryAlert:
     operation: str
     client_info: str
     record_path: str
+    #: "access" (canary was read) or "tamper" (canary was deleted, moved,
+    #: or modified — anti-forensic cleanup is itself attacker behavior).
+    category: str = "access"
 
 
 class VerifyStatus(enum.Enum):

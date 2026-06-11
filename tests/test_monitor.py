@@ -10,6 +10,8 @@ from unittest.mock import MagicMock, patch
 
 from rich.console import Console
 
+import pytest
+
 from anglerfish.alerts import AlertDispatcher
 from anglerfish.auth import AuthConfig
 from anglerfish.deployers.outlook import _build_entry
@@ -936,3 +938,117 @@ def test_load_records_logs_warning_for_malformed_record(tmp_path, caplog):
 
     assert len(results) == 1
     assert any("broken.json" in rec.message for rec in caplog.records)
+
+
+# ------------------------------------------------------------------
+# Tamper detection
+# ------------------------------------------------------------------
+
+
+def _tamper_event(operation: str = "HardDelete", **overrides) -> dict:
+    base = {
+        "Id": f"evt-tamper-{operation}",
+        "Operation": operation,
+        "UserId": "attacker@evil.com",
+        "ClientIP": "203.0.113.42",
+        "CreationTime": "2026-03-05T15:00:00",
+        "AffectedItems": [
+            {
+                "Id": "store-entry-id-1",
+                "InternetMessageId": "<canary-msg-001@contoso.com>",
+                "Subject": "Password Reset Required",
+                "ParentFolder": {"Id": "folder-abc", "Path": "\\IT Notifications - af-123"},
+            }
+        ],
+    }
+    base.update(overrides)
+    return base
+
+
+def test_tamper_hard_delete_matches_by_internet_message_id():
+    idx = CanaryIndex([("rec.json", _outlook_record())])
+    alert = idx.match(_tamper_event("HardDelete"))
+
+    assert alert is not None
+    assert alert.category == "tamper"
+    assert alert.operation == "HardDelete"
+    assert "internet_message_id" in alert.artifact_label
+
+
+@pytest.mark.parametrize("operation", ["SoftDelete", "MoveToDeletedItems", "Move", "Update"])
+def test_tamper_operations_all_match(operation):
+    idx = CanaryIndex([("rec.json", _outlook_record())])
+    alert = idx.match(_tamper_event(operation))
+
+    assert alert is not None
+    assert alert.category == "tamper"
+    assert alert.operation == operation
+
+
+def test_tamper_update_event_with_single_item_shape():
+    # Update events carry a single "Item" instead of "AffectedItems".
+    event = _tamper_event("Update", AffectedItems=[])
+    event["Item"] = {
+        "Id": "store-entry-id-1",
+        "InternetMessageId": "<canary-msg-001@contoso.com>",
+        "ParentFolder": {"Id": "folder-abc", "Path": "\\IT Notifications"},
+    }
+    idx = CanaryIndex([("rec.json", _outlook_record())])
+    alert = idx.match(event)
+
+    assert alert is not None
+    assert alert.category == "tamper"
+
+
+def test_tamper_falls_back_to_parent_folder_id():
+    event = _tamper_event("SoftDelete")
+    event["AffectedItems"][0]["InternetMessageId"] = "<some-other-message@contoso.com>"
+    idx = CanaryIndex([("rec.json", _outlook_record())])
+    alert = idx.match(event)
+
+    assert alert is not None
+    assert alert.category == "tamper"
+    assert alert.artifact_label == "folder_id: folder-abc"
+
+
+def test_tamper_falls_back_to_folder_path_with_canary_id():
+    event = _tamper_event("HardDelete")
+    event["AffectedItems"][0]["InternetMessageId"] = "<some-other-message@contoso.com>"
+    event["AffectedItems"][0]["ParentFolder"] = {"Id": "different-id", "Path": "\\Inbox\\IT Notifications - af-123"}
+    record = _outlook_record(canary_id="af-123", folder_id="")
+    idx = CanaryIndex([("rec.json", record)])
+    alert = idx.match(event)
+
+    assert alert is not None
+    assert alert.artifact_label == "folder: IT Notifications"
+
+
+def test_tamper_no_match_returns_none():
+    event = _tamper_event("HardDelete")
+    event["AffectedItems"][0]["InternetMessageId"] = "<unrelated@contoso.com>"
+    event["AffectedItems"][0]["ParentFolder"] = {"Id": "unrelated", "Path": "\\Inbox"}
+    idx = CanaryIndex([("rec.json", _outlook_record())])
+
+    assert idx.match(event) is None
+
+
+def test_tamper_respects_principal_exclusion():
+    idx = CanaryIndex([("rec.json", _outlook_record())])
+    alert = idx.match(_tamper_event("HardDelete"), exclude_app_ids={"attacker@evil.com"})
+
+    assert alert is None
+
+
+def test_tamper_malformed_items_are_skipped():
+    event = _tamper_event("HardDelete", AffectedItems=["garbage", 42, None])
+    idx = CanaryIndex([("rec.json", _outlook_record())])
+
+    assert idx.match(event) is None
+
+
+def test_access_alert_category_defaults_to_access():
+    idx = CanaryIndex([("rec.json", _outlook_record())])
+    alert = idx.match(_mail_items_accessed_event())
+
+    assert alert is not None
+    assert alert.category == "access"
