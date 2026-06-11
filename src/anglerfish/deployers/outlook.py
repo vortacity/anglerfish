@@ -388,7 +388,7 @@ def _build_entry(record_path: str, rec: DeploymentRecord) -> _CanaryEntry:
     )
 
 
-def _build_alert(entry: _CanaryEntry, event: dict, *, artifact_label: str) -> CanaryAlert:
+def _build_alert(entry: _CanaryEntry, event: dict, *, artifact_label: str, category: str = "access") -> CanaryAlert:
     return CanaryAlert(
         canary_type=entry.canary_type,
         template_name=entry.template_name or entry.subject or "(unnamed)",
@@ -399,6 +399,7 @@ def _build_alert(entry: _CanaryEntry, event: dict, *, artifact_label: str) -> Ca
         operation=str(event.get("Operation") or ""),
         client_info=str(event.get("ClientInfoString") or event.get("ClientAppId") or ""),
         record_path=entry.record_path,
+        category=category,
     )
 
 
@@ -409,8 +410,18 @@ def _entry_is_expired(entry: _CanaryEntry, now: datetime | None) -> bool:
     return current_time > entry.expires_at
 
 
+# Mailbox-item operations that destroy, hide, or modify a canary. An attacker
+# deleting a planted artifact is itself high-confidence attacker behavior; a
+# canary silently disappearing also means its detection coverage is gone.
+_TAMPER_OPERATIONS = frozenset({"HardDelete", "SoftDelete", "MoveToDeletedItems", "Move", "Update"})
+
+
 class OutlookMatcher(CanaryMatcher):
-    """Match MailItemsAccessed audit events against deployed Outlook canaries."""
+    """Match Outlook audit events against deployed canaries.
+
+    ``MailItemsAccessed`` events signal canary *access*; the mailbox-item
+    operations in ``_TAMPER_OPERATIONS`` signal canary *tampering*.
+    """
 
     def __init__(self, records: Sequence[tuple[str, DeploymentRecord]]):
         self._entries: list[_CanaryEntry] = []
@@ -426,9 +437,14 @@ class OutlookMatcher(CanaryMatcher):
         return len(self._entries)
 
     def match(self, event: dict, *, now: datetime | None = None) -> CanaryAlert | None:
-        if str(event.get("Operation", "")) != "MailItemsAccessed":
+        operation = str(event.get("Operation", ""))
+        if operation in _TAMPER_OPERATIONS:
+            return self._match_tamper(event, now=now)
+        if operation != "MailItemsAccessed":
             return None
+        return self._match_access(event, now=now)
 
+    def _match_access(self, event: dict, *, now: datetime | None = None) -> CanaryAlert | None:
         # Check MailAccessType — "Bind" events carry FolderItems.
         folders = event.get("Folders") or []
         for folder in folders:
@@ -463,6 +479,49 @@ class OutlookMatcher(CanaryMatcher):
                         and entry.folder_name.casefold() in folder_path_lower
                     ):
                         return _build_alert(entry, event, artifact_label=f"folder: {entry.folder_name}")
+
+        return None
+
+    def _match_tamper(self, event: dict, *, now: datetime | None = None) -> CanaryAlert | None:
+        """Match delete/move/update mailbox-audit events (ExchangeItem schema).
+
+        These events carry the touched messages in ``AffectedItems`` (or a
+        single ``Item`` for Update), each with an ``InternetMessageId`` and a
+        ``ParentFolder``.
+        """
+        items: list[object] = list(event.get("AffectedItems") or [])
+        single = event.get("Item")
+        if single is not None:
+            items.append(single)
+
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            imid = str(item.get("InternetMessageId") or "").strip()
+            if imid and imid in self._by_internet_message_id:
+                entry = self._by_internet_message_id[imid]
+                if _entry_is_expired(entry, now):
+                    continue
+                return _build_alert(entry, event, artifact_label=f"internet_message_id: {imid}", category="tamper")
+            parent = item.get("ParentFolder")
+            if not isinstance(parent, dict):
+                continue
+            parent_id = str(parent.get("Id") or "").strip()
+            parent_path = str(parent.get("Path") or "")
+            for entry in self._entries:
+                if _entry_is_expired(entry, now):
+                    continue
+                if entry.folder_id and parent_id and entry.folder_id == parent_id:
+                    return _build_alert(entry, event, artifact_label=f"folder_id: {entry.folder_id}", category="tamper")
+                if entry.canary_id and entry.folder_name:
+                    parent_path_lower = parent_path.casefold()
+                    if (
+                        entry.canary_id.casefold() in parent_path_lower
+                        and entry.folder_name.casefold() in parent_path_lower
+                    ):
+                        return _build_alert(
+                            entry, event, artifact_label=f"folder: {entry.folder_name}", category="tamper"
+                        )
 
         return None
 

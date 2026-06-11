@@ -174,3 +174,123 @@ def test_dispatch_slack_non_ok_response_does_not_block_other_channels(tmp_path):
         dispatcher = AlertDispatcher(alert_log=log_path, slack_webhook_url="https://hooks.slack.com/services/x")
         dispatcher.dispatch(_sample_alert())  # must not raise on a non-2xx Slack response
     assert log_path.is_file()  # JSONL channel still wrote
+
+
+# ------------------------------------------------------------------
+# Teams channel
+# ------------------------------------------------------------------
+
+
+def test_dispatch_teams_posts_adaptive_card():
+    with patch("anglerfish.alerts.requests.post") as mock_post:
+        mock_post.return_value.ok = True
+        dispatcher = AlertDispatcher(teams_webhook_url="https://prod-01.westus.logic.azure.com/workflows/abc")
+        dispatcher.dispatch(_sample_alert())
+
+        mock_post.assert_called_once()
+        payload = mock_post.call_args[1]["json"]
+        assert payload["type"] == "message"
+        card = payload["attachments"][0]["content"]
+        assert card["type"] == "AdaptiveCard"
+        assert "accessed" in card["body"][0]["text"]
+        assert mock_post.call_args[1]["timeout"] == 10
+
+
+def test_dispatch_teams_tamper_alert_says_tampered():
+    with patch("anglerfish.alerts.requests.post") as mock_post:
+        mock_post.return_value.ok = True
+        dispatcher = AlertDispatcher(teams_webhook_url="https://prod-01.westus.logic.azure.com/workflows/abc")
+        dispatcher.dispatch(_sample_alert(category="tamper", operation="HardDelete"))
+
+        card = mock_post.call_args[1]["json"]["attachments"][0]["content"]
+        assert "tampered" in card["body"][0]["text"]
+
+
+def test_dispatch_teams_skips_non_https_url():
+    with patch("anglerfish.alerts.requests.post") as mock_post:
+        dispatcher = AlertDispatcher(teams_webhook_url="http://insecure.example.com/hook")
+        dispatcher.dispatch(_sample_alert())
+        mock_post.assert_not_called()
+
+
+def test_dispatch_teams_failure_does_not_raise():
+    with patch("anglerfish.alerts.requests.post") as mock_post:
+        mock_post.side_effect = ConnectionError("network down")
+        dispatcher = AlertDispatcher(teams_webhook_url="https://prod-01.westus.logic.azure.com/workflows/abc")
+        dispatcher.dispatch(_sample_alert())
+
+
+# ------------------------------------------------------------------
+# Generic webhook channel
+# ------------------------------------------------------------------
+
+
+def test_dispatch_webhook_posts_versioned_json():
+    with patch("anglerfish.alerts.requests.post") as mock_post:
+        mock_post.return_value.ok = True
+        dispatcher = AlertDispatcher(webhook_url="https://siem.example.com/anglerfish")
+        dispatcher.dispatch(_sample_alert())
+
+        mock_post.assert_called_once()
+        body = mock_post.call_args[1]["data"]
+        payload = json.loads(body)
+        assert payload["schema_version"] == 1
+        assert payload["accessed_by"] == "attacker@evil.com"
+        assert payload["category"] == "access"
+        headers = mock_post.call_args[1]["headers"]
+        assert headers["Content-Type"] == "application/json"
+        assert "X-Anglerfish-Signature" not in headers
+
+
+def test_dispatch_webhook_hmac_signature_verifies():
+    import hashlib
+    import hmac as hmac_mod
+
+    with patch("anglerfish.alerts.requests.post") as mock_post:
+        mock_post.return_value.ok = True
+        dispatcher = AlertDispatcher(
+            webhook_url="https://siem.example.com/anglerfish",
+            webhook_hmac_secret="shared-secret",
+        )
+        dispatcher.dispatch(_sample_alert())
+
+        body = mock_post.call_args[1]["data"]
+        signature = mock_post.call_args[1]["headers"]["X-Anglerfish-Signature"]
+        expected = hmac_mod.new(b"shared-secret", body, hashlib.sha256).hexdigest()
+        assert signature == f"sha256={expected}"
+
+
+def test_dispatch_webhook_skips_non_https_url():
+    with patch("anglerfish.alerts.requests.post") as mock_post:
+        dispatcher = AlertDispatcher(webhook_url="http://siem.example.com/anglerfish")
+        dispatcher.dispatch(_sample_alert())
+        mock_post.assert_not_called()
+
+
+def test_dispatch_webhook_redirects_disabled():
+    with patch("anglerfish.alerts.requests.post") as mock_post:
+        mock_post.return_value.ok = True
+        dispatcher = AlertDispatcher(webhook_url="https://siem.example.com/anglerfish")
+        dispatcher.dispatch(_sample_alert())
+        assert mock_post.call_args[1]["allow_redirects"] is False
+
+
+# ------------------------------------------------------------------
+# Tamper alert rendering
+# ------------------------------------------------------------------
+
+
+def test_console_tamper_alert_title():
+    console = Console(record=True, force_terminal=False, width=100)
+    dispatcher = AlertDispatcher(console=console)
+    dispatcher.dispatch(_sample_alert(category="tamper", operation="HardDelete"))
+    output = console.export_text()
+    assert "CANARY TAMPERED" in output
+
+
+def test_jsonl_includes_category(tmp_path):
+    log = tmp_path / "alerts.jsonl"
+    dispatcher = AlertDispatcher(alert_log=log)
+    dispatcher.dispatch(_sample_alert(category="tamper"))
+    record = json.loads(log.read_text().splitlines()[0])
+    assert record["category"] == "tamper"

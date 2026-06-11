@@ -32,6 +32,9 @@ def _run_monitor(args: argparse.Namespace, console: Console) -> int:
         MONITOR_NO_CONSOLE,
         MONITOR_SLACK_WEBHOOK,
         MONITOR_STATE_FILE,
+        MONITOR_TEAMS_WEBHOOK,
+        MONITOR_WEBHOOK_HMAC_SECRET,
+        MONITOR_WEBHOOK_URL,
     )
     from ..monitor import CanaryIndex, _TokenManager, load_records, render_demo_alert, run_monitor
     from ..state import StateManager
@@ -79,10 +82,15 @@ def _run_monitor(args: argparse.Namespace, console: Console) -> int:
     no_console = args.no_console or MONITOR_NO_CONSOLE
     alert_log = args.alert_log or MONITOR_ALERT_LOG or None
     slack_webhook = getattr(args, "slack_webhook_url", None) or MONITOR_SLACK_WEBHOOK or None
+    teams_webhook = getattr(args, "teams_webhook_url", None) or MONITOR_TEAMS_WEBHOOK or None
+    webhook_url = getattr(args, "webhook_url", None) or MONITOR_WEBHOOK_URL or None
     dispatcher = AlertDispatcher(
         console=None if no_console else console,
         alert_log=alert_log,
         slack_webhook_url=slack_webhook,
+        teams_webhook_url=teams_webhook,
+        webhook_url=webhook_url,
+        webhook_hmac_secret=MONITOR_WEBHOOK_HMAC_SECRET or None,
     )
 
     # Token manager for automatic refresh.

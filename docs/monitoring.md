@@ -17,6 +17,9 @@ Each cycle (default `--interval 300` seconds) the monitor:
    Management Activity API maximum per request).
 2. Fetches each blob and matches every event against the deployed canary
    records (internet message ID first, then folder ID / folder name).
+   `MailItemsAccessed` events produce *access* alerts; `HardDelete`,
+   `SoftDelete`, `MoveToDeletedItems`, `Move`, and `Update` against a
+   canary item produce *tamper* alerts.
 3. Dispatches alerts for matches, deduplicating on audit event IDs it has
    already seen.
 4. Advances the watermark — **only past windows that were ingested
@@ -87,6 +90,7 @@ appended as one JSON object per line, `0600` permissions:
 
 | Field | Meaning |
 | --- | --- |
+| `category` | `access` (canary read) or `tamper` (canary deleted/moved/modified) |
 | `canary_type` | Record type that matched (`outlook`) |
 | `template_name` | Template of the matched canary |
 | `artifact_label` | What matched: `internet_message_id: …`, `folder_id: …`, or `folder: …` |
@@ -101,6 +105,26 @@ appended as one JSON object per line, `0600` permissions:
 [privacy and data handling](privacy.md). The log grows without bound;
 rotate or prune it on your own schedule (each line is self-contained, so
 `logrotate` with `copytruncate` works).
+
+## Alert channels
+
+Every alert fans out to all configured channels independently (one failing
+channel never blocks another):
+
+| Channel | Configuration | Notes |
+| --- | --- | --- |
+| Console | default; suppress with `--no-console` | Rich panel, actor-influenced fields escaped |
+| JSONL file | `--alert-log` / `ANGLERFISH_MONITOR_ALERT_LOG` | Schema above, `0600` |
+| Slack | `--slack-webhook-url` / `ANGLERFISH_SLACK_WEBHOOK_URL` | Block Kit; HTTPS required |
+| Microsoft Teams | `--teams-webhook-url` / `ANGLERFISH_TEAMS_WEBHOOK_URL` | Adaptive Card to a Teams workflow (Power Automate) webhook; HTTPS required |
+| Generic webhook | `--webhook-url` / `ANGLERFISH_WEBHOOK_URL` | JSON POST of the alert (`schema_version: 1`); HTTPS required |
+
+The generic webhook body can be authenticated: set
+`ANGLERFISH_WEBHOOK_HMAC_SECRET` and each request carries
+`X-Anglerfish-Signature: sha256=<hex>` — the HMAC-SHA256 of the raw body
+under that secret. Receivers should verify it before trusting the alert.
+Webhook URLs are bearer secrets; Anglerfish never logs them, and neither
+should your shell history (prefer the environment variables).
 
 ## Scale characteristics
 

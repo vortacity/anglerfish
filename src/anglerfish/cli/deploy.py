@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import datetime
+import json
 from pathlib import Path
 
 import questionary
@@ -103,10 +104,14 @@ def _print_demo_access_success(console: Console, result: dict[str, str]) -> None
 
 
 def _run_list(args: argparse.Namespace, console: Console) -> int:
-    """List all deployment records in a directory as a Rich table."""
+    """List all deployment records in a directory (Rich table or JSON)."""
     records_dir = Path(args.records_dir)
+    as_json = getattr(args, "output_format", "table") == "json"
 
     if not records_dir.exists():
+        if as_json:
+            print("[]")
+            return 0
         console.print(f"[yellow]Records directory not found:[/yellow] {records_dir}")
         console.print(
             "[dim]Deploy with --output-json pointing into this directory, "
@@ -116,7 +121,23 @@ def _run_list(args: argparse.Namespace, console: Console) -> int:
 
     record_files = sorted(records_dir.glob("*.json"), key=lambda p: p.stat().st_mtime)
     if not record_files:
+        if as_json:
+            print("[]")
+            return 0
         console.print("[yellow]No deployment records found in[/yellow] " + str(records_dir))
+        return 0
+
+    if as_json:
+        entries = []
+        for record_file in record_files:
+            try:
+                record = read_deployment_record(record_file)
+            except DeploymentError:
+                continue  # Skip malformed records, matching table behavior
+            if record.canary_type != "outlook":
+                continue
+            entries.append({"record_path": str(record_file), **record.to_dict()})
+        print(json.dumps(entries, indent=2))
         return 0
 
     table = Table(
@@ -439,11 +460,14 @@ def _run_verify(args: argparse.Namespace, console: Console) -> int:
     from ..monitor import load_records
     from ..verify import VerifyResult, VerifyStatus, run_verify
 
-    _print_banner(console)
+    as_json = getattr(args, "output_format", "table") == "json"
+    if not as_json:
+        _print_banner(console)
 
     if getattr(args, "demo", False):
         # Demo mode: show simulated output.
-        console.print("Verifying [bold]3[/bold] deployment record(s)...\n")
+        if not as_json:
+            console.print("Verifying [bold]3[/bold] deployment record(s)...\n")
         results = [
             VerifyResult(
                 canary_type="outlook",
@@ -479,10 +503,14 @@ def _run_verify(args: argparse.Namespace, console: Console) -> int:
             records = load_records(default_dir)
 
         if not records:
-            console.print("[yellow]No deployment records found to verify.[/yellow]")
+            if as_json:
+                print("[]")
+            else:
+                console.print("[yellow]No deployment records found to verify.[/yellow]")
             return 1
 
-        console.print(f"Verifying [bold]{len(records)}[/bold] deployment record(s)...\n")
+        if not as_json:
+            console.print(f"Verifying [bold]{len(records)}[/bold] deployment record(s)...\n")
         pending_graph_checks: list[tuple[int, tuple[str, DeploymentRecord]]] = []
         ordered_results: list[VerifyResult | None] = [None] * len(records)
 
@@ -514,16 +542,37 @@ def _run_verify(args: argparse.Namespace, console: Console) -> int:
             )
             if auth_result is None:
                 return 130
-            console.print("Authenticating with Microsoft Graph...")
+            if not as_json:
+                console.print("Authenticating with Microsoft Graph...")
             token = authenticate(auth_mode="application", auth_config=auth_result)
             graph = GraphClient(token)
-            _print_auth_success(console)
+            if not as_json:
+                _print_auth_success(console)
 
             graph_results = run_verify([record_item for _index, record_item in pending_graph_checks], graph)
             for (index, _record_item), graph_result in zip(pending_graph_checks, graph_results):
                 ordered_results[index] = graph_result
 
         results = [result for result in ordered_results if result is not None]
+
+    any_bad_statuses = {VerifyStatus.GONE, VerifyStatus.ERROR}
+    if as_json:
+        print(
+            json.dumps(
+                [
+                    {
+                        "canary_type": r.canary_type,
+                        "template_name": r.template_name,
+                        "target": r.target,
+                        "status": r.status.value,
+                        "detail": r.detail,
+                    }
+                    for r in results
+                ],
+                indent=2,
+            )
+        )
+        return 1 if any(r.status in any_bad_statuses for r in results) else 0
 
     # Render table.
     table = Table(box=box.ROUNDED, title="Canary Verification")

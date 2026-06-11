@@ -282,19 +282,28 @@ anglerfish demo-access --non-interactive ~/.anglerfish/records/adele-send.json
 
 `demo-access` performs a Graph read of the deployed canary so a permitted demo tenant can generate a real `MailItemsAccessed` event. It does not bypass Unified Audit Log latency; poll after the event is available.
 
-Monitor for access:
+Monitor for access and tampering:
 
 ```bash
 anglerfish monitor --records-dir ~/.anglerfish/records
 anglerfish monitor --once --records-dir ~/.anglerfish/records
 anglerfish monitor --records-dir ~/.anglerfish/records \
   --alert-log ~/.anglerfish/alerts.jsonl \
-  --slack-webhook-url https://hooks.slack.com/services/...
+  --slack-webhook-url https://hooks.slack.com/services/... \
+  --teams-webhook-url https://prod-01.westus.logic.azure.com/workflows/... \
+  --webhook-url https://siem.example.com/anglerfish
 ```
+
+The monitor alerts both when a canary is **read** (`MailItemsAccessed`) and
+when it is **tampered with** — deleted, moved, or modified (`HardDelete`,
+`SoftDelete`, `MoveToDeletedItems`, `Move`, `Update`). Anti-forensic cleanup
+of a planted artifact is itself high-confidence attacker behavior.
 
 The monitor flags can also be set via environment variables
 (`ANGLERFISH_MONITOR_STATE_FILE`, `ANGLERFISH_MONITOR_ALERT_LOG`,
-`ANGLERFISH_SLACK_WEBHOOK_URL`, `ANGLERFISH_MONITOR_NO_CONSOLE`); CLI flags
+`ANGLERFISH_SLACK_WEBHOOK_URL`, `ANGLERFISH_TEAMS_WEBHOOK_URL`,
+`ANGLERFISH_WEBHOOK_URL`, `ANGLERFISH_WEBHOOK_HMAC_SECRET`,
+`ANGLERFISH_MONITOR_NO_CONSOLE`); CLI flags
 take precedence. See `.env.example` for the full variable set.
 
 Unified Audit Log polling is delayed, not an immediate stream. Microsoft does not guarantee a return time for audit records; core service records are typically available after 60 to 90 minutes. See [Microsoft audit search guidance](https://learn.microsoft.com/en-us/purview/audit-search).

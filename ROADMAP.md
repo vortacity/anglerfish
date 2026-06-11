@@ -8,11 +8,19 @@ starting anything large so we can agree on the approach.
 
 ## Near term
 
-- First adoption features from the list below: alert channels,
-  tamper detection, and machine-readable output.
+- Batch deploy mode for seeding many mailboxes (the JSON-output half of
+  machine-readable automation shipped; see Done).
+- Canary lifecycle management (expiry, rotation) — next from the list
+  below.
 
 ### Done
 
+- ~~More alert channels~~ — Microsoft Teams (Adaptive Card workflow
+  webhook) and a generic HMAC-signed JSON webhook. syslog/CEF output
+  remains open (help wanted).
+- ~~Tamper detection~~ — delete/move/update of a canary item now raises
+  a `tamper`-category alert.
+- ~~Machine-readable output~~ — `--format json` on `list` and `verify`.
 - ~~Exchange RBAC scoping guide~~ — [docs/scoping-permissions.md](docs/scoping-permissions.md).
 - ~~Privacy and data-handling documentation~~ — [docs/privacy.md](docs/privacy.md).
 - ~~Production deployment guide~~ — [docs/production-deployment.md](docs/production-deployment.md),
@@ -30,15 +38,10 @@ starting anything large so we can agree on the approach.
 
 In rough order of priority:
 
-- **More alert channels** (help wanted) — Microsoft Teams workflow webhook,
-  a generic JSON HTTPS webhook, and syslog/CEF output alongside the existing
-  console, JSONL, and Slack sinks.
-- **Tamper detection** — alert when a canary item is deleted, moved, or
-  modified (`HardDelete`, `SoftDelete`, `MoveToDeletedItems`, `Update`),
-  not only when it is read. Anti-forensic cleanup of a planted artifact is
-  itself high-confidence attacker behavior.
-- **Machine-readable output** (help wanted) — `--format json` for `list`
-  and `verify`, and a batch deploy mode for seeding many mailboxes.
+- **syslog/CEF alert output** (help wanted) — for legacy SIEM pipelines,
+  alongside the console, JSONL, Slack, Teams, and webhook sinks.
+- **Batch deploy** (help wanted) — seed many mailboxes from a targets
+  file, one record per mailbox.
 - **Canary lifecycle management** — deploy-time expiry, age surfaced in
   `list`, and a `rotate` command that replaces a canary atomically.
 - **More canary surfaces** — SharePoint/OneDrive decoy files and
