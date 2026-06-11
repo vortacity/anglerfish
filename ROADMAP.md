@@ -8,17 +8,16 @@ starting anything large so we can agree on the approach.
 
 ## Near term
 
-- **Exchange RBAC scoping guide** — a step-by-step walkthrough for scoping
-  the `Mail.ReadWrite` application permission to canary mailboxes with
-  Exchange RBAC for Applications.
-- **Privacy and data-handling documentation** — what personal data alerts
-  carry (UPN, source IP, client string), where it flows, and retention
-  guidance.
-- **Production deployment guide** — the demo-tenant walkthrough reframed
-  for production use.
+- First adoption features from the list below: alert channels,
+  tamper detection, and machine-readable output.
 
 ### Done
 
+- ~~Exchange RBAC scoping guide~~ — [docs/scoping-permissions.md](docs/scoping-permissions.md).
+- ~~Privacy and data-handling documentation~~ — [docs/privacy.md](docs/privacy.md).
+- ~~Production deployment guide~~ — [docs/production-deployment.md](docs/production-deployment.md),
+  plus a [monitor operations reference](docs/monitoring.md) with the
+  documented scale envelope.
 - ~~Real deployer abstraction~~ — `CanaryType` lifecycle protocol +
   `deployers/registry.py`; a new canary surface is one class plus one
   `register()` call.

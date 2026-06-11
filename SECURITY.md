@@ -1,10 +1,21 @@
 # Security Policy
 
+## Supported Versions
+
+| Version | Supported |
+| --- | --- |
+| Latest 2.x release | Yes |
+| Older releases | No — upgrade to the latest release |
+
+Security fixes land on `main` and ship in the next release; they are not
+backported to older versions.
+
 ## Reporting a Vulnerability
 
 To report a security vulnerability, please open a
 [GitHub Security Advisory](https://github.com/vortacity/anglerfish/security/advisories/new)
-(private) rather than a public issue.
+(private) rather than a public issue. If you cannot use GitHub, email
+`security@vortacity.com`.
 
 Do **not** include exploit details, credentials, tenant identifiers, or
 proof-of-concept payloads in public issue reports.

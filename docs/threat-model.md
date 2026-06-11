@@ -66,6 +66,30 @@ Anglerfish requires explicit authorization before deployment. Operators must:
 
 Grant only the permissions required for the Outlook workflows you intend to run.
 
+## Operator Workstation and Local Artifacts
+
+The host running Anglerfish is part of the threat model. It holds three
+kinds of sensitive artifacts:
+
+- **Deployment records** (`~/.anglerfish/records` or wherever
+  `--output-json` points) are a complete map of every planted canary —
+  target mailboxes, folder names, message IDs. An attacker who reads them
+  can locate and deliberately avoid every canary, silently defeating the
+  detection layer. Treat records like detection engineering content:
+  access-controlled host, owner-only permissions (Anglerfish creates its
+  directories `0700` and files `0600`), never committed to source control.
+- **Alert logs and monitor state** carry accessing-user identities and
+  source IPs — personal data with incident-response sensitivity. See
+  [privacy and data handling](privacy.md).
+- **The Slack webhook URL** (`ANGLERFISH_SLACK_WEBHOOK_URL`) is a bearer
+  secret: anyone holding it can post into the alert channel, and anyone
+  who can set the monitor's environment can redirect alert telemetry.
+  Handle it like a credential.
+
+Compromise of the operator host also exposes the app credential, which is
+why [scoping the mailbox permission](scoping-permissions.md) matters: it
+bounds that credential's blast radius to the canary mailboxes.
+
 ## Known Limitations
 
 ### UAL Ingest Latency
