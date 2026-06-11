@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ._io import parse_utc_datetime, write_json_atomic
+from ._io import ensure_private_dir, parse_utc_datetime, write_json_atomic
 from .exceptions import MonitorError
 
 _DEFAULT_STATE_PATH = Path.home() / ".anglerfish" / "monitor-state.json"
@@ -107,7 +107,7 @@ class StateManager:
         s = self.state
         s.seen_ids = list(self._seen_deque)
 
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        ensure_private_dir(self.path.parent)
         payload = {
             "last_poll_end": s.last_poll_end,
             "seen_ids": s.seen_ids,

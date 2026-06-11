@@ -70,3 +70,21 @@ def as_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         value = value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
+
+
+def ensure_private_dir(path: Path) -> None:
+    """Create *path* (and missing parents) with owner-only (0o700) permissions.
+
+    Deployment records, monitor state, and alert logs reveal canary locations
+    and accessing-user identities; directories created for them must not be
+    world-readable. Existing directories are left untouched.
+    """
+    missing: list[Path] = []
+    current = path
+    while not current.exists():
+        missing.append(current)
+        if current.parent == current:
+            break
+        current = current.parent
+    for directory in reversed(missing):
+        directory.mkdir(mode=0o700, exist_ok=True)

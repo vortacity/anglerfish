@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
+from ._io import ensure_private_dir
+
 import requests
 from rich.console import Console
 from rich.markup import escape
@@ -101,7 +103,7 @@ def _render_console(console: Console, alert: CanaryAlert) -> None:
 
 def _append_jsonl(path: Path, alert: CanaryAlert) -> None:
     """Append one JSON object per line to the alert log."""
-    path.parent.mkdir(parents=True, exist_ok=True)
+    ensure_private_dir(path.parent)
     record = asdict(alert)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
     try:
