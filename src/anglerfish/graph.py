@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import logging
-from email.utils import parsedate_to_datetime
-import time
-from datetime import datetime, timezone
 from typing import Any
 
 import requests
 from requests import Response
 
+from ._http import request_with_retries
 from .config import GRAPH_BASE_URL
 from .exceptions import GraphApiError
 
@@ -78,83 +76,47 @@ class GraphClient:
         url = f"{self.base_url}{request_path}"
         can_retry = retry_safe or normalized_method in {"GET", "DELETE"}
 
-        for attempt in range(self.retries):
-            logger.debug("%s %s", normalized_method, url)
-            try:
-                response = self.session.request(
-                    normalized_method, url, timeout=self.timeout, allow_redirects=False, **kwargs
-                )
-            except requests.RequestException as exc:
-                if can_retry and attempt < self.retries - 1:
-                    time.sleep(_compute_backoff(attempt))
-                    continue
-                raise GraphApiError(
-                    f"Network error while calling Graph API: {exc}",
-                    method=normalized_method,
-                    path=request_path,
-                ) from exc
+        response = request_with_retries(
+            self.session,
+            normalized_method,
+            url,
+            retries=self.retries,
+            timeout=self.timeout,
+            can_retry=can_retry,
+            network_error=lambda exc: GraphApiError(
+                f"Network error while calling Graph API: {exc}",
+                method=normalized_method,
+                path=request_path,
+            ),
+            exhausted_error=lambda: GraphApiError(
+                "Request failed after retries.", status_code=0, method=normalized_method, path=request_path
+            ),
+            logger=logger,
+            **kwargs,
+        )
 
-            logger.debug("%s %s -> %d", normalized_method, url, response.status_code)
+        # Redirects are disabled; the Graph JSON API should never 3xx here.
+        # Treat one as an error rather than parsing an empty redirect body.
+        if 300 <= response.status_code < 400:
+            raise GraphApiError(
+                f"Unexpected redirect response (HTTP {response.status_code})",
+                status_code=response.status_code,
+                method=normalized_method,
+                path=request_path,
+            )
 
-            if response.status_code == 429 and can_retry and attempt < self.retries - 1:
-                retry_after = _parse_retry_after(response.headers.get("Retry-After"))
-                time.sleep(retry_after)
-                continue
+        if not response.ok:
+            error_message, request_id, client_request_id = _extract_error_details(response)
+            raise GraphApiError(
+                error_message,
+                status_code=response.status_code,
+                method=normalized_method,
+                path=request_path,
+                request_id=request_id,
+                client_request_id=client_request_id,
+            )
 
-            if 500 <= response.status_code <= 599 and can_retry and attempt < self.retries - 1:
-                time.sleep(_compute_backoff(attempt))
-                continue
-
-            # Redirects are disabled; the Graph JSON API should never 3xx here.
-            # Treat one as an error rather than parsing an empty redirect body.
-            if 300 <= response.status_code < 400:
-                raise GraphApiError(
-                    f"Unexpected redirect response (HTTP {response.status_code})",
-                    status_code=response.status_code,
-                    method=normalized_method,
-                    path=request_path,
-                )
-
-            if not response.ok:
-                error_message, request_id, client_request_id = _extract_error_details(response)
-                raise GraphApiError(
-                    error_message,
-                    status_code=response.status_code,
-                    method=normalized_method,
-                    path=request_path,
-                    request_id=request_id,
-                    client_request_id=client_request_id,
-                )
-
-            return _parse_json_response(response)
-
-        raise GraphApiError("Request failed after retries.", status_code=0, method=normalized_method, path=request_path)
-
-
-# A misbehaving server or proxy must not be able to park the client for hours.
-_MAX_RETRY_AFTER_SECONDS = 120
-
-
-def _parse_retry_after(value: str | None) -> int:
-    if not value:
-        return 1
-
-    try:
-        parsed = int(value)
-    except ValueError:
-        try:
-            retry_at = parsedate_to_datetime(value)
-            now = datetime.now(timezone.utc)
-            delay = int((retry_at - now).total_seconds())
-            return min(max(delay, 1), _MAX_RETRY_AFTER_SECONDS)
-        except (TypeError, ValueError):
-            return 1
-
-    return min(max(parsed, 1), _MAX_RETRY_AFTER_SECONDS)
-
-
-def _compute_backoff(attempt: int, *, max_seconds: int = 8) -> int:
-    return int(min(2**attempt, max_seconds))
+        return _parse_json_response(response)
 
 
 def _extract_error_details(response: Response) -> tuple[str, str, str]:
