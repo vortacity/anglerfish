@@ -5,7 +5,7 @@ import pytest
 
 from urllib.parse import quote as _quote
 
-from anglerfish.deployers.outlook import OutlookDeployer, _parse_graph_datetime, remove_canary, trigger_canary_access
+from anglerfish.deployers.outlook import OutlookDeployer, remove_canary, trigger_canary_access
 from anglerfish.exceptions import DeploymentError, GraphApiError
 from anglerfish.models import OutlookTemplate
 
@@ -521,27 +521,6 @@ def test_trigger_canary_access_tolerates_null_delivery_mode():
     # missing field instead of crashing or claiming an invalid mode.
     with pytest.raises(DeploymentError, match="folder_id"):
         trigger_canary_access(NoCallGraph(), record)
-
-
-def test_parse_graph_datetime_empty_string_returns_none():
-    assert _parse_graph_datetime("") is None
-    assert _parse_graph_datetime("   ") is None
-
-
-def test_parse_graph_datetime_invalid_string_returns_none():
-    assert _parse_graph_datetime("not-a-date") is None
-
-
-def test_parse_graph_datetime_z_suffix_handled():
-    result = _parse_graph_datetime("2026-02-19T12:00:00Z")
-    assert result is not None
-    assert result.tzinfo is not None
-
-
-def test_parse_graph_datetime_no_timezone_gets_utc():
-    result = _parse_graph_datetime("2026-02-19T12:00:00")
-    assert result is not None
-    assert result.tzinfo is not None
 
 
 # ---------------------------------------------------------------------------

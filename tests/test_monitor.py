@@ -11,11 +11,13 @@ from unittest.mock import MagicMock, patch
 from rich.console import Console
 
 from anglerfish.alerts import AlertDispatcher
+from anglerfish.auth import AuthConfig
+from anglerfish.deployers.outlook import _build_entry
+from anglerfish.inventory import DeploymentRecord
 from anglerfish.monitor import (
     CanaryAlert,
     CanaryIndex,
     _TokenManager,
-    _build_entry,
     _write_heartbeat,
     load_records,
     run_monitor,
@@ -270,7 +272,7 @@ def test_build_entry_sets_outlook_fields():
         "folder_name": "Inbox/IT Notifications",
         "canary_id": "af-test-001",
     }
-    entry = _build_entry("rec.json", rec)
+    entry = _build_entry("rec.json", DeploymentRecord.from_dict(rec))
 
     assert entry.internet_message_id == "<m1@contoso.com>"
     assert entry.folder_name == "Inbox/IT Notifications"
@@ -279,7 +281,7 @@ def test_build_entry_sets_outlook_fields():
 
 def test_build_entry_defaults_missing_outlook_fields_to_empty_strings():
     rec = {"timestamp": "t", "canary_type": "outlook"}
-    entry = _build_entry("rec.json", rec)
+    entry = _build_entry("rec.json", DeploymentRecord.from_dict(rec))
 
     assert entry.internet_message_id == ""
     assert entry.folder_name == ""
@@ -309,7 +311,7 @@ def test_load_records_from_directory(tmp_path):
     results = load_records(tmp_path)
 
     assert len(results) == 1
-    assert results[0][1]["canary_type"] == "outlook"
+    assert results[0][1].canary_type == "outlook"
 
 
 def test_load_records_includes_recently_cleaned_outlook_records(tmp_path):
@@ -426,7 +428,7 @@ def test_load_records_adds_internal_expiry_to_cleaned_record(tmp_path):
 
     results = load_records(tmp_path, cleaned_up_lookback=timedelta(hours=24), now=now)
 
-    assert results[0][1]["_monitor_expires_at"] == (now + timedelta(hours=22)).isoformat()
+    assert results[0][1].monitor_expires_at == now + timedelta(hours=22)
     assert "_monitor_expires_at" not in json.loads((tmp_path / "rec.json").read_text(encoding="utf-8"))
 
 
@@ -622,18 +624,17 @@ def test_token_manager_returns_cached_when_valid():
     assert mgr.get_token() == "cached-token"
 
 
-def test_token_manager_temporarily_restores_prompted_env(monkeypatch):
+def test_token_manager_refreshes_with_auth_config_not_env(monkeypatch):
     monkeypatch.delenv("ANGLERFISH_CLIENT_SECRET", raising=False)
-    mgr = _TokenManager(
-        "initial-token",
-        "secret",
-        prompted_env={"ANGLERFISH_CLIENT_SECRET": "prompted-secret"},
-    )
+    config = AuthConfig(credential_mode="secret", client_secret="prompted-secret")
+    mgr = _TokenManager("initial-token", "secret", auth_config=config)
     mgr._expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
 
-    def _fake_authenticate(mode):
+    def _fake_authenticate(mode, *, auth_config=None):
         assert mode == "secret"
-        assert os.environ.get("ANGLERFISH_CLIENT_SECRET") == "prompted-secret"
+        # The prompted secret arrives by value; the environment is untouched.
+        assert auth_config is config
+        assert "ANGLERFISH_CLIENT_SECRET" not in os.environ
         return ("new-token", 3600)
 
     with patch("anglerfish.monitor.authenticate_management_api_with_expiry", side_effect=_fake_authenticate):

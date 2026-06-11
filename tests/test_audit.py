@@ -8,7 +8,8 @@ from unittest.mock import MagicMock
 import pytest
 import requests
 
-from anglerfish.audit import CONTENT_TYPES, AuditClient, _compute_backoff, _parse_retry_after
+from anglerfish._http import compute_backoff as _compute_backoff, parse_retry_after as _parse_retry_after
+from anglerfish.audit import CONTENT_TYPES, AuditClient
 from anglerfish.exceptions import AuditApiError
 
 

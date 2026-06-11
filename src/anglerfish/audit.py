@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-import time
 from datetime import datetime, timezone
-from email.utils import parsedate_to_datetime
 from typing import Any
 from urllib.parse import urlparse
 
 import requests
 from requests.structures import CaseInsensitiveDict
 
+from ._http import request_with_retries
 from .config import MANAGEMENT_API_BASE_URL
 from .exceptions import AuditApiError
 
@@ -22,9 +21,6 @@ _TIME_FORMAT = "%Y-%m-%dT%H:%M:%S"
 # Outlook-only content feed for canary monitoring.
 CONTENT_TYPES = ("Audit.Exchange",)
 
-# Upper bound on a server-supplied Retry-After: a misbehaving server or proxy
-# must not be able to park the client for hours.
-_MAX_RETRY_AFTER_SECONDS = 120
 # Hard cap on pagination depth; a stale or self-referencing NextPageUri must
 # not loop or accumulate forever.
 _MAX_CONTENT_PAGES = 1000
@@ -222,61 +218,49 @@ class AuditClient:
         not, so a transient failure cannot double-execute the write.
         """
         can_retry = method.strip().upper() == "GET"
-        for attempt in range(self.retries):
-            try:
-                response = self.session.request(method, url, timeout=self.timeout, allow_redirects=False, **kwargs)
-            except requests.RequestException as exc:
-                if can_retry and attempt < self.retries - 1:
-                    time.sleep(_compute_backoff(attempt))
-                    continue
-                raise AuditApiError(
-                    f"Network error calling Management Activity API: {exc}",
-                    method=method,
-                    url=url,
-                ) from exc
-
-            if response.status_code == 429 and can_retry and attempt < self.retries - 1:
-                retry_after = _parse_retry_after(response.headers.get("Retry-After"))
-                time.sleep(retry_after)
-                continue
-
-            if 500 <= response.status_code <= 599 and can_retry and attempt < self.retries - 1:
-                time.sleep(_compute_backoff(attempt))
-                continue
-
-            # Redirects are disabled; the Management API should not 3xx here.
-            if 300 <= response.status_code < 400:
-                raise AuditApiError(
-                    f"Unexpected redirect response (HTTP {response.status_code})",
-                    status_code=response.status_code,
-                    method=method,
-                    url=url,
-                )
-
-            if not response.ok:
-                raise AuditApiError(
-                    _extract_error_message(response),
-                    status_code=response.status_code,
-                    method=method,
-                    url=url,
-                )
-
-            return _parse_body(response), dict(response.headers)
-
-        raise AuditApiError(
-            "Request failed after retries.",
-            method=method,
-            url=url,
+        response = request_with_retries(
+            self.session,
+            method,
+            url,
+            retries=self.retries,
+            timeout=self.timeout,
+            can_retry=can_retry,
+            network_error=lambda exc: AuditApiError(
+                f"Network error calling Management Activity API: {exc}",
+                method=method,
+                url=url,
+            ),
+            exhausted_error=lambda: AuditApiError(
+                "Request failed after retries.",
+                method=method,
+                url=url,
+            ),
+            **kwargs,
         )
+
+        # Redirects are disabled; the Management API should not 3xx here.
+        if 300 <= response.status_code < 400:
+            raise AuditApiError(
+                f"Unexpected redirect response (HTTP {response.status_code})",
+                status_code=response.status_code,
+                method=method,
+                url=url,
+            )
+
+        if not response.ok:
+            raise AuditApiError(
+                _extract_error_message(response),
+                status_code=response.status_code,
+                method=method,
+                url=url,
+            )
+
+        return _parse_body(response), dict(response.headers)
 
 
 # ------------------------------------------------------------------
 # Utility helpers
 # ------------------------------------------------------------------
-
-
-def _compute_backoff(attempt: int, *, max_seconds: int = 8) -> int:
-    return int(min(2**attempt, max_seconds))
 
 
 def _validate_management_api_url(url: str, *, base_url: str = MANAGEMENT_API_BASE_URL) -> None:
@@ -300,21 +284,6 @@ def _management_api_origin(url: str) -> tuple[str, str, int]:
         raise AuditApiError("Management Activity API URL must not include credentials")
 
     return (parsed.scheme, hostname.lower(), port)
-
-
-def _parse_retry_after(value: str | None) -> int:
-    if not value:
-        return 1
-    try:
-        return min(max(int(value), 1), _MAX_RETRY_AFTER_SECONDS)
-    except ValueError:
-        # RFC 7231 also permits an HTTP-date; Microsoft throttling may use either.
-        try:
-            retry_at = parsedate_to_datetime(value)
-            delay = int((retry_at - datetime.now(timezone.utc)).total_seconds())
-            return min(max(delay, 1), _MAX_RETRY_AFTER_SECONDS)
-        except (TypeError, ValueError):
-            return 1
 
 
 def _extract_error_message(response: requests.Response) -> str:

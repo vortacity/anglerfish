@@ -10,10 +10,11 @@ import questionary
 from rich.console import Console
 
 import anglerfish.templates as templates_mod
+from anglerfish.inventory import DeploymentRecord
 from anglerfish.cli import deploy as deploy_mod
 from anglerfish.templates import find_template_by_name as _find_template_by_name
+from anglerfish.auth import AuthConfig
 from anglerfish.cli.prompts import (
-    AuthPromptResult,
     _parse_var_args,
     _prompt_auth_setup,
     _render_deploy_template,
@@ -204,7 +205,9 @@ class TestPromptAuthSetup:
 
         result = _prompt_auth_setup(args, console=None, auth_mode="application", non_interactive=True)
 
-        assert result == AuthPromptResult(credential_mode="secret")
+        assert result == AuthConfig(
+            tenant_id="tenant-id", client_id="client-id", credential_mode="secret", client_secret="secret"
+        )
 
     def test_prompt_auth_setup_non_interactive_application_certificate_only_returns_certificate(self, monkeypatch):
         args = type("Args", (), {"tenant_id": None, "client_id": None, "credential_mode": "auto"})()
@@ -214,7 +217,9 @@ class TestPromptAuthSetup:
 
         result = _prompt_auth_setup(args, console=None, auth_mode="application", non_interactive=True)
 
-        assert result == AuthPromptResult(credential_mode="certificate")
+        assert result is not None
+        assert result.credential_mode == "certificate"
+        assert result.cert_pfx_path == "/tmp/client.pfx"
 
     def test_prompt_auth_setup_non_interactive_application_mixed_defaults_to_secret(self, monkeypatch):
         args = type("Args", (), {"tenant_id": None, "client_id": None, "credential_mode": "auto"})()
@@ -226,7 +231,8 @@ class TestPromptAuthSetup:
 
         result = _prompt_auth_setup(args, console=None, auth_mode="application", non_interactive=True)
 
-        assert result == AuthPromptResult(credential_mode="secret")
+        assert result is not None
+        assert result.credential_mode == "secret"
 
     def test_prompt_auth_setup_rejects_delegated_auth_mode(self, monkeypatch):
         args = type("Args", (), {"tenant_id": None, "client_id": None, "credential_mode": None})()
@@ -236,7 +242,7 @@ class TestPromptAuthSetup:
         with pytest.raises(AuthenticationError, match="application auth"):
             _prompt_auth_setup(args, console=None, auth_mode="delegated", non_interactive=True)
 
-    def test_prompt_auth_setup_records_restore_value_for_overwritten_passphrase(self, monkeypatch, tmp_path):
+    def test_prompt_auth_setup_keeps_prompted_passphrase_out_of_env(self, monkeypatch, tmp_path):
         args = type("Args", (), {"tenant_id": None, "client_id": None, "credential_mode": "certificate"})()
         monkeypatch.setenv("ANGLERFISH_TENANT_ID", "tenant-id")
         monkeypatch.setenv("ANGLERFISH_CLIENT_ID", "client-id")
@@ -260,11 +266,11 @@ class TestPromptAuthSetup:
 
         result = _prompt_auth_setup(args, console=Console(file=None, force_terminal=False))
 
-        assert result == AuthPromptResult(
-            credential_mode="certificate",
-            restore_env_vars=(("ANGLERFISH_CLIENT_CERT_PASSPHRASE", "existing-passphrase"),),
-        )
-        assert os.environ["ANGLERFISH_CLIENT_CERT_PASSPHRASE"] == "prompted-passphrase"
+        assert result is not None
+        assert result.credential_mode == "certificate"
+        assert result.cert_passphrase == "prompted-passphrase"
+        # The environment is an input, never an output.
+        assert os.environ["ANGLERFISH_CLIENT_CERT_PASSPHRASE"] == "existing-passphrase"
 
     def test_prompt_auth_setup_interactive_prompts_for_secret(self, monkeypatch):
         args = type("Args", (), {"tenant_id": None, "client_id": None, "credential_mode": "auto"})()
@@ -291,8 +297,9 @@ class TestPromptAuthSetup:
         result = _prompt_auth_setup(args, console=Console(file=None, force_terminal=False))
 
         assert result.credential_mode == "secret"
-        assert "ANGLERFISH_CLIENT_SECRET" in result.clear_env_vars
-        assert os.environ["ANGLERFISH_CLIENT_SECRET"] == "prompted-secret"
+        assert result.client_secret == "prompted-secret"
+        # The prompted secret never enters the process environment.
+        assert "ANGLERFISH_CLIENT_SECRET" not in os.environ
 
     def test_prompt_auth_setup_interactive_both_present_selects_certificate(self, monkeypatch):
         args = type("Args", (), {"tenant_id": None, "client_id": None, "credential_mode": "auto"})()
@@ -335,7 +342,7 @@ class TestPromptAuthSetup:
         assert result is None
 
 
-def test_verify_prompted_secret_is_cleared_after_auth(monkeypatch):
+def test_verify_prompted_secret_never_enters_env(monkeypatch):
     args = argparse.Namespace(
         demo=False,
         record="record.json",
@@ -350,25 +357,25 @@ def test_verify_prompted_secret_is_cleared_after_auth(monkeypatch):
     monkeypatch.setattr(
         deploy_mod,
         "read_deployment_record",
-        lambda _path: {
-            "canary_type": "outlook",
-            "delivery_mode": "draft",
-            "template_name": "Fake Password Reset",
-            "target_user": "alice@contoso.com",
-            "folder_id": "folder-123",
-        },
+        lambda _path: DeploymentRecord.from_dict(
+            {
+                "canary_type": "outlook",
+                "delivery_mode": "draft",
+                "template_name": "Fake Password Reset",
+                "target_user": "alice@contoso.com",
+                "folder_id": "folder-123",
+            }
+        ),
     )
     monkeypatch.setattr(deploy_mod, "GraphClient", lambda _token: object())
 
     def _fake_prompt_auth_setup(*_args, **_kwargs):
-        os.environ["ANGLERFISH_CLIENT_SECRET"] = "prompted-secret"
-        return AuthPromptResult(
-            credential_mode="secret",
-            clear_env_vars=("ANGLERFISH_CLIENT_SECRET",),
-        )
+        return AuthConfig(credential_mode="secret", client_secret="prompted-secret")
 
     def _fake_authenticate(*_args, **_kwargs):
-        assert os.environ.get("ANGLERFISH_CLIENT_SECRET") == "prompted-secret"
+        auth_config = _kwargs.get("auth_config")
+        assert auth_config is not None and auth_config.client_secret == "prompted-secret"
+        assert "ANGLERFISH_CLIENT_SECRET" not in os.environ
         return "token-123"
 
     monkeypatch.setattr(deploy_mod, "_prompt_auth_setup", _fake_prompt_auth_setup)
@@ -390,7 +397,7 @@ def test_verify_prompted_secret_is_cleared_after_auth(monkeypatch):
     assert "ANGLERFISH_CLIENT_SECRET" not in os.environ
 
 
-def test_verify_prompted_passphrase_restores_previous_env_value(monkeypatch):
+def test_verify_prompted_passphrase_leaves_env_value_untouched(monkeypatch):
     args = argparse.Namespace(
         demo=False,
         record="record.json",
@@ -405,25 +412,25 @@ def test_verify_prompted_passphrase_restores_previous_env_value(monkeypatch):
     monkeypatch.setattr(
         deploy_mod,
         "read_deployment_record",
-        lambda _path: {
-            "canary_type": "outlook",
-            "delivery_mode": "draft",
-            "template_name": "Fake Password Reset",
-            "target_user": "alice@contoso.com",
-            "folder_id": "folder-123",
-        },
+        lambda _path: DeploymentRecord.from_dict(
+            {
+                "canary_type": "outlook",
+                "delivery_mode": "draft",
+                "template_name": "Fake Password Reset",
+                "target_user": "alice@contoso.com",
+                "folder_id": "folder-123",
+            }
+        ),
     )
     monkeypatch.setattr(deploy_mod, "GraphClient", lambda _token: object())
 
     def _fake_prompt_auth_setup(*_args, **_kwargs):
-        os.environ["ANGLERFISH_CLIENT_CERT_PASSPHRASE"] = "prompted-passphrase"
-        return AuthPromptResult(
-            credential_mode="certificate",
-            restore_env_vars=(("ANGLERFISH_CLIENT_CERT_PASSPHRASE", "existing-passphrase"),),
-        )
+        return AuthConfig(credential_mode="certificate", cert_passphrase="prompted-passphrase")
 
     def _fake_authenticate(*_args, **_kwargs):
-        assert os.environ.get("ANGLERFISH_CLIENT_CERT_PASSPHRASE") == "prompted-passphrase"
+        auth_config = _kwargs.get("auth_config")
+        assert auth_config is not None and auth_config.cert_passphrase == "prompted-passphrase"
+        assert os.environ.get("ANGLERFISH_CLIENT_CERT_PASSPHRASE") == "existing-passphrase"
         return "token-123"
 
     monkeypatch.setattr(deploy_mod, "_prompt_auth_setup", _fake_prompt_auth_setup)

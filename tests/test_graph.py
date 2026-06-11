@@ -67,7 +67,7 @@ def test_graph_client_retries_on_429(monkeypatch: pytest.MonkeyPatch):
 
     session.request = Mock(side_effect=fake_request)
     sleep_calls: list[int] = []
-    monkeypatch.setattr("anglerfish.graph.time.sleep", lambda value: sleep_calls.append(value))
+    monkeypatch.setattr("anglerfish._http.time.sleep", lambda value: sleep_calls.append(value))
 
     client = GraphClient("token", session=session)
     result = client.get("/me")
@@ -131,7 +131,7 @@ def test_graph_client_retries_on_5xx(monkeypatch: pytest.MonkeyPatch):
     session = requests.Session()
     session.request = Mock(side_effect=lambda *args, **kwargs: responses.pop(0))
     sleep_calls: list[int] = []
-    monkeypatch.setattr("anglerfish.graph.time.sleep", lambda value: sleep_calls.append(value))
+    monkeypatch.setattr("anglerfish._http.time.sleep", lambda value: sleep_calls.append(value))
 
     client = GraphClient("token", session=session)
     result = client.get("/me")
@@ -147,7 +147,7 @@ def test_graph_client_post_does_not_retry_on_5xx(monkeypatch: pytest.MonkeyPatch
     ]
     session = requests.Session()
     session.request = Mock(side_effect=lambda *args, **kwargs: responses.pop(0))
-    monkeypatch.setattr("anglerfish.graph.time.sleep", lambda *_: None)
+    monkeypatch.setattr("anglerfish._http.time.sleep", lambda *_: None)
 
     client = GraphClient("token", session=session, retries=3)
 
@@ -165,7 +165,7 @@ def test_graph_client_post_retry_safe_retries_on_5xx(monkeypatch: pytest.MonkeyP
     session = requests.Session()
     session.request = Mock(side_effect=lambda *args, **kwargs: responses.pop(0))
     sleep_calls: list[int] = []
-    monkeypatch.setattr("anglerfish.graph.time.sleep", lambda value: sleep_calls.append(value))
+    monkeypatch.setattr("anglerfish._http.time.sleep", lambda value: sleep_calls.append(value))
 
     client = GraphClient("token", session=session, retries=3)
     result = client.post("/me/sendMail", json={"message": {}}, retry_safe=True)
@@ -186,7 +186,7 @@ def test_graph_client_post_does_not_retry_on_429(monkeypatch: pytest.MonkeyPatch
     ]
     session = requests.Session()
     session.request = Mock(side_effect=lambda *args, **kwargs: responses.pop(0))
-    monkeypatch.setattr("anglerfish.graph.time.sleep", lambda *_: None)
+    monkeypatch.setattr("anglerfish._http.time.sleep", lambda *_: None)
 
     client = GraphClient("token", session=session, retries=3)
 
@@ -205,7 +205,7 @@ def test_graph_client_retries_on_request_exception(monkeypatch: pytest.MonkeyPat
         ]
     )
     sleep_calls: list[int] = []
-    monkeypatch.setattr("anglerfish.graph.time.sleep", lambda value: sleep_calls.append(value))
+    monkeypatch.setattr("anglerfish._http.time.sleep", lambda value: sleep_calls.append(value))
 
     client = GraphClient("token", session=session)
     result = client.get("/me")
@@ -222,7 +222,7 @@ def test_graph_client_put_does_not_retry_on_request_exception(monkeypatch: pytes
             FakeResponse(status_code=200, payload={"ok": True}),
         ]
     )
-    monkeypatch.setattr("anglerfish.graph.time.sleep", lambda *_: None)
+    monkeypatch.setattr("anglerfish._http.time.sleep", lambda *_: None)
 
     client = GraphClient("token", session=session, retries=3)
 
@@ -235,7 +235,7 @@ def test_graph_client_put_does_not_retry_on_request_exception(monkeypatch: pytes
 def test_graph_client_raises_graph_api_error_on_request_exception(monkeypatch: pytest.MonkeyPatch):
     session = requests.Session()
     session.request = Mock(side_effect=requests.exceptions.ConnectionError("no route"))
-    monkeypatch.setattr("anglerfish.graph.time.sleep", lambda *_: None)
+    monkeypatch.setattr("anglerfish._http.time.sleep", lambda *_: None)
 
     client = GraphClient("token", session=session, retries=2)
 
@@ -251,7 +251,7 @@ def test_graph_client_delete_retries_on_5xx(monkeypatch: pytest.MonkeyPatch):
     session = requests.Session()
     session.request = Mock(side_effect=lambda *args, **kwargs: responses.pop(0))
     sleep_calls: list[int] = []
-    monkeypatch.setattr("anglerfish.graph.time.sleep", lambda value: sleep_calls.append(value))
+    monkeypatch.setattr("anglerfish._http.time.sleep", lambda value: sleep_calls.append(value))
 
     client = GraphClient("token", session=session, retries=3)
     client.delete("/sites/site-id/drive/items/item-id")
@@ -285,7 +285,7 @@ def test_graph_client_raises_after_all_429_retries_exhausted(monkeypatch: pytest
             headers={"Retry-After": "1"},
         )
     )
-    monkeypatch.setattr("anglerfish.graph.time.sleep", lambda *_: None)
+    monkeypatch.setattr("anglerfish._http.time.sleep", lambda *_: None)
 
     client = GraphClient("token", session=session, retries=2)
 
@@ -378,26 +378,26 @@ def test_graph_client_non_dict_error_payload_uses_text():
 
 
 def test_parse_retry_after_returns_1_for_none():
-    from anglerfish.graph import _parse_retry_after
+    from anglerfish._http import parse_retry_after as _parse_retry_after
 
     assert _parse_retry_after(None) == 1
 
 
 def test_parse_retry_after_parses_integer_string():
-    from anglerfish.graph import _parse_retry_after
+    from anglerfish._http import parse_retry_after as _parse_retry_after
 
     assert _parse_retry_after("5") == 5
 
 
 def test_parse_retry_after_caps_excessive_delay():
-    from anglerfish.graph import _parse_retry_after
+    from anglerfish._http import parse_retry_after as _parse_retry_after
 
     assert _parse_retry_after("86400") == 120
     assert _parse_retry_after("Wed, 21 Oct 2099 07:28:00 GMT") == 120
 
 
 def test_parse_retry_after_parses_http_date():
-    from anglerfish.graph import _parse_retry_after
+    from anglerfish._http import parse_retry_after as _parse_retry_after
     from datetime import datetime, timedelta, timezone
 
     future = datetime.now(timezone.utc) + timedelta(seconds=10)
@@ -407,7 +407,7 @@ def test_parse_retry_after_parses_http_date():
 
 
 def test_parse_retry_after_returns_1_for_invalid_string():
-    from anglerfish.graph import _parse_retry_after
+    from anglerfish._http import parse_retry_after as _parse_retry_after
 
     assert _parse_retry_after("not-a-number-or-date") == 1
 

@@ -23,6 +23,7 @@ from ..exceptions import (
     GraphApiError,
     MonitorError,
 )
+from ..deployers.registry import supported_canary_types
 from ..templates import find_template_by_name as _find_template_by_name, list_templates, load_template
 from .prompts import _parse_var_args, _render_deploy_template
 
@@ -187,7 +188,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--canary-type",
-        choices=("outlook",),
+        choices=supported_canary_types(),
         default=None,
         help="Canary type. Skips canary type prompt when provided.",
     )
@@ -589,7 +590,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         if getattr(args, "demo", False):
             return _run_demo_deploy(console, canary_type, rendered_template, args.delivery_mode)
 
-        return _run_outlook_deploy(
+        # Interactive deploy flows are CLI-layer, keyed by the same registry
+        # names as the core lifecycle plugins (deployers.registry).
+        deploy_handlers = {"outlook": _run_outlook_deploy}
+        deploy_handler = deploy_handlers.get(canary_type)
+        if deploy_handler is None:
+            raise DeploymentError(f"No deploy flow for canary type '{canary_type}'.")
+        return deploy_handler(
             args,
             console,
             rendered_template,

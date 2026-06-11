@@ -5,13 +5,13 @@ from __future__ import annotations
 import argparse
 import os
 import re
-from dataclasses import dataclass
 from pathlib import Path
 
 import questionary
 from questionary import Style
 from rich.console import Console
 
+from ..auth import AuthConfig
 from ..exceptions import (
     AuthenticationError,
     DeploymentError,
@@ -41,25 +41,8 @@ _QMARK = "\u2022"
 _POINTER = ">"
 
 
-@dataclass(frozen=True)
-class AuthPromptResult:
-    credential_mode: str
-    clear_env_vars: tuple[str, ...] = ()
-    restore_env_vars: tuple[tuple[str, str], ...] = ()
-
-
-def _set_prompted_sensitive_env_var(
-    name: str,
-    value: str,
-    *,
-    clear_env_vars: list[str],
-    restore_env_vars: dict[str, str],
-) -> None:
-    if name in os.environ and name not in restore_env_vars:
-        restore_env_vars[name] = os.environ[name]
-    elif name not in os.environ and name not in clear_env_vars:
-        clear_env_vars.append(name)
-    os.environ[name] = value
+def _env(name: str) -> str:
+    return os.environ.get(name, "").strip()
 
 
 def _validate_email(value: str) -> bool | str:
@@ -117,68 +100,63 @@ def _prompt_auth_setup(
     *,
     auth_mode: str = "application",
     non_interactive: bool = False,
-) -> AuthPromptResult | None:
+) -> AuthConfig | None:
+    """Resolve application credentials from CLI flags, environment, and prompts.
+
+    Returns an :class:`~anglerfish.auth.AuthConfig` carrying the resolved
+    values — prompted secrets travel inside it; nothing is written to
+    ``os.environ``. Returns ``None`` when the user cancels a prompt.
+    """
     selected_auth_mode = auth_mode.strip().lower()
     if selected_auth_mode in ("", "application"):
         selected_auth_mode = "application"
     else:
         raise AuthenticationError("Only application auth is supported in this release.")
 
-    cli_tenant_id = str(args.tenant_id or "").strip()
-    if cli_tenant_id:
-        os.environ["ANGLERFISH_TENANT_ID"] = cli_tenant_id
-
-    cli_client_id = str(args.client_id or "").strip()
-    if cli_client_id:
-        os.environ["ANGLERFISH_CLIENT_ID"] = cli_client_id
-
-    if not os.environ.get("ANGLERFISH_TENANT_ID", "").strip():
+    tenant_id = str(args.tenant_id or "").strip() or _env("ANGLERFISH_TENANT_ID")
+    if not tenant_id:
         if non_interactive:
             raise AuthenticationError(
                 "ANGLERFISH_TENANT_ID is not set. Provide it via environment variable or --tenant-id."
             )
         console.print("ANGLERFISH_TENANT_ID is not set. Please provide your tenant ID.")
-        tenant_id = questionary.text(
+        answer = questionary.text(
             "Entra Directory (tenant) ID:",
             validate=_validate_non_empty,
             style=_STYLE,
             qmark=_QMARK,
         ).ask()
-        if tenant_id is None:
+        if answer is None:
             return None
-        tenant_value = tenant_id.strip()
-        if tenant_value:
-            os.environ["ANGLERFISH_TENANT_ID"] = tenant_value
+        tenant_id = answer.strip()
 
-    if not os.environ.get("ANGLERFISH_CLIENT_ID", "").strip():
+    client_id = str(args.client_id or "").strip() or _env("ANGLERFISH_CLIENT_ID")
+    if not client_id:
         if non_interactive:
             raise AuthenticationError(
                 "ANGLERFISH_CLIENT_ID is not set. Provide it via environment variable or --client-id."
             )
         console.print("ANGLERFISH_CLIENT_ID is not set. Let's configure it now.")
-        client_id = questionary.text(
+        answer = questionary.text(
             "Entra Application (client) ID:", validate=_validate_non_empty, style=_STYLE, qmark=_QMARK
         ).ask()
-        if client_id is None:
+        if answer is None:
             return None
-        os.environ["ANGLERFISH_CLIENT_ID"] = client_id.strip()
+        client_id = answer.strip()
 
-    os.environ["ANGLERFISH_AUTH_MODE"] = selected_auth_mode
-
-    current_mode = args.credential_mode or os.environ.get("ANGLERFISH_APP_CREDENTIAL_MODE", "auto").strip().lower()
+    current_mode = (args.credential_mode or _env("ANGLERFISH_APP_CREDENTIAL_MODE") or "auto").strip().lower()
     if current_mode not in ("auto", "secret", "certificate"):
         current_mode = "auto"
 
-    clear_env_vars: list[str] = []
-    restore_env_vars: dict[str, str] = {}
+    client_secret = _env("ANGLERFISH_CLIENT_SECRET")
+    pfx_path = _env("ANGLERFISH_CLIENT_CERT_PFX_PATH")
+    key_path = _env("ANGLERFISH_CLIENT_CERT_PRIVATE_KEY_PATH")
+    public_cert_path = _env("ANGLERFISH_CLIENT_CERT_PUBLIC_CERT_PATH")
+    thumbprint = _env("ANGLERFISH_CLIENT_CERT_THUMBPRINT")
+    passphrase = os.environ.get("ANGLERFISH_CLIENT_CERT_PASSPHRASE", "")
 
-    has_secret = bool(os.environ.get("ANGLERFISH_CLIENT_SECRET", "").strip())
-    has_certificate = bool(
-        os.environ.get("ANGLERFISH_CLIENT_CERT_PFX_PATH", "").strip()
-        or os.environ.get("ANGLERFISH_CLIENT_CERT_PRIVATE_KEY_PATH", "").strip()
-        or os.environ.get("ANGLERFISH_CLIENT_CERT_PUBLIC_CERT_PATH", "").strip()
-        or os.environ.get("ANGLERFISH_CLIENT_CERT_THUMBPRINT", "").strip()
-    )
+    has_secret = bool(client_secret)
+    has_certificate = bool(pfx_path or key_path or public_cert_path or thumbprint)
 
     if current_mode == "auto":
         if has_secret and has_certificate:
@@ -233,24 +211,15 @@ def _prompt_auth_setup(
             ).ask()
             if secret is None:
                 return None
-            _set_prompted_sensitive_env_var(
-                "ANGLERFISH_CLIENT_SECRET",
-                secret,
-                clear_env_vars=clear_env_vars,
-                restore_env_vars=restore_env_vars,
-            )
-        os.environ["ANGLERFISH_APP_CREDENTIAL_MODE"] = "secret"
-        return AuthPromptResult(
+            client_secret = secret.strip()
+        return AuthConfig(
+            tenant_id=tenant_id,
+            client_id=client_id,
             credential_mode="secret",
-            clear_env_vars=tuple(clear_env_vars),
-            restore_env_vars=tuple(restore_env_vars.items()),
+            client_secret=client_secret,
         )
 
     # current_mode == "certificate"
-    pfx_path = os.environ.get("ANGLERFISH_CLIENT_CERT_PFX_PATH", "").strip()
-    key_path = os.environ.get("ANGLERFISH_CLIENT_CERT_PRIVATE_KEY_PATH", "").strip()
-    thumbprint = os.environ.get("ANGLERFISH_CLIENT_CERT_THUMBPRINT", "").strip()
-
     if not pfx_path and not key_path:
         if non_interactive:
             raise AuthenticationError(
@@ -276,25 +245,20 @@ def _prompt_auth_setup(
             ).ask()
             if pfx is None:
                 return None
-            os.environ["ANGLERFISH_CLIENT_CERT_PFX_PATH"] = pfx.strip()
+            pfx_path = pfx.strip()
             pfx_passphrase = questionary.password(
                 "PFX passphrase (leave blank if none):", style=_STYLE, qmark=_QMARK
             ).ask()
             if pfx_passphrase is None:
                 return None
-            _set_prompted_sensitive_env_var(
-                "ANGLERFISH_CLIENT_CERT_PASSPHRASE",
-                pfx_passphrase,
-                clear_env_vars=clear_env_vars,
-                restore_env_vars=restore_env_vars,
-            )
+            passphrase = pfx_passphrase
         else:
             key = questionary.text(
                 "Path to PEM private key file:", validate=_validate_file_path, style=_STYLE, qmark=_QMARK
             ).ask()
             if key is None:
                 return None
-            os.environ["ANGLERFISH_CLIENT_CERT_PRIVATE_KEY_PATH"] = key.strip()
+            key_path = key.strip()
             cert_thumbprint = questionary.text(
                 "Certificate thumbprint (hex, no colons):",
                 validate=_validate_non_empty,
@@ -303,25 +267,20 @@ def _prompt_auth_setup(
             ).ask()
             if cert_thumbprint is None:
                 return None
-            os.environ["ANGLERFISH_CLIENT_CERT_THUMBPRINT"] = cert_thumbprint.strip()
+            thumbprint = cert_thumbprint.strip()
 
             cert_file = questionary.text("Path to PEM public certificate (optional):", style=_STYLE, qmark=_QMARK).ask()
             if cert_file is None:
                 return None
             if cert_file.strip():
-                os.environ["ANGLERFISH_CLIENT_CERT_PUBLIC_CERT_PATH"] = cert_file.strip()
+                public_cert_path = cert_file.strip()
 
             key_passphrase = questionary.password(
                 "Private key passphrase (leave blank if none):", style=_STYLE, qmark=_QMARK
             ).ask()
             if key_passphrase is None:
                 return None
-            _set_prompted_sensitive_env_var(
-                "ANGLERFISH_CLIENT_CERT_PASSPHRASE",
-                key_passphrase,
-                clear_env_vars=clear_env_vars,
-                restore_env_vars=restore_env_vars,
-            )
+            passphrase = key_passphrase
 
     if key_path and not thumbprint:
         if non_interactive:
@@ -334,13 +293,17 @@ def _prompt_auth_setup(
         ).ask()
         if cert_thumbprint is None:
             return None
-        os.environ["ANGLERFISH_CLIENT_CERT_THUMBPRINT"] = cert_thumbprint.strip()
+        thumbprint = cert_thumbprint.strip()
 
-    os.environ["ANGLERFISH_APP_CREDENTIAL_MODE"] = "certificate"
-    return AuthPromptResult(
+    return AuthConfig(
+        tenant_id=tenant_id,
+        client_id=client_id,
         credential_mode="certificate",
-        clear_env_vars=tuple(clear_env_vars),
-        restore_env_vars=tuple(restore_env_vars.items()),
+        cert_pfx_path=pfx_path,
+        cert_private_key_path=key_path,
+        cert_public_cert_path=public_cert_path,
+        cert_thumbprint=thumbprint,
+        cert_passphrase=passphrase,
     )
 
 
