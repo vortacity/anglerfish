@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
-from ._io import write_json_atomic
+from ._io import ensure_private_dir, write_json_atomic
 from .exceptions import DeploymentError
 
 #: Current on-disk record schema. Version 2 canonicalizes the ``canary_type``
@@ -184,7 +184,7 @@ def write_deployment_record(path: str | Path, record: Mapping[str, Any] | Deploy
     directories are created automatically if they do not exist.
     """
     output_path = Path(path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    ensure_private_dir(output_path.parent)
 
     if not isinstance(record, DeploymentRecord):
         record = DeploymentRecord.from_dict(record)

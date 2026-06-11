@@ -11,7 +11,7 @@ from typing import Any, Sequence
 
 from rich.console import Console
 
-from ._io import as_utc, parse_utc_datetime, write_json_atomic
+from ._io import as_utc, ensure_private_dir, parse_utc_datetime, write_json_atomic
 from .alerts import AlertDispatcher
 from .audit import AuditClient
 from .auth import AuthConfig, authenticate_management_api_with_expiry
@@ -216,7 +216,7 @@ def _write_heartbeat(
         "alerts_this_session": session_alerts,
     }
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
+        ensure_private_dir(path.parent)
         write_json_atomic(path, payload, error_cls=MonitorError, label="monitor heartbeat", indent=None)
     except (MonitorError, OSError):
         pass  # heartbeat is best-effort

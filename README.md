@@ -36,13 +36,17 @@ the evidence without exposing tenant data:
 ## Documentation
 
 - [Demo tenant setup guide](docs/demo-tenant-setup.md)
+- [Production deployment guide](docs/production-deployment.md)
+- [Scoping Mail.ReadWrite to canary mailboxes](docs/scoping-permissions.md)
+- [Monitor operations reference](docs/monitoring.md)
+- [Privacy and data handling](docs/privacy.md)
 - [Architecture notes](docs/architecture.md)
 - [Threat model](docs/threat-model.md)
 - [Sentinel KQL validation snippet](docs/sentinel-kql.md)
 - [Roadmap](ROADMAP.md)
 
 > [!WARNING]
-> This tool is for authorized security testing and defensive canary deployments only. `Mail.ReadWrite` application permission grants tenant-wide mailbox write access by default. Production use requires formal approval and explicit scoping decisions.
+> This tool is for authorized security testing and defensive canary deployments only. `Mail.ReadWrite` application permission grants tenant-wide mailbox write access by default — [scope it to the canary mailboxes](docs/scoping-permissions.md) for production use, which also requires formal approval ([threat model](docs/threat-model.md#authorization-requirements)) and privacy review ([privacy and data handling](docs/privacy.md)).
 
 ## How It Works
 
@@ -194,7 +198,7 @@ PEM certificate configuration is also supported. See `.env.example` for the full
 Grant admin consent after adding the permissions.
 
 > [!WARNING]
-> `Mail.ReadWrite` application permission grants tenant-wide mailbox write access by default. Production use requires formal approval and explicit scoping decisions. Operators can use Exchange Online RBAC for Applications to scope access to selected mailboxes, but must ensure unscoped Microsoft Entra grants do not remain in place.
+> `Mail.ReadWrite` application permission grants tenant-wide mailbox write access by default. Production use requires formal approval and explicit scoping decisions. Use [Exchange Online RBAC for Applications](docs/scoping-permissions.md) to scope access to the canary mailboxes, and ensure unscoped Microsoft Entra grants do not remain in place.
 
 ## Templates
 

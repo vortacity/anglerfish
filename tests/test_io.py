@@ -94,3 +94,28 @@ def test_write_json_atomic_leaves_no_temp_file_on_failure(tmp_path):
         assert list(target_dir.iterdir()) == []
     finally:
         os.chmod(target_dir, 0o700)
+
+
+# ------------------------------------------------------------------
+# ensure_private_dir
+# ------------------------------------------------------------------
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission semantics")
+def test_ensure_private_dir_creates_chain_with_0700(tmp_path):
+    from anglerfish._io import ensure_private_dir
+
+    target = tmp_path / "outer" / "inner"
+    ensure_private_dir(target)
+    assert stat.S_IMODE((tmp_path / "outer").stat().st_mode) == 0o700
+    assert stat.S_IMODE(target.stat().st_mode) == 0o700
+
+
+def test_ensure_private_dir_leaves_existing_dir_untouched(tmp_path):
+    from anglerfish._io import ensure_private_dir
+
+    existing = tmp_path / "existing"
+    existing.mkdir(mode=0o755)
+    before = stat.S_IMODE(existing.stat().st_mode)
+    ensure_private_dir(existing)
+    assert stat.S_IMODE(existing.stat().st_mode) == before
