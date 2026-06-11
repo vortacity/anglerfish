@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 from rich.console import Console
 
 from anglerfish.alerts import AlertDispatcher
+from anglerfish.auth import AuthConfig
 from anglerfish.deployers.outlook import _build_entry
 from anglerfish.inventory import DeploymentRecord
 from anglerfish.monitor import (
@@ -623,18 +624,17 @@ def test_token_manager_returns_cached_when_valid():
     assert mgr.get_token() == "cached-token"
 
 
-def test_token_manager_temporarily_restores_prompted_env(monkeypatch):
+def test_token_manager_refreshes_with_auth_config_not_env(monkeypatch):
     monkeypatch.delenv("ANGLERFISH_CLIENT_SECRET", raising=False)
-    mgr = _TokenManager(
-        "initial-token",
-        "secret",
-        prompted_env={"ANGLERFISH_CLIENT_SECRET": "prompted-secret"},
-    )
+    config = AuthConfig(credential_mode="secret", client_secret="prompted-secret")
+    mgr = _TokenManager("initial-token", "secret", auth_config=config)
     mgr._expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
 
-    def _fake_authenticate(mode):
+    def _fake_authenticate(mode, *, auth_config=None):
         assert mode == "secret"
-        assert os.environ.get("ANGLERFISH_CLIENT_SECRET") == "prompted-secret"
+        # The prompted secret arrives by value; the environment is untouched.
+        assert auth_config is config
+        assert "ANGLERFISH_CLIENT_SECRET" not in os.environ
         return ("new-token", 3600)
 
     with patch("anglerfish.monitor.authenticate_management_api_with_expiry", side_effect=_fake_authenticate):

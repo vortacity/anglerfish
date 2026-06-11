@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import signal
 import time
 from datetime import datetime, timedelta, timezone
@@ -15,7 +14,7 @@ from rich.console import Console
 from ._io import as_utc, parse_utc_datetime, write_json_atomic
 from .alerts import AlertDispatcher
 from .audit import AuditClient
-from .auth import authenticate_management_api_with_expiry
+from .auth import AuthConfig, authenticate_management_api_with_expiry
 from .deployers.registry import all_audit_content_types, find_canary_type
 from .exceptions import MonitorError
 from .inventory import DeploymentRecord, coerce_record, read_deployment_record
@@ -167,14 +166,14 @@ class _TokenManager:
         initial_token: str,
         credential_mode: str | None = None,
         *,
-        prompted_env: dict[str, str] | None = None,
+        auth_config: AuthConfig | None = None,
         expires_in: int | None = None,
     ):
         self._token = initial_token
         self._credential_mode = credential_mode
+        self._auth_config = auth_config
         self._lifetime = self._lifetime_from_expires_in(expires_in)
         self._expires_at = datetime.now(timezone.utc) + self._lifetime
-        self._prompted_env = dict(prompted_env or {})
 
     @classmethod
     def _lifetime_from_expires_in(cls, expires_in: int | None) -> timedelta:
@@ -187,19 +186,11 @@ class _TokenManager:
         # margin consume the whole lifetime or every call would re-authenticate.
         margin = min(self._REFRESH_MARGIN, self._lifetime / 2)
         if datetime.now(timezone.utc) >= self._expires_at - margin:
-            previous_env = {name: os.environ.get(name) for name in self._prompted_env}
-            try:
-                for name, value in self._prompted_env.items():
-                    os.environ[name] = value
-                self._token, expires_in = authenticate_management_api_with_expiry(self._credential_mode)
-                self._lifetime = self._lifetime_from_expires_in(expires_in)
-                self._expires_at = datetime.now(timezone.utc) + self._lifetime
-            finally:
-                for name, previous_value in previous_env.items():
-                    if previous_value is None:
-                        os.environ.pop(name, None)
-                    else:
-                        os.environ[name] = previous_value
+            self._token, expires_in = authenticate_management_api_with_expiry(
+                self._credential_mode, auth_config=self._auth_config
+            )
+            self._lifetime = self._lifetime_from_expires_in(expires_in)
+            self._expires_at = datetime.now(timezone.utc) + self._lifetime
         return self._token
 
 

@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import datetime
-import os
 from pathlib import Path
 
 import questionary
@@ -14,7 +13,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from ..auth import authenticate
+from ..auth import AuthConfig, authenticate
 from ..deployers.outlook import OutlookDeployer
 from ..deployers.registry import find_canary_type, get_canary_type
 from ..exceptions import (
@@ -37,7 +36,6 @@ from ._main import (
     _step_rule,
 )
 from .prompts import (
-    AuthPromptResult,
     _POINTER,
     _QMARK,
     _STYLE,
@@ -47,19 +45,13 @@ from .prompts import (
 )
 
 
-def _normalize_auth_prompt_result(result: AuthPromptResult | str | None) -> AuthPromptResult | None:
+def _normalize_auth_prompt_result(result: AuthConfig | str | None) -> AuthConfig | None:
+    """Tolerate legacy stubs that return a bare credential-mode string."""
     if result is None:
         return None
-    if isinstance(result, AuthPromptResult):
+    if isinstance(result, AuthConfig):
         return result
-    return AuthPromptResult(credential_mode=str(result))
-
-
-def _clear_prompted_env_values(auth_result: AuthPromptResult) -> None:
-    for name, value in auth_result.restore_env_vars:
-        os.environ[name] = value
-    for name in auth_result.clear_env_vars:
-        os.environ.pop(name, None)
+    return AuthConfig(credential_mode=str(result))
 
 
 def _print_cleanup_summary(console: Console, record: DeploymentRecord) -> None:
@@ -206,10 +198,7 @@ def _run_cleanup(args: argparse.Namespace, console: Console) -> int:
         if auth_result is None:
             return 130
         console.print("Authenticating with Microsoft Graph...")
-        try:
-            token = authenticate(auth_mode="application", app_credential_mode=auth_result.credential_mode)
-        finally:
-            _clear_prompted_env_values(auth_result)
+        token = authenticate(auth_mode="application", auth_config=auth_result)
         _print_auth_success(console)
         graph = GraphClient(token)
 
@@ -268,10 +257,7 @@ def _run_demo_access(args: argparse.Namespace, console: Console) -> int:
         if auth_result is None:
             return 130
         console.print("Authenticating with Microsoft Graph...")
-        try:
-            token = authenticate(auth_mode="application", app_credential_mode=auth_result.credential_mode)
-        finally:
-            _clear_prompted_env_values(auth_result)
+        token = authenticate(auth_mode="application", auth_config=auth_result)
         _print_auth_success(console)
         graph = GraphClient(token)
 
@@ -362,13 +348,7 @@ def _run_outlook_deploy(
         return 130
 
     console.print("Authenticating with Microsoft Graph...")
-    try:
-        token = authenticate(
-            auth_mode="application",
-            app_credential_mode=auth_result.credential_mode,
-        )
-    finally:
-        _clear_prompted_env_values(auth_result)
+    token = authenticate(auth_mode="application", auth_config=auth_result)
     graph = GraphClient(token)
 
     _print_auth_success(console)
@@ -535,10 +515,7 @@ def _run_verify(args: argparse.Namespace, console: Console) -> int:
             if auth_result is None:
                 return 130
             console.print("Authenticating with Microsoft Graph...")
-            try:
-                token = authenticate(auth_mode="application", app_credential_mode=auth_result.credential_mode)
-            finally:
-                _clear_prompted_env_values(auth_result)
+            token = authenticate(auth_mode="application", auth_config=auth_result)
             graph = GraphClient(token)
             _print_auth_success(console)
 

@@ -8,31 +8,19 @@ from datetime import timedelta
 
 from rich.console import Console
 
-from ..auth import authenticate_management_api_with_expiry
+from ..auth import AuthConfig, authenticate_management_api_with_expiry
 from ..exceptions import AuthenticationError
 from ._main import _print_banner
-from .prompts import AuthPromptResult, _prompt_auth_setup
+from .prompts import _prompt_auth_setup
 
 
-def _normalize_auth_prompt_result(result: AuthPromptResult | str | None) -> AuthPromptResult | None:
+def _normalize_auth_prompt_result(result: AuthConfig | str | None) -> AuthConfig | None:
+    """Tolerate legacy stubs that return a bare credential-mode string."""
     if result is None:
         return None
-    if isinstance(result, AuthPromptResult):
+    if isinstance(result, AuthConfig):
         return result
-    return AuthPromptResult(credential_mode=str(result))
-
-
-def _capture_prompted_env_values(auth_result: AuthPromptResult) -> dict[str, str]:
-    prompted_names = {name for name, _value in auth_result.restore_env_vars}
-    prompted_names.update(auth_result.clear_env_vars)
-    return {name: os.environ[name] for name in prompted_names if name in os.environ}
-
-
-def _clear_prompted_env_values(auth_result: AuthPromptResult) -> None:
-    for name, value in auth_result.restore_env_vars:
-        os.environ[name] = value
-    for name in auth_result.clear_env_vars:
-        os.environ.pop(name, None)
+    return AuthConfig(credential_mode=str(result))
 
 
 def _run_monitor(args: argparse.Namespace, console: Console) -> int:
@@ -44,7 +32,6 @@ def _run_monitor(args: argparse.Namespace, console: Console) -> int:
         MONITOR_NO_CONSOLE,
         MONITOR_SLACK_WEBHOOK,
         MONITOR_STATE_FILE,
-        TENANT_ID,
     )
     from ..monitor import CanaryIndex, _TokenManager, load_records, render_demo_alert, run_monitor
     from ..state import StateManager
@@ -70,26 +57,16 @@ def _run_monitor(args: argparse.Namespace, console: Console) -> int:
 
     # Auth
     cli_tenant_id = str(args.tenant_id or "").strip()
-    if cli_tenant_id:
-        os.environ["ANGLERFISH_TENANT_ID"] = cli_tenant_id
-    cli_client_id = str(args.client_id or "").strip()
-    if cli_client_id:
-        os.environ["ANGLERFISH_CLIENT_ID"] = cli_client_id
-
-    tenant_id = cli_tenant_id or os.environ.get("ANGLERFISH_TENANT_ID", TENANT_ID).strip()
+    tenant_id = cli_tenant_id or os.environ.get("ANGLERFISH_TENANT_ID", "").strip()
     if not tenant_id:
         raise AuthenticationError(
             "ANGLERFISH_TENANT_ID is required for monitoring. Set it via environment variable or --tenant-id."
         )
 
-    auth_result = _normalize_auth_prompt_result(_prompt_auth_setup(args, console, auth_mode="application"))
-    if auth_result is None:
+    auth_config = _normalize_auth_prompt_result(_prompt_auth_setup(args, console, auth_mode="application"))
+    if auth_config is None:
         return 130
-    prompted_env = _capture_prompted_env_values(auth_result)
-    try:
-        token, token_expires_in = authenticate_management_api_with_expiry(auth_result.credential_mode)
-    finally:
-        _clear_prompted_env_values(auth_result)
+    token, token_expires_in = authenticate_management_api_with_expiry(auth_config=auth_config)
     audit_client = AuditClient(token, tenant_id)
 
     exclude_ids = {aid.strip().lower() for aid in args.exclude_app_ids if aid.strip()}
@@ -111,8 +88,7 @@ def _run_monitor(args: argparse.Namespace, console: Console) -> int:
     # Token manager for automatic refresh.
     token_mgr = _TokenManager(
         token,
-        auth_result.credential_mode,
-        prompted_env=prompted_env,
+        auth_config=auth_config,
         expires_in=token_expires_in,
     )
 
