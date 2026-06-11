@@ -8,20 +8,24 @@ starting anything large so we can agree on the approach.
 
 ## Near term
 
-Internal groundwork that should land before new canary surfaces are added:
-
-- **Real deployer abstraction** — expand `BaseDeployer` to cover the full
-  canary lifecycle (deploy, remove, verify, trigger access, audit-event
-  matching) behind a registry, so a new canary type is one class instead of
-  edits across the CLI, monitor, and verify paths.
-- **Typed, versioned deployment records** — a `DeploymentRecord` dataclass
-  with a `schema_version` field and a single normalizer, replacing the
-  untyped dicts written today.
-- **Credentials as values** — stop plumbing secrets through `os.environ`
-  mutation between the prompt flow, auth, and the monitor's token refresh.
 - **Exchange RBAC scoping guide** — a step-by-step walkthrough for scoping
   the `Mail.ReadWrite` application permission to canary mailboxes with
   Exchange RBAC for Applications.
+- **Privacy and data-handling documentation** — what personal data alerts
+  carry (UPN, source IP, client string), where it flows, and retention
+  guidance.
+- **Production deployment guide** — the demo-tenant walkthrough reframed
+  for production use.
+
+### Done
+
+- ~~Real deployer abstraction~~ — `CanaryType` lifecycle protocol +
+  `deployers/registry.py`; a new canary surface is one class plus one
+  `register()` call.
+- ~~Typed, versioned deployment records~~ — `DeploymentRecord` dataclass,
+  schema v2, one normalizer for all legacy shapes.
+- ~~Credentials as values~~ — `AuthConfig` carries credentials; the auth
+  flow never writes to `os.environ`.
 
 ## Planned features
 
