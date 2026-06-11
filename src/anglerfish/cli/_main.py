@@ -291,6 +291,13 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         dest="records_dir",
         help=("Directory containing deployment record JSON files. Default: ~/.anglerfish/records/"),
     )
+    list_parser.add_argument(
+        "--format",
+        choices=("table", "json"),
+        default="table",
+        dest="output_format",
+        help="Output format: human-readable table (default) or a JSON array on stdout.",
+    )
 
     monitor_parser = subparsers.add_parser("monitor", help="Monitor audit logs for canary access events.")
     monitor_parser.add_argument(
@@ -365,6 +372,23 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Slack incoming webhook URL for alert notifications.",
     )
     monitor_parser.add_argument(
+        "--teams-webhook-url",
+        default=None,
+        metavar="URL",
+        dest="teams_webhook_url",
+        help="Microsoft Teams workflow (Power Automate) webhook URL for alert notifications.",
+    )
+    monitor_parser.add_argument(
+        "--webhook-url",
+        default=None,
+        metavar="URL",
+        dest="webhook_url",
+        help=(
+            "Generic HTTPS webhook for alert notifications (JSON POST; signed with "
+            "HMAC-SHA256 when ANGLERFISH_WEBHOOK_HMAC_SECRET is set)."
+        ),
+    )
+    monitor_parser.add_argument(
         "--no-console",
         action="store_true",
         default=False,
@@ -401,6 +425,13 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         metavar="DIR",
         dest="records_dir",
         help="Directory containing deployment record JSON files.",
+    )
+    verify_parser.add_argument(
+        "--format",
+        choices=("table", "json"),
+        default="table",
+        dest="output_format",
+        help="Output format: human-readable table (default) or a JSON array on stdout.",
     )
     verify_parser.add_argument(
         "--demo",

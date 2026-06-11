@@ -17,6 +17,9 @@ MANAGEMENT_API_SCOPE = "https://manage.office.com/.default"
 MONITOR_STATE_FILE = os.environ.get("ANGLERFISH_MONITOR_STATE_FILE", "").strip()
 MONITOR_ALERT_LOG = os.environ.get("ANGLERFISH_MONITOR_ALERT_LOG", "").strip()
 MONITOR_SLACK_WEBHOOK = os.environ.get("ANGLERFISH_SLACK_WEBHOOK_URL", "").strip()
+MONITOR_TEAMS_WEBHOOK = os.environ.get("ANGLERFISH_TEAMS_WEBHOOK_URL", "").strip()
+MONITOR_WEBHOOK_URL = os.environ.get("ANGLERFISH_WEBHOOK_URL", "").strip()
+MONITOR_WEBHOOK_HMAC_SECRET = os.environ.get("ANGLERFISH_WEBHOOK_HMAC_SECRET", "")
 MONITOR_NO_CONSOLE = os.environ.get("ANGLERFISH_MONITOR_NO_CONSOLE", "").strip().lower() in (
     "1",
     "true",
