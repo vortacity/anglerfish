@@ -9,7 +9,64 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- **Tamper detection**: the monitor now alerts when a canary item is
+  deleted, moved, or modified (`HardDelete`, `SoftDelete`,
+  `MoveToDeletedItems`, `Move`, `Update`) — anti-forensic cleanup of a
+  planted artifact is itself high-confidence attacker behavior. Alerts
+  carry a `category` field (`access` or `tamper`) across all channels.
+- **Microsoft Teams alert channel** (`--teams-webhook-url` /
+  `ANGLERFISH_TEAMS_WEBHOOK_URL`): Adaptive Card notifications via a
+  Teams workflow (Power Automate) webhook, with the same hardening as
+  the Slack sink (HTTPS only, webhook URL never logged).
+- **Generic webhook alert channel** (`--webhook-url` /
+  `ANGLERFISH_WEBHOOK_URL`): JSON POST of each alert
+  (`schema_version: 1`) for SIEM/SOAR collectors, with optional
+  HMAC-SHA256 body signing (`ANGLERFISH_WEBHOOK_HMAC_SECRET` →
+  `X-Anglerfish-Signature` header).
+- **Machine-readable output**: `--format json` on `list` and `verify`
+  emits a JSON array on stdout (no banner or table) for scripting; exit
+  codes unchanged.
+- **Canary lifecycle plugin API**: `CanaryType`
+  (`deployers/base.py`) covers deploy, remove, verify, trigger-access,
+  audit content types, and audit-event matching; the CLI, monitor,
+  verify, and cleanup paths dispatch through `deployers/registry.py`.
+  Adding a canary surface is one class plus one `register()` call.
+- Documentation: step-by-step
+  [Exchange RBAC scoping guide](docs/scoping-permissions.md) for
+  `Mail.ReadWrite`, a
+  [production deployment guide](docs/production-deployment.md), a
+  [monitor operations reference](docs/monitoring.md) (heartbeat
+  contract, state-file semantics, alert-log schema, scale envelope),
+  and [privacy and data handling](docs/privacy.md).
+
+### Changed
+
+- Deployment records are written as **schema version 2**: canonical
+  `canary_type` key only, `verified` as a JSON boolean, and a
+  `schema_version` field. v1 records (legacy `type` alias, string
+  booleans) are read transparently and migrate on rewrite; unknown keys
+  are preserved round-trip.
+- Credentials are passed by value (`AuthConfig`) from prompts to
+  authentication; the auth flow and the monitor's token refresh no
+  longer write secrets to the process environment.
+- Directories Anglerfish creates for records, monitor state, and alert
+  logs (including `~/.anglerfish`) now use owner-only (`0700`)
+  permissions.
+- `--help` output is branded `anglerfish` regardless of invocation style
+  (previously `usage: __main__.py` when run as a module).
+
+### Fixed
+
+- A deployment record carrying both the legacy `type` key and
+  `canary_type` behaved differently in cleanup (which preferred `type`)
+  than in monitor/verify (which preferred `canary_type`); `canary_type`
+  now wins everywhere via a single normalizer.
+- Monitor state files with `Z`-suffixed timestamps were rejected as
+  corrupt on Python 3.10 (`datetime.fromisoformat` accepts the `Z`
+  suffix only from 3.11), and the warm-restart watermark parse would
+  have crashed the same way.
 
 ---
 

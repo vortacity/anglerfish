@@ -37,10 +37,15 @@ backend, and nothing leaves your control unless you send it somewhere:
 2. **Alert log** (`--alert-log`) — JSONL on local disk, written `0600`
    inside a `0700` directory. Schema in the
    [monitor reference](monitoring.md#alert-log).
-3. **Slack webhook** (`--slack-webhook-url`) — the full alert, including
-   the accessing user's UPN and IP, is POSTed to Slack. This is the one
-   flow that leaves the host; sending employee-identifying data into a
-   chat tool may itself require privacy review in your organization.
+3. **Slack / Microsoft Teams webhooks** (`--slack-webhook-url`,
+   `--teams-webhook-url`) — the full alert, including the accessing
+   user's UPN and IP, is POSTed to the chat tool. Sending
+   employee-identifying data into a chat channel may itself require
+   privacy review in your organization.
+4. **Generic webhook** (`--webhook-url`) — the full alert as JSON to an
+   endpoint you control (SIEM/SOAR collector). Sign bodies with
+   `ANGLERFISH_WEBHOOK_HMAC_SECRET` so the receiver can authenticate
+   them.
 
 That self-contained design is deliberate: compared to SaaS canary
 platforms, no third party ever sees who accessed what in your tenant.
