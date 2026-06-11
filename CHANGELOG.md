@@ -9,6 +9,12 @@ This project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+_Nothing yet._
+
+---
+
+## [2.2.0] — 2026-06-10
+
 ### Added
 
 - **Tamper detection**: the monitor now alerts when a canary item is
